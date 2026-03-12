@@ -15,6 +15,7 @@
     "fastify-cors": "^6.1.0",
     "fastify-plugin": "^5.1.0",
     "node-telegram-bot-api": "^0.67.0",
-    "pg": "^8.20.0"
+    "pg": "^8.20.0",
+    "request": "^2.88.2"
   }
 }

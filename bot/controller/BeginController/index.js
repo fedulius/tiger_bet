@@ -1,19 +1,21 @@
 const Controller = require('../Controller');
+const DAL = require('./DAL');
+const InlineController = require('./inline');
 
 class BeginController extends Controller {
 
   constructor({pg, lib}) {
     super(lib);
-    // this.text = new Text({pg});
+    this.dal = new DAL({pg});
+    this.inline = new InlineController();
   }
   
-  greetAction(msg) {
-    console.log('sultan')
-
-    this.sendBotMessage(msg, `Привет!
-Я твой проводник в мир здоровой и быстрой еды  "По рецепту". Здесь ты сможешь  выбрать и заказать вкусные, полезные и питательные блюда, горячие и прохладные напитки.
-Добро пожаловать и приятного аппетита!
-«По рецепту» - готовим, то в чем уверены.`);
+  async greetAction(msg) {
+    let categoryList = await this.dal.getCategories();
+    let content = this.inline.main(categoryList);
+    let inline = this.km.generateKeyboard(content);
+    console.log(inline);
+    this.sendAndDeleteBotMessage(msg, `Выбери категорию.`, inline)
   }
 }
 

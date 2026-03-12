@@ -3,7 +3,6 @@ class User {
   #meta = {
     userId: 0,
     logger: true,
-    scores: 0,
     userChatId: 0,
     state: {
       controller: '',

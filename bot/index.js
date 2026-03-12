@@ -7,7 +7,7 @@ module.exports = {
   },
   run: (db) => {
     lib.bot.onText(/\/start/, message => {
-      console.log('Huy v rot');
+      console.log(message);
       let data = 'begin_greet';
       message.message_id = 0;
       lib.mainRouter(db).performCommandByData({message, data});
