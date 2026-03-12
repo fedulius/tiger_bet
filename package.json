@@ -8,5 +8,13 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": ""
+  "description": "",
+  "dependencies": {
+    "fastify": "^5.8.2",
+    "fastify-autoload": "^3.13.0",
+    "fastify-cors": "^6.1.0",
+    "fastify-plugin": "^5.1.0",
+    "node-telegram-bot-api": "^0.67.0",
+    "pg": "^8.20.0"
+  }
 }
