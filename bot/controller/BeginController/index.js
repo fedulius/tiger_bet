@@ -14,7 +14,7 @@ class BeginController extends Controller {
     let categoryList = await this.dal.getCategories();
     let content = this.inline.main(categoryList);
     let inline = this.km.generateKeyboard(content);
-    console.log(inline);
+
     this.sendAndDeleteBotMessage(msg, `Выбери категорию.`, inline)
   }
 }

@@ -28,14 +28,14 @@ class MainRouter {
     if (dataSplit.length < 2) {
       throw 'data command is too short - use _ to split command data';
     }
-    
+
     const controllerName = dataSplit.shift();
     const actionName = dataSplit.shift();
     
     dataSplit.unshift(message);
     
     this.logger(message, controllerName, actionName);
-    
+
     new ControllerRegister(this.pg).getController(controllerName).getAction(actionName, dataSplit);
   }
 

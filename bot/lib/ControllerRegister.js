@@ -14,7 +14,6 @@ class ControllerRegister {
     controllerName = controllerName.toLowerCase();
     controllerName = controllerName.charAt(0).toUpperCase() + controllerName.slice(1);
 
-    console.log(controllerName);
     if (!this.#controllers.has(controllerName)) {
       this.#controllers.set(controllerName, new (require(`../controller/${controllerName}Controller`))({pg: this.pg, lib: require('./index')}));
     }

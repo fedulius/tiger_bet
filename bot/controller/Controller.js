@@ -8,6 +8,7 @@ class Controller {
   }
 
   getAction(actionName, actionArgs = []) {
+    console.log('actionName')
     actionName = actionName.toLowerCase();
     const methodName = `${actionName}Action`;
 
