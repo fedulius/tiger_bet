@@ -1,2 +1,6 @@
+/bot/lib/Telegram.js/
+
 /node_modules/
+/.gitignore
+/config
 

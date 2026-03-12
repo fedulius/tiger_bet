@@ -2,7 +2,9 @@
 <project version="4">
   <component name="SshConfigs">
     <configs>
-      <sshConfig authType="PASSWORD" host="178.236.244.53" id="01ae40b7-9093-493c-ba2f-b1a692b2421d" port="22" nameFormat="DESCRIPTIVE" username="fedulov" useOpenSSHConfig="true" />
+      <sshConfig authType="PASSWORD" host="178.236.244.53" id="01ae40b7-9093-493c-ba2f-b1a692b2421d" port="22" customName="tiger_bet" nameFormat="CUSTOM" username="fedulov" useOpenSSHConfig="true">
+        <option name="customName" value="tiger_bet" />
+      </sshConfig>
     </configs>
   </component>
 </project>

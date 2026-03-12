@@ -3,7 +3,7 @@
   <component name="WebServers">
     <option name="servers">
       <webServer id="5a10647a-c58f-4b83-80fc-8333f39004be" name="twfed.com">
-        <fileTransfer rootFolder="/home/fedulov" accessType="SFTP" host="178.236.244.53" port="22" sshConfigId="01ae40b7-9093-493c-ba2f-b1a692b2421d" sshConfig="fedulov@178.236.244.53:22 password">
+        <fileTransfer rootFolder="/home/fedulov" accessType="SFTP" host="178.236.244.53" port="22" sshConfigId="01ae40b7-9093-493c-ba2f-b1a692b2421d" sshConfig="tiger_bet">
           <advancedOptions>
             <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" passiveMode="true" shareSSLContext="true" />
           </advancedOptions>
