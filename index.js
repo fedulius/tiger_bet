@@ -1,6 +1,7 @@
 const path = require('path');
 const fs = require("fs");
 const bot = require('./bot');
+const scheduler = require('./scheduler');
 
 
 const pg = require('./DataBase').postgres;
@@ -45,4 +46,5 @@ fastify.register(plugin((fn, opts, done) => {
 // });
 
 // fastify.listen(PORT, DOMAIN);
-bot.run(pg);
+scheduler.matches(pg).main();
+// bot.run(pg);

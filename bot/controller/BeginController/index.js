@@ -15,7 +15,7 @@ class BeginController extends Controller {
     let content = this.inline.main(categoryList);
     let inline = this.km.generateKeyboard(content);
 
-    this.sendAndDeleteBotMessage(msg, `Выбери категорию.`, inline)
+    this.sendAndDeleteBotMessage(msg, `Выберите вид спорта.`, inline)
   }
 }
 

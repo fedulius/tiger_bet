@@ -18,6 +18,8 @@ class User {
   cancelLogger() {
     this.#meta.logger = false;
   }
+
+
   
   getLoggerStatus() {
     return this.#meta.logger;
