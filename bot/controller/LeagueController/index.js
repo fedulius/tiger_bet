@@ -32,11 +32,8 @@ class LeagueController extends Controller {
         return [league.league, `match_league_${token}`];
       });
 
-      // Кнопка "Назад" со 2-го экрана возвращает на первый экран (категории).
-      leagueInline.push(['⬅️ Назад', 'begin_greet']);
-
-      const inline = this.km.generateKeyboard(leagueInline, 1);
-      this.sendAndDeleteBotMessage(msg, 'Выберите лигу.', inline, false);
+      // Показываем экран лиг + унифицированная кнопка "Назад" на первый экран.
+      this.sendScreenWithBack(msg, 'Выберите лигу.', leagueInline, 'begin_greet', false, 1);
     } catch (error) {
       console.log(error);
       this.sendBotMessage(msg, 'Не удалось получить список лиг.');

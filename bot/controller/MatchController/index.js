@@ -43,11 +43,15 @@ class MatchController extends Controller {
         return [match.team, `match_forecast_${matchToken}`];
       });
 
-      // Кнопка "Назад" с экрана матчей возвращает на экран лиг.
-      matchesInline.push(['⬅️ Назад', `league_category_${leaguePayload.categoryId}`]);
-
-      const inline = this.km.generateKeyboard(matchesInline, 1);
-      this.sendAndDeleteBotMessage(msg, `Лига: ${league.league}\nВыберите матч.`, inline, false);
+      // Показываем экран матчей + унифицированная кнопка "Назад" на экран лиг.
+      this.sendScreenWithBack(
+        msg,
+        `Лига: ${league.league}\nВыберите матч.`,
+        matchesInline,
+        `league_category_${leaguePayload.categoryId}`,
+        false,
+        1
+      );
     } catch (error) {
       console.log(error);
       this.sendBotMessage(msg, 'Не удалось получить список матчей.');
@@ -72,12 +76,15 @@ class MatchController extends Controller {
       `Источник: https://stavka.tv${matchPayload.url}`,
     ].join('\n');
 
-    // Кнопка "Назад" с экрана прогноза возвращает на список матчей текущей лиги.
-    const inline = this.km.generateKeyboard([
-      ['⬅️ Назад', `match_league_${matchPayload.leagueToken}`],
-    ], 1);
-
-    this.sendAndDeleteBotMessage(msg, response, inline, false);
+    // Показываем экран прогноза + унифицированная кнопка "Назад" на список матчей.
+    this.sendScreenWithBack(
+      msg,
+      response,
+      [],
+      `match_league_${matchPayload.leagueToken}`,
+      false,
+      1
+    );
   }
 }
 

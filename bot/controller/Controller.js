@@ -37,6 +37,19 @@ class Controller {
     this.#sendBotMessageWithReply(msg.chat.id, text, inline);
   }
 
+  // Добавляет кнопку "Назад" к списку кнопок экрана и строит inline-клавиатуру.
+  // Используем единый helper, чтобы не дублировать этот код по контроллерам.
+  buildInlineWithBack(items = [], backCallback = 'begin_greet', maxInLine = 1) {
+    const withBack = [...items, ['⬅️ Назад', backCallback]];
+    return this.km.generateKeyboard(withBack, maxInLine);
+  }
+
+  // Унифицированная отправка экрана с кнопкой "Назад".
+  sendScreenWithBack(msg, text, items = [], backCallback = 'begin_greet', remove = false, maxInLine = 1) {
+    const inline = this.buildInlineWithBack(items, backCallback, maxInLine);
+    this.sendAndDeleteBotMessage(msg, text, inline, remove);
+  }
+
   async sendPhoto(msg, fileStream, text, inline) {
     this.#deletePreviousMessage(msg.chat.id, msg.message_id);
 
