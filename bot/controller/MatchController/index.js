@@ -11,6 +11,7 @@ class MatchController extends Controller {
 
   async leagueAction(msg, token) {
     try {
+      // Достаём контекст выбранной лиги из временного callback-store.
       const leaguePayload = this.callbackStore.get(token);
 
       if (!leaguePayload || leaguePayload.type !== 'league') {
@@ -18,6 +19,7 @@ class MatchController extends Controller {
         return;
       }
 
+      // Повторно получаем список лиг, чтобы выдать актуальный список матчей.
       const leagues = await getLeaguesByCategory(leaguePayload.categoryId);
       const league = leagues[leaguePayload.leagueIndex];
 
@@ -26,6 +28,7 @@ class MatchController extends Controller {
         return;
       }
 
+      // Формируем кнопки матчей. На каждый матч — отдельный короткий token.
       const matchesInline = league.matches.map(match => {
         const matchToken = this.callbackStore.put({
           type: 'match',
@@ -33,10 +36,15 @@ class MatchController extends Controller {
           leagueName: league.league,
           team: match.team,
           url: match.link,
+          // Нужен для кнопки "Назад" с экрана прогноза на экран матчей.
+          leagueToken: token,
         });
 
         return [match.team, `match_forecast_${matchToken}`];
       });
+
+      // Кнопка "Назад" с экрана матчей возвращает на экран лиг.
+      matchesInline.push(['⬅️ Назад', `league_category_${leaguePayload.categoryId}`]);
 
       const inline = this.km.generateKeyboard(matchesInline, 1);
       this.sendAndDeleteBotMessage(msg, `Лига: ${league.league}\nВыберите матч.`, inline, false);
@@ -47,6 +55,7 @@ class MatchController extends Controller {
   }
 
   async forecastAction(msg, token) {
+    // Получаем контекст выбранного матча.
     const matchPayload = this.callbackStore.get(token);
 
     if (!matchPayload || matchPayload.type !== 'match') {
@@ -63,7 +72,12 @@ class MatchController extends Controller {
       `Источник: https://stavka.tv${matchPayload.url}`,
     ].join('\n');
 
-    this.sendBotMessage(msg, response);
+    // Кнопка "Назад" с экрана прогноза возвращает на список матчей текущей лиги.
+    const inline = this.km.generateKeyboard([
+      ['⬅️ Назад', `match_league_${matchPayload.leagueToken}`],
+    ], 1);
+
+    this.sendAndDeleteBotMessage(msg, response, inline, false);
   }
 }
 

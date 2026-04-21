@@ -11,6 +11,7 @@ class LeagueController extends Controller {
 
   async categoryAction(msg, categoryId) {
     try {
+      // Шаг 1: получаем актуальный список лиг по выбранной категории спорта.
       const leagues = await getLeaguesByCategory(categoryId);
 
       if (!leagues.length) {
@@ -18,6 +19,8 @@ class LeagueController extends Controller {
         return;
       }
 
+      // Шаг 2: для каждой лиги создаем короткий callback token,
+      // чтобы не превышать лимит callback_data в Telegram.
       const leagueInline = leagues.map((league, index) => {
         const token = this.callbackStore.put({
           type: 'league',
@@ -29,8 +32,10 @@ class LeagueController extends Controller {
         return [league.league, `match_league_${token}`];
       });
 
-      const inline = this.km.generateKeyboard(leagueInline, 1);
+      // Кнопка "Назад" со 2-го экрана возвращает на первый экран (категории).
+      leagueInline.push(['⬅️ Назад', 'begin_greet']);
 
+      const inline = this.km.generateKeyboard(leagueInline, 1);
       this.sendAndDeleteBotMessage(msg, 'Выберите лигу.', inline, false);
     } catch (error) {
       console.log(error);
