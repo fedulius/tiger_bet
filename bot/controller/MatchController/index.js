@@ -1,5 +1,6 @@
 const Controller = require('../Controller');
 const {getLeaguesByCategory} = require('../../../lib/stavkaMatches');
+const {buildBriefForecastText} = require('../../../lib/forecastAnalyzer');
 
 class MatchController extends Controller {
 
@@ -7,6 +8,7 @@ class MatchController extends Controller {
     super(lib);
     this.pg = pg;
     this.callbackStore = lib.callbackStore;
+    this.forecastProvider = lib.forecastProvider;
   }
 
   async leagueAction(msg, token) {
@@ -67,14 +69,21 @@ class MatchController extends Controller {
       return;
     }
 
-    const response = [
-      `Матч: ${matchPayload.team}`,
-      `Лига: ${matchPayload.leagueName}`,
-      '',
-      'Прогноз (MVP):',
-      'Скоро здесь будет расчет вероятностей по сигналам матча.',
-      `Источник: https://stavka.tv${matchPayload.url}`,
-    ].join('\n');
+    let analysis;
+
+    try {
+      analysis = await this.forecastProvider.getMatchForecast({
+        team: matchPayload.team,
+        url: matchPayload.url,
+      });
+    } catch (error) {
+      console.log(error);
+      analysis = {
+        source: 'no-signal',
+      };
+    }
+
+    const response = buildBriefForecastText(matchPayload, analysis);
 
     // Показываем экран прогноза + унифицированная кнопка "Назад" на список матчей.
     this.sendScreenWithBack(

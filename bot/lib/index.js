@@ -3,5 +3,6 @@ module.exports = {
   keyboard: new (require('./KeyboardMaker'))(),
   bot: new (require('./Telegram'))(),
   callbackStore: new (require('./CallbackStore'))(),
+  forecastProvider: new (require('../../lib/stavkaForecast'))(),
   mainRouter: (pg) => new (require('./MainRouter'))(pg)
 };

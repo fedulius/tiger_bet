@@ -47,4 +47,4 @@ fastify.register(plugin((fn, opts, done) => {
 
 // fastify.listen(PORT, DOMAIN);
 scheduler.matches(pg).main();
-// bot.run(pg);
+bot.run(pg);
