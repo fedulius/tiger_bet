@@ -2,15 +2,16 @@ const bot = require('./bot');
 const scheduler = require('./scheduler');
 const pg = require('./DataBase').postgres;
 const { buildApp } = require('./server/app');
-
-const PORT = 8084;
-const DOMAIN = '178.236.244.53';
+const { getHttpsOptions, getListenConfig } = require('./server/runtimeConfig');
 
 const shouldRunHttp = process.env.RUN_HTTP !== '0';
 const shouldRunScheduler = process.env.RUN_SCHEDULER !== '0';
 const shouldRunBot = process.env.RUN_BOT !== '0';
 
-const fastify = buildApp({ pg, bot });
+const httpsOptions = getHttpsOptions();
+const listenConfig = getListenConfig();
+
+const fastify = buildApp({ pg, bot, httpsOptions });
 
 if (shouldRunScheduler) {
   scheduler.matches(pg).main();
@@ -21,10 +22,7 @@ if (shouldRunBot) {
 }
 
 if (shouldRunHttp) {
-  fastify.listen({
-    port: Number(process.env.PORT || PORT),
-    host: process.env.DOMAIN || DOMAIN,
-  });
+  fastify.listen(listenConfig);
 }
 
 module.exports = { fastify };

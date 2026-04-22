@@ -7,8 +7,11 @@ const { registerFavoritesRoutes } = require('../webapp/api/favorites');
 const { registerHistoryRoutes } = require('../webapp/api/history');
 const { registerMatchDetailsRoutes } = require('../webapp/api/matchDetails');
 
-function buildApp({ pg, bot } = {}) {
-  const fastify = new Fastify({ logger: true });
+function buildApp({ pg, bot, httpsOptions = null } = {}) {
+  const fastify = new Fastify({
+    logger: true,
+    ...(httpsOptions ? { https: httpsOptions } : {}),
+  });
   const webappPublicDir = path.join(__dirname, '..', 'webapp', 'public');
 
   fastify.register(require('@fastify/cors'), {

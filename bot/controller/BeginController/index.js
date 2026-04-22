@@ -1,6 +1,7 @@
 const Controller = require('../Controller');
 const DAL = require('./DAL');
 const InlineController = require('./inline');
+const { getWebAppUrl } = require('../../../server/runtimeConfig');
 
 class BeginController extends Controller {
 
@@ -15,7 +16,7 @@ class BeginController extends Controller {
     let content = this.inline.main(categoryList);
     let inline = this.km.generateKeyboard(content);
 
-    const webAppUrl = process.env.WEBAPP_URL || 'https://example.com/webapp';
+    const webAppUrl = getWebAppUrl(process.env);
     inline.push([
       {
         text: '🧩 Открыть WebApp',
