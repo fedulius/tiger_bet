@@ -1,7 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { analyzeForecastFromHtml, buildBriefForecastText } = require('../lib/forecastAnalyzer');
+const {
+  analyzeForecastFromHtml,
+  buildBriefForecastText,
+  extractEditorialForecast,
+} = require('../lib/forecastAnalyzer');
 
 test('analyzeForecastFromHtml picks highest percent signal as best outcome', () => {
   const html = `
@@ -70,4 +74,24 @@ test('buildBriefForecastText keeps explanation in 4-6 lines', () => {
 
   const explanationRows = rows.slice(idx + 1, rows.length - 1).filter(Boolean);
   assert.ok(explanationRows.length >= 4 && explanationRows.length <= 6);
+});
+
+test('extractEditorialForecast prioritizes site main prediction for match page', () => {
+  const html = `
+    <html>
+      <head><title>Бергс — Чилич: прогноз (кэф 1.94) 22 апреля 2026 | СТАВКА ТВ</title></head>
+      <body>
+        <div>
+          ☑️ Прогноз на матч Зизу Бергс — Марин Чилич: победа Чилича за коэффициент 1.88
+          Основной прогноз: Бергс произвел смешанное впечатление...
+        </div>
+      </body>
+    </html>
+  `;
+
+  const result = extractEditorialForecast(html, { matchName: 'Зизу Бергс - Марин Чилич' });
+
+  assert.equal(result.bestOutcome, 'П2');
+  assert.equal(result.source, 'editorial-main-forecast');
+  assert.equal(result.probabilityPercent, 53);
 });
