@@ -2,6 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const Fastify = require('fastify');
 const plugin = require('fastify-plugin');
+const { registerRecommendationsRoutes } = require('../webapp/api/recommendations');
 
 function buildApp({ pg, bot } = {}) {
   const fastify = new Fastify({ logger: true });
@@ -48,6 +49,8 @@ function buildApp({ pg, bot } = {}) {
   fastify.get('/webapp/', async (request, reply) => sendWebappFile(reply, 'index.html', 'text/html; charset=utf-8'));
   fastify.get('/webapp/styles.css', async (request, reply) => sendWebappFile(reply, 'styles.css', 'text/css; charset=utf-8'));
   fastify.get('/webapp/app.js', async (request, reply) => sendWebappFile(reply, 'app.js', 'application/javascript; charset=utf-8'));
+
+  registerRecommendationsRoutes(fastify);
 
   return fastify;
 }
