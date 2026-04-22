@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { analyzeForecastFromHtml } = require('../lib/forecastAnalyzer');
+const { analyzeForecastFromHtml, buildBriefForecastText } = require('../lib/forecastAnalyzer');
 
 test('analyzeForecastFromHtml picks highest percent signal as best outcome', () => {
   const html = `
@@ -43,4 +43,31 @@ test('analyzeForecastFromHtml returns no-signal result when html has no usable s
   assert.equal(analysis.bestOutcome, 'нет сигнала');
   assert.equal(analysis.source, 'no-signal');
   assert.equal(analysis.probabilityPercent, 0);
+});
+
+test('buildBriefForecastText keeps explanation in 4-6 lines', () => {
+  const text = buildBriefForecastText(
+    {
+      team: 'Team A - Team B',
+      leagueName: 'Test League',
+      url: '/match-url',
+    },
+    {
+      bestOutcome: 'П1',
+      probabilityPercent: 62,
+      confidence: 'средняя',
+      source: 'ai-llm',
+      explanationLines: [
+        '1) Команда A стабильнее по последним матчам.',
+        '2) У команды B слабее оборона на выезде.',
+      ],
+    }
+  );
+
+  const rows = text.split('\n');
+  const idx = rows.findIndex((line) => line.startsWith('Объяснение:'));
+  assert.ok(idx >= 0, 'Объяснение: section not found');
+
+  const explanationRows = rows.slice(idx + 1, rows.length - 1).filter(Boolean);
+  assert.ok(explanationRows.length >= 4 && explanationRows.length <= 6);
 });
