@@ -13,9 +13,9 @@ const listenConfig = getListenConfig();
 
 const fastify = buildApp({ pg, bot, httpsOptions });
 
-if (shouldRunScheduler) {
-  scheduler.matches(pg).main();
-}
+// if (shouldRunScheduler) {
+//   scheduler.matches(pg).main();
+// }
 
 if (shouldRunBot) {
   bot.run(pg);

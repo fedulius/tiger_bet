@@ -2,6 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const Fastify = require('fastify');
 const plugin = require('fastify-plugin');
+
 const { registerRecommendationsRoutes } = require('../webapp/api/recommendations');
 const { registerFavoritesRoutes } = require('../webapp/api/favorites');
 const { registerHistoryRoutes } = require('../webapp/api/history');

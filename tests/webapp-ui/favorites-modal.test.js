@@ -92,6 +92,13 @@ test('favorites flow: search + apply PUT + chips remove updates state', async ()
       return { ok: true, json: async () => ({}) };
     },
     Date,
+    window: {
+      Telegram: {
+        WebApp: {
+          initData: 'user=%7B%22id%22%3A337412226%7D&hash=test',
+        },
+      },
+    },
     setTimeout,
     clearTimeout,
     setInterval: () => 111,
@@ -124,6 +131,7 @@ test('favorites flow: search + apply PUT + chips remove updates state', async ()
 
   const putCall = fetchCalls.find((call) => call.url === '/api/webapp/favorites' && call.options?.method === 'PUT');
   assert.ok(putCall, 'PUT /api/webapp/favorites must be called');
+  assert.ok(putCall.options?.headers?.['x-telegram-init-data'] !== undefined);
 
   app.removeFavorite('sports', 'tennis');
   assert.ok(!app.getState().favorites.sports.includes('tennis'));

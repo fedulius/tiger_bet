@@ -1,0 +1,59 @@
+<h2>tiger_bet — Личный кабинет (черновик v1)</h2>
+<p class="subtitle">Фокус: избранные виды спорта + избранные лиги + рекомендации + последние прогнозы</p>
+
+<div class="section">
+  <div class="mockup">
+    <div class="mockup-header">Главный экран</div>
+    <div class="mockup-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div style="border:1px solid #2a2a2a;border-radius:10px;padding:10px;">
+          <div class="label">Избранное</div>
+          <h3 style="margin:6px 0 8px 0;">Виды спорта</h3>
+          <p>Футбол, Теннис, CS2</p>
+        </div>
+        <div style="border:1px solid #2a2a2a;border-radius:10px;padding:10px;">
+          <div class="label">Избранное</div>
+          <h3 style="margin:6px 0 8px 0;">Лиги</h3>
+          <p>Premier League, ATP, ESL Pro League</p>
+        </div>
+      </div>
+
+      <div style="border:1px solid #2a2a2a;border-radius:10px;padding:10px;margin-bottom:12px;">
+        <div class="label">Подборка</div>
+        <h3 style="margin:6px 0 8px 0;">Рекомендованные матчи</h3>
+        <p>Лента 3-6 матчей, собранных только из избранных видов спорта/лиг.</p>
+      </div>
+
+      <div style="border:1px solid #2a2a2a;border-radius:10px;padding:10px;">
+        <div class="label">История</div>
+        <h3 style="margin:6px 0 8px 0;">Последние прогнозы</h3>
+        <p>Последние 5-10 прогнозов с пометкой источника и уверенности.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h3>Выбери, какой порядок блоков лучше для первого релиза</h3>
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Избранное → Рекомендации → Последние прогнозы</h3>
+      <p>Сначала настройка интересов, потом actionable-контент.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Рекомендации → Избранное → Последние прогнозы</h3>
+      <p>Сразу показываем матчи, избранное ниже как контекст.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Последние прогнозы → Рекомендации → Избранное</h3>
+      <p>Опора на историю пользователя, затем новые матчи.</p>
+    </div>
+  </div>
+</div>

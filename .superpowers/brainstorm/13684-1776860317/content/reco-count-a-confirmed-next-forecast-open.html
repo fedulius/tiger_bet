@@ -1,0 +1,38 @@
+<h2>Зафиксировано ✅</h2>
+<p class="subtitle">В MVP показываем 3 рекомендованные карточки на главном экране (вариант A)</p>
+
+<div class="mockup">
+  <div class="mockup-header">Итоговая верхняя часть экрана (превью)</div>
+  <div class="mockup-body">
+    <p>• Sticky-хедер с якорями + «Обновить сейчас»</p>
+    <p>• Блок «Рекомендованные матчи» (3 карточки, сортировка по времени)</p>
+    <p>• Новые матчи помечаются бейджем «Новые»</p>
+  </div>
+</div>
+
+<h3>Следующий шаг: куда ведёт кнопка «Подробнее» на карточке рекомендации?</h3>
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>В модальное окно</h3>
+      <p>Детали прогноза открываются поверх текущей страницы без перехода.</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>На отдельную страницу матча</h3>
+      <p>Полноценный экран деталей с URL и возможностью шаринга.</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Раскрытие прямо в ленте (accordion)</h3>
+      <p>Карточка разворачивается на месте, без модалок и переходов.</p>
+    </div>
+  </div>
+</div>

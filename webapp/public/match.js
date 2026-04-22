@@ -24,6 +24,26 @@
     return `${yyyy}-${mm}-${dd} ${hh}:${min}`;
   }
 
+  function getTelegramInitData(globalRef) {
+    const locationRef = globalRef?.location || globalRef?.window?.location;
+    const nativeSearchParams = (typeof URLSearchParams === 'function') ? URLSearchParams : null;
+    const searchParamsCtor = globalRef?.URLSearchParams || globalRef?.window?.URLSearchParams || nativeSearchParams;
+
+    const hash = String(locationRef?.hash || '').replace(/^#/, '');
+    const search = String(locationRef?.search || '').replace(/^\?/, '');
+
+    const hashParams = typeof searchParamsCtor === 'function' ? new searchParamsCtor(hash) : { get: () => null };
+    const searchParams = typeof searchParamsCtor === 'function' ? new searchParamsCtor(search) : { get: () => null };
+
+    return String(
+      globalRef?.Telegram?.WebApp?.initData
+      || globalRef?.window?.Telegram?.WebApp?.initData
+      || hashParams.get('tgWebAppData')
+      || searchParams.get('tgWebAppData')
+      || ''
+    );
+  }
+
   function createMatchPageApp(deps = {}) {
     const doc = deps.document || global.document;
     const location = deps.location || global.window?.location || { search: '' };
@@ -49,7 +69,11 @@
       }
 
       try {
-        const response = await fetchFn(`/api/webapp/match/${encodeURIComponent(id)}`);
+        const response = await fetchFn(`/api/webapp/match/${encodeURIComponent(id)}`, {
+          headers: {
+            'x-telegram-init-data': getTelegramInitData(global),
+          },
+        });
         if (response && response.ok === false) {
           throw new Error('not found');
         }

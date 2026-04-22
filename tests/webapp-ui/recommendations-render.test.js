@@ -41,6 +41,7 @@ test('recommendations block fetches API and renders exactly 3 cards with Нов�
     ],
   };
 
+  const fetchCalls = [];
   const sandbox = {
     document: {
       getElementById(id) {
@@ -56,7 +57,17 @@ test('recommendations block fetches API and renders exactly 3 cards with Нов�
         return null;
       },
     },
-    fetch: async () => ({ json: async () => payload }),
+    window: {
+      Telegram: {
+        WebApp: {
+          initData: 'user=%7B%22id%22%3A337412226%7D&hash=test',
+        },
+      },
+    },
+    fetch: async (url, options) => {
+      fetchCalls.push({ url, options });
+      return { json: async () => payload };
+    },
     Date,
     setTimeout,
     clearTimeout,
@@ -73,6 +84,8 @@ test('recommendations block fetches API and renders exactly 3 cards with Нов�
   assert.equal(cardsCount, 3);
   assert.match(recommendationsList.innerHTML, /Новые/);
   assert.match(recommendationsList.innerHTML, /2026-04-22 20:30/);
+  assert.equal(fetchCalls[0]?.url, '/api/webapp/recommendations');
+  assert.equal(fetchCalls[0]?.options?.headers?.['x-telegram-init-data'], 'user=%7B%22id%22%3A337412226%7D&hash=test');
 });
 
 test('manual refresh updates status as "Обновлено X сек назад"', async () => {
@@ -125,4 +138,54 @@ test('manual refresh updates status as "Обновлено X сек назад"'
 
   assert.ok(calls >= 2);
   assert.match(refreshStatus.textContent, /Обновлено \d+ сек назад/);
+});
+
+test('uses tgWebAppData from location hash when Telegram.WebApp.initData is unavailable', async () => {
+  const refreshBtn = createElement();
+  const recommendationsList = createElement();
+  const refreshStatus = createElement();
+  const fetchCalls = [];
+
+  const sandbox = {
+    document: {
+      getElementById(id) {
+        if (id === 'refresh-btn') return refreshBtn;
+        if (id === 'recommendations-list') return recommendationsList;
+        if (id === 'refresh-status') return refreshStatus;
+        return null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+      querySelector() {
+        return null;
+      },
+    },
+    location: {
+      hash: '#tgWebAppData=user%3D%257B%2522id%2522%253A337412226%257D%26hash%3DhashFromLocation',
+      search: '',
+    },
+    fetch: async (url, options) => {
+      fetchCalls.push({ url, options });
+      return {
+        json: async () => ({
+          updated_at: new Date().toISOString(),
+          items: [],
+        }),
+      };
+    },
+    URLSearchParams,
+    Date,
+    setTimeout,
+    clearTimeout,
+    console,
+  };
+
+  const code = fs.readFileSync(APP_JS, 'utf8');
+  vm.runInNewContext(code, sandbox);
+
+  await flush();
+  await flush();
+
+  assert.equal(fetchCalls[0]?.options?.headers?.['x-telegram-init-data'], 'user=%7B%22id%22%3A337412226%7D&hash=hashFromLocation');
 });
