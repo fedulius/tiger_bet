@@ -22,8 +22,8 @@ function makeElement() {
   };
 }
 
-test('recommendations fallback to top matches when favorites source is empty', () => {
-  const payload = getRecommendations({
+test('recommendations fallback to top matches when favorites source is empty', async () => {
+  const payload = await getRecommendations({
     source: 'favorites',
     items: [],
   });

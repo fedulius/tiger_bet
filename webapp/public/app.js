@@ -102,6 +102,10 @@
 
       elements.recommendationsList.innerHTML = top3.map((item) => {
         const badge = item.is_new ? '<span class="recommendation-badge">Новые</span>' : '';
+        const actionLink = item.source_url
+          ? `<a href="${escapeHtml(item.source_url)}" target="_blank" rel="noopener noreferrer">Открыть источник</a>`
+          : `<a href="/webapp/match.html?id=${encodeURIComponent(item.id || '')}">Подробнее</a>`;
+
         return `
           <article class="recommendation-card" data-id="${escapeHtml(item.id || '')}">
             <div class="recommendation-head">
@@ -111,7 +115,7 @@
             <div class="recommendation-meta">${escapeHtml(item.league || '')} · ${escapeHtml(item.starts_at || '')}</div>
             <p>${escapeHtml(item.main_thought || '')}</p>
             <div class="recommendation-confidence">Уверенность: ${escapeHtml(item.confidence ?? '—')}%</div>
-            <div class="recommendation-actions"><a href="/webapp/match.html?id=${encodeURIComponent(item.id || '')}">Подробнее</a></div>
+            <div class="recommendation-actions">${actionLink}</div>
           </article>
         `;
       }).join('');

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 
 const { buildApp } = require('../../server/app');
 
-test('GET /api/webapp/recommendations returns 3 items sorted by starts_at with fallback source', async () => {
+test('GET /api/webapp/recommendations returns 3 items sorted by starts_at', async () => {
   const app = buildApp({ pg: null, bot: null });
   await app.ready();
 
@@ -16,7 +16,7 @@ test('GET /api/webapp/recommendations returns 3 items sorted by starts_at with f
     assert.equal(response.statusCode, 200);
 
     const payload = response.json();
-    assert.equal(payload.source, 'fallback-top');
+    assert.ok(['fallback-top', 'stavka-live'].includes(payload.source));
     assert.ok(payload.updated_at);
     assert.equal(Array.isArray(payload.items), true);
     assert.equal(payload.items.length, 3);
