@@ -342,13 +342,10 @@
         const payload = await response.json();
         if (!Array.isArray(payload?.items) || payload.items.length === 0) {
           const message = payload?.empty_state?.message || 'История пока пустая';
-          const ctaLabel = payload?.empty_state?.cta?.label;
-          const ctaTarget = payload?.empty_state?.cta?.target;
-          if (ctaLabel && ctaTarget) {
-            elements.historyList.innerHTML = `${escapeHtml(message)} <a href="${escapeHtml(ctaTarget)}">${escapeHtml(ctaLabel)}</a>`;
-          } else {
-            elements.historyList.textContent = message;
-          }
+          const ctaLabel = payload?.empty_state?.cta?.label || 'Открыть рекомендации';
+          const ctaTarget = payload?.empty_state?.cta?.target || '#recommendations';
+
+          elements.historyList.innerHTML = `${escapeHtml(message)} <a href="${escapeHtml(ctaTarget)}">${escapeHtml(ctaLabel)}</a>`;
           return;
         }
 
