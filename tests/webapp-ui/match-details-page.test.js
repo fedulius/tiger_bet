@@ -77,6 +77,7 @@ test('match.js reads id from query and renders details with external source butt
   await app.init();
 
   assert.match(details.innerHTML, /Arsenal vs Chelsea/);
+  assert.match(details.innerHTML, /2026-04-22 20:30/);
   assert.match(details.innerHTML, /Форма и xG/);
   assert.match(details.innerHTML, /68%/);
   assert.match(external.innerHTML, /target="_blank"/);

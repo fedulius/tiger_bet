@@ -72,6 +72,7 @@ test('recommendations block fetches API and renders exactly 3 cards with Нов�
   const cardsCount = (recommendationsList.innerHTML.match(/recommendation-card/g) || []).length;
   assert.equal(cardsCount, 3);
   assert.match(recommendationsList.innerHTML, /Новые/);
+  assert.match(recommendationsList.innerHTML, /2026-04-22 20:30/);
 });
 
 test('manual refresh updates status as "Обновлено X сек назад"', async () => {

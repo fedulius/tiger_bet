@@ -137,6 +137,7 @@ test('history list renders format A item fields', async () => {
 
   assert.match(historyList.innerHTML, /Arsenal vs Chelsea/);
   assert.match(historyList.innerHTML, /Premier League/);
+  assert.match(historyList.innerHTML, /2026-04-22 20:30/);
   assert.match(historyList.innerHTML, /Победа Arsenal/);
   assert.match(historyList.innerHTML, /68%/);
 });
