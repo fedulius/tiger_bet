@@ -82,6 +82,51 @@ section h2 {
   font-size: 1.05rem;
 }
 
+#recommendations-list {
+  display: grid;
+  gap: 10px;
+}
+
+.recommendation-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  background: color-mix(in oklab, var(--surface) 90%, var(--surface-muted));
+}
+
+.recommendation-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.recommendation-head h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.recommendation-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  border: 1px solid var(--line);
+  background: color-mix(in oklab, var(--link) 20%, var(--surface));
+}
+
+.recommendation-meta,
+.recommendation-confidence {
+  font-size: 0.86rem;
+  opacity: 0.82;
+}
+
+.recommendations-empty {
+  font-size: 0.92rem;
+  opacity: 0.85;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --surface: #121622;
