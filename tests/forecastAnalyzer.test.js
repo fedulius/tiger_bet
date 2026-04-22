@@ -76,14 +76,15 @@ test('buildBriefForecastText keeps explanation in 4-6 lines', () => {
   assert.ok(explanationRows.length >= 4 && explanationRows.length <= 6);
 });
 
-test('extractEditorialForecast prioritizes site main prediction for match page', () => {
+test('extractEditorialForecast returns main thought from editorial forecast block', () => {
   const html = `
     <html>
       <head><title>Бергс — Чилич: прогноз (кэф 1.94) 22 апреля 2026 | СТАВКА ТВ</title></head>
       <body>
         <div>
           ☑️ Прогноз на матч Зизу Бергс — Марин Чилич: победа Чилича за коэффициент 1.88
-          Основной прогноз: Бергс произвел смешанное впечатление...
+          Основной прогноз: Бергс произвел смешанное впечатление, но в разменах Чилич выглядит сильнее.
+          Поэтому ставка на победу Чилича выглядит оправданной.
         </div>
       </body>
     </html>
@@ -91,7 +92,27 @@ test('extractEditorialForecast prioritizes site main prediction for match page',
 
   const result = extractEditorialForecast(html, { matchName: 'Зизу Бергс - Марин Чилич' });
 
-  assert.equal(result.bestOutcome, 'П2');
+  assert.match(result.mainThought, /побед/i);
+  assert.match(result.mainThought, /Чилич/i);
   assert.equal(result.source, 'editorial-main-forecast');
   assert.equal(result.probabilityPercent, 53);
+});
+
+test('extractEditorialForecast keeps named winner for non П1/П2 markets (e.g. Dota2 team)', () => {
+  const html = `
+    <html>
+      <head><title>Xtreme Gaming — Team Spirit: прогноз 22 апреля 2026 | СТАВКА ТВ</title></head>
+      <body>
+        <div>
+          Прогноз на матч Xtreme Gaming — Team Spirit: победа Xtreme Gaming за коэффициент 1.95
+          Основной прогноз: По пикам и текущей форме Xtreme Gaming выглядит стабильнее по лейту.
+        </div>
+      </body>
+    </html>
+  `;
+
+  const result = extractEditorialForecast(html, { matchName: 'Xtreme Gaming - Team Spirit' });
+
+  assert.match(result.mainThought, /Xtreme Gaming/i);
+  assert.doesNotMatch(result.mainThought, /П1|П2|Х/i);
 });
