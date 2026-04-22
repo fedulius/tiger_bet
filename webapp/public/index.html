@@ -7,12 +7,23 @@
   <link rel="stylesheet" href="/webapp/styles.css">
 </head>
 <body>
-  <header class="header">
-    <h1>Tiger Bet</h1>
-    <button id="refresh-btn" type="button">Обновить сейчас</button>
+  <header class="header" id="top-header">
+    <div class="brand-row">
+      <h1>Tiger Bet</h1>
+      <button id="refresh-btn" type="button">Обновить сейчас</button>
+    </div>
+
+    <nav class="anchors" aria-label="Навигация по блокам">
+      <a href="#recommendations">Рекомендации</a>
+      <a href="#favorites-sports">Спорт</a>
+      <a href="#favorites-leagues">Лиги</a>
+      <a href="#history">История</a>
+    </nav>
+
+    <div id="refresh-status" class="refresh-status" aria-live="polite"></div>
   </header>
 
-  <main>
+  <main class="layout">
     <section id="recommendations">
       <h2>Рекомендованные матчи</h2>
       <div id="recommendations-list">Загрузка...</div>

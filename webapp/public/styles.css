@@ -1,31 +1,93 @@
 :root {
   color-scheme: light dark;
   font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  --surface: #ffffff;
+  --surface-muted: #f5f7fb;
+  --text: #1f2937;
+  --line: #d7dce7;
+  --link: #2563eb;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
   padding: 16px;
-  line-height: 1.4;
+  line-height: 1.45;
+  background: var(--surface-muted);
+  color: var(--text);
 }
 
 .header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  backdrop-filter: blur(4px);
+  background: color-mix(in oklab, var(--surface) 86%, transparent);
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.brand-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  position: sticky;
-  top: 0;
-  backdrop-filter: blur(4px);
-  padding: 8px 0;
+  gap: 12px;
 }
 
-main {
+.brand-row h1 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.anchors {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.anchors a {
+  text-decoration: none;
+  color: var(--link);
+  font-size: 0.95rem;
+}
+
+.refresh-status {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+
+.layout {
   display: grid;
   gap: 16px;
+  max-width: 920px;
+  margin: 0 auto;
 }
 
 section {
-  border: 1px solid color-mix(in oklab, CanvasText 20%, Canvas 80%);
+  border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 12px;
+  padding: 14px;
+  background: var(--surface);
+}
+
+section h2 {
+  margin: 0 0 10px;
+  font-size: 1.05rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: #121622;
+    --surface-muted: #0b0f18;
+    --text: #e5e7eb;
+    --line: #30384b;
+    --link: #7aa2ff;
+  }
 }
