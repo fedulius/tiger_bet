@@ -7,7 +7,7 @@ function buildApp({ pg, bot } = {}) {
   const fastify = new Fastify({ logger: true });
   const webappPublicDir = path.join(__dirname, '..', 'webapp', 'public');
 
-  fastify.register(require('fastify-cors'), {
+  fastify.register(require('@fastify/cors'), {
     origin: true,
   });
 
