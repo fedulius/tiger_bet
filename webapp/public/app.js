@@ -350,6 +350,7 @@
             <h3>${escapeHtml(item.match || 'Матч')}</h3>
             <div class="recommendation-meta">${escapeHtml(item.league || '')} · ${escapeHtml(item.starts_at || '')}</div>
             <p>${escapeHtml(item.main_thought || '')}</p>
+            <div class="recommendation-confidence">Уверенность: ${escapeHtml(item.confidence ?? '—')}%</div>
           </article>
         `).join('');
       } catch {
