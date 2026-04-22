@@ -5,6 +5,7 @@ const plugin = require('fastify-plugin');
 const { registerRecommendationsRoutes } = require('../webapp/api/recommendations');
 const { registerFavoritesRoutes } = require('../webapp/api/favorites');
 const { registerHistoryRoutes } = require('../webapp/api/history');
+const { registerMatchDetailsRoutes } = require('../webapp/api/matchDetails');
 
 function buildApp({ pg, bot } = {}) {
   const fastify = new Fastify({ logger: true });
@@ -55,6 +56,7 @@ function buildApp({ pg, bot } = {}) {
   registerRecommendationsRoutes(fastify);
   registerFavoritesRoutes(fastify);
   registerHistoryRoutes(fastify);
+  registerMatchDetailsRoutes(fastify);
 
   return fastify;
 }
