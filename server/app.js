@@ -50,8 +50,11 @@ function buildApp({ pg, bot } = {}) {
   fastify.get('/health', async () => ({ ok: true }));
   fastify.get('/webapp', async (request, reply) => sendWebappFile(reply, 'index.html', 'text/html; charset=utf-8'));
   fastify.get('/webapp/', async (request, reply) => sendWebappFile(reply, 'index.html', 'text/html; charset=utf-8'));
+  fastify.get('/webapp/match', async (request, reply) => sendWebappFile(reply, 'match.html', 'text/html; charset=utf-8'));
+  fastify.get('/webapp/match.html', async (request, reply) => sendWebappFile(reply, 'match.html', 'text/html; charset=utf-8'));
   fastify.get('/webapp/styles.css', async (request, reply) => sendWebappFile(reply, 'styles.css', 'text/css; charset=utf-8'));
   fastify.get('/webapp/app.js', async (request, reply) => sendWebappFile(reply, 'app.js', 'application/javascript; charset=utf-8'));
+  fastify.get('/webapp/match.js', async (request, reply) => sendWebappFile(reply, 'match.js', 'application/javascript; charset=utf-8'));
 
   registerRecommendationsRoutes(fastify);
   registerFavoritesRoutes(fastify);

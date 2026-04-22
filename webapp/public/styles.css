@@ -161,6 +161,15 @@ section h2 {
   opacity: 0.82;
 }
 
+.recommendation-actions {
+  margin-top: 6px;
+  font-size: 0.9rem;
+}
+
+.match-external-link {
+  margin-top: 10px;
+}
+
 .recommendations-empty {
   font-size: 0.92rem;
   opacity: 0.85;
