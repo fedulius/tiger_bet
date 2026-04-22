@@ -26,17 +26,24 @@
   <main class="layout">
     <section id="recommendations">
       <h2>Рекомендованные матчи</h2>
+      <div id="recommendations-error" class="block-error" aria-live="polite"></div>
       <div id="recommendations-list">Загрузка...</div>
     </section>
 
     <section id="favorites-sports">
-      <h2>Избранные виды спорта</h2>
-      <button type="button">+ Добавить</button>
+      <div class="section-head">
+        <h2>Избранные виды спорта</h2>
+        <button id="add-sports-btn" type="button">+ Добавить</button>
+      </div>
+      <div id="sports-chips" class="chips-row"></div>
     </section>
 
     <section id="favorites-leagues">
-      <h2>Избранные лиги</h2>
-      <button type="button">+ Добавить</button>
+      <div class="section-head">
+        <h2>Избранные лиги</h2>
+        <button id="add-leagues-btn" type="button">+ Добавить</button>
+      </div>
+      <div id="leagues-chips" class="chips-row"></div>
     </section>
 
     <section id="history">
@@ -44,6 +51,22 @@
       <div id="history-list">История пока пустая</div>
     </section>
   </main>
+
+  <div id="favorites-modal" class="modal" style="display:none" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="favorites-modal-title">
+      <div class="modal-head">
+        <h3 id="favorites-modal-title">Управление избранным</h3>
+        <button id="favorites-close-btn" type="button" aria-label="Закрыть">×</button>
+      </div>
+
+      <input id="favorites-search" type="search" placeholder="Поиск по спорту и лигам">
+      <div id="favorites-options" class="favorites-options"></div>
+
+      <div class="modal-actions">
+        <button id="favorites-apply-btn" type="button">Применить</button>
+      </div>
+    </div>
+  </div>
 
   <script src="/webapp/app.js"></script>
 </body>
