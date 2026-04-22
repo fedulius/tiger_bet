@@ -3,6 +3,7 @@ const fs = require('fs');
 const Fastify = require('fastify');
 const plugin = require('fastify-plugin');
 const { registerRecommendationsRoutes } = require('../webapp/api/recommendations');
+const { registerFavoritesRoutes } = require('../webapp/api/favorites');
 
 function buildApp({ pg, bot } = {}) {
   const fastify = new Fastify({ logger: true });
@@ -51,6 +52,7 @@ function buildApp({ pg, bot } = {}) {
   fastify.get('/webapp/app.js', async (request, reply) => sendWebappFile(reply, 'app.js', 'application/javascript; charset=utf-8'));
 
   registerRecommendationsRoutes(fastify);
+  registerFavoritesRoutes(fastify);
 
   return fastify;
 }
