@@ -54,8 +54,8 @@ test('history empty-state renders message and CTA link to recommendations', asyn
     Date,
     setTimeout,
     clearTimeout,
-    setInterval,
-    clearInterval,
+    setInterval: () => 112,
+    clearInterval: () => {},
     console,
   };
 
@@ -117,8 +117,8 @@ test('history list renders format A item fields', async () => {
     Date,
     setTimeout,
     clearTimeout,
-    setInterval,
-    clearInterval,
+    setInterval: () => 112,
+    clearInterval: () => {},
     console,
   };
 

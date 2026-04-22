@@ -66,8 +66,14 @@
       }
     }
 
-    function setRecommendationsError(text) {
-      if (elements.recommendationsError) {
+    function setRecommendationsError(text, { asHtml = false } = {}) {
+      if (!elements.recommendationsError) {
+        return;
+      }
+
+      if (asHtml) {
+        elements.recommendationsError.innerHTML = text || '';
+      } else {
         elements.recommendationsError.textContent = text || '';
       }
     }
@@ -134,7 +140,7 @@
         if (elements.recommendationsList && !elements.recommendationsList.innerHTML.trim()) {
           elements.recommendationsList.innerHTML = '<div class="recommendations-empty">Не удалось загрузить рекомендации</div>';
         }
-        setRecommendationsError('Не удалось обновить рекомендации. Попробуйте снова.');
+        setRecommendationsError('<span>Не удалось обновить рекомендации.</span> <button type="button" data-action="retry-recommendations">Повторить</button>', { asHtml: true });
         setRefreshStatus('Ошибка обновления');
       }
     }
@@ -374,6 +380,12 @@
 
     function bindCoreEvents() {
       elements.refreshBtn?.addEventListener('click', refreshRecommendations);
+      elements.recommendationsError?.addEventListener('click', (event) => {
+        const target = event?.target;
+        if (target?.dataset?.action === 'retry-recommendations') {
+          refreshRecommendations();
+        }
+      });
       bindAnchorScroll();
       bindFavoritesEvents();
     }
@@ -385,6 +397,7 @@
         loadFavorites(),
         loadHistory(),
       ]);
+      this.startPolling(180000);
     }
 
     function getState() {

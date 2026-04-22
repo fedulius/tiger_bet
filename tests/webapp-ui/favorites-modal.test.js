@@ -94,8 +94,8 @@ test('favorites flow: search + apply PUT + chips remove updates state', async ()
     Date,
     setTimeout,
     clearTimeout,
-    setInterval,
-    clearInterval,
+    setInterval: () => 111,
+    clearInterval: () => {},
     console,
   };
 
