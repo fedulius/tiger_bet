@@ -6,6 +6,19 @@ module.exports = {
     lib.bot.sendMessage(chatId, messageText);
   },
   run: (db) => {
+    const webAppUrl = process.env.WEBAPP_URL;
+    if (webAppUrl && /^https:\/\//i.test(webAppUrl)) {
+      lib.bot.setChatMenuButton({
+        menu_button: {
+          type: 'web_app',
+          text: 'Tiger Bet WebApp',
+          web_app: { url: webAppUrl },
+        },
+      }).catch((error) => {
+        console.log('setChatMenuButton error:', error?.message || error);
+      });
+    }
+
     lib.bot.onText(/\/start/, message => {
       console.log(message);
       let data = 'begin_greet';
