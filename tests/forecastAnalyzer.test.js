@@ -116,3 +116,16 @@ test('extractEditorialForecast keeps named winner for non П1/П2 markets (e.g. 
   assert.match(result.mainThought, /Xtreme Gaming/i);
   assert.doesNotMatch(result.mainThought, /П1|П2|Х/i);
 });
+
+test('extractEditorialForecast decodes html entities in main thought', () => {
+  const html = `
+    <div>
+      Основной прогноз: Победа &quot;Баварии&quot; с форой (-1.5) с кэфом: 2.27
+    </div>
+  `;
+
+  const result = extractEditorialForecast(html, { matchName: 'Бавария - Дортмунд' });
+
+  assert.match(result.mainThought, /Победа "Баварии"/);
+  assert.doesNotMatch(result.mainThought, /&quot;/);
+});
