@@ -59,6 +59,14 @@ test('GET /webapp serves React dist index when webappFrontendMode=react', async 
 
     assert.equal(assetResponse.statusCode, 200);
     assert.match(assetResponse.body, /console\.log\("react"\)/);
+
+    const matchCompatResponse = await app.inject({
+      method: 'GET',
+      url: '/webapp/match.html?id=match-42',
+    });
+
+    assert.equal(matchCompatResponse.statusCode, 200);
+    assert.match(matchCompatResponse.body, /id="root">React</);
   } finally {
     await app.close();
     fs.rmSync(dir, { recursive: true, force: true });

@@ -83,6 +83,7 @@ function buildApp({
   if (reactModeAvailable) {
     fastify.get('/webapp', async (request, reply) => sendFileFromBase(reply, reactDistDir, 'index.html'));
     fastify.get('/webapp/', async (request, reply) => sendFileFromBase(reply, reactDistDir, 'index.html'));
+    fastify.get('/webapp/match.html', async (request, reply) => sendFileFromBase(reply, reactDistDir, 'index.html'));
     fastify.get('/webapp/*', async (request, reply) => {
       const rawPath = String(request.params['*'] || '').replace(/^\/+/, '');
 
