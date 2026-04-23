@@ -22,10 +22,17 @@ function resolveContentType(fileName = '') {
   return 'application/octet-stream';
 }
 
-function sendFileFromBase(reply, baseDir, fileName) {
+function resolveSafePath(baseDir, fileName) {
   const targetPath = path.normalize(path.join(baseDir, fileName));
-
   if (!targetPath.startsWith(baseDir)) {
+    return null;
+  }
+  return targetPath;
+}
+
+function sendFileFromBase(reply, baseDir, fileName) {
+  const targetPath = resolveSafePath(baseDir, fileName);
+  if (!targetPath) {
     return reply.status(400).send('Bad Request');
   }
 
@@ -37,25 +44,23 @@ function sendFileFromBase(reply, baseDir, fileName) {
   }
 }
 
+function buildMissingDistMessage(distDir) {
+  return JSON.stringify({
+    error: 'React build not found',
+    message: `Expected ${distDir}/index.html. Run: cd webapp-react && npm install && npm run build`,
+  });
+}
+
 function buildApp({
   pg,
   bot,
   httpsOptions = null,
-  webappFrontendMode = 'legacy',
   reactDistDir = path.join(__dirname, '..', 'webapp-react', 'dist'),
 } = {}) {
   const fastify = new Fastify({
     logger: true,
     ...(httpsOptions ? { https: httpsOptions } : {}),
   });
-
-  const webappLegacyDir = path.join(__dirname, '..', 'webapp', 'public');
-  const reactIndexPath = path.join(reactDistDir, 'index.html');
-  const reactModeAvailable = webappFrontendMode === 'react' && fs.existsSync(reactIndexPath);
-
-  if (webappFrontendMode === 'react' && !reactModeAvailable) {
-    fastify.log.warn({ reactDistDir }, 'WEBAPP_FRONTEND_MODE=react requested, but dist/index.html missing. Falling back to legacy frontend.');
-  }
 
   fastify.register(require('@fastify/cors'), {
     origin: true,
@@ -78,39 +83,51 @@ function buildApp({
     done();
   }));
 
-  fastify.get('/health', async () => ({ ok: true }));
-
-  if (reactModeAvailable) {
-    fastify.get('/webapp', async (request, reply) => sendFileFromBase(reply, reactDistDir, 'index.html'));
-    fastify.get('/webapp/', async (request, reply) => sendFileFromBase(reply, reactDistDir, 'index.html'));
-    fastify.get('/webapp/match.html', async (request, reply) => sendFileFromBase(reply, reactDistDir, 'index.html'));
-    fastify.get('/webapp/*', async (request, reply) => {
-      const rawPath = String(request.params['*'] || '').replace(/^\/+/, '');
-
-      if (!rawPath) {
-        return sendFileFromBase(reply, reactDistDir, 'index.html');
-      }
-
-      const served = sendFileFromBase(reply, reactDistDir, rawPath);
-      if (served.statusCode !== 404) {
-        return served;
-      }
-
-      if (path.extname(rawPath)) {
-        return served;
-      }
-
-      return sendFileFromBase(reply, reactDistDir, 'index.html');
-    });
-  } else {
-    fastify.get('/webapp', async (request, reply) => sendFileFromBase(reply, webappLegacyDir, 'index.html'));
-    fastify.get('/webapp/', async (request, reply) => sendFileFromBase(reply, webappLegacyDir, 'index.html'));
-    fastify.get('/webapp/match', async (request, reply) => sendFileFromBase(reply, webappLegacyDir, 'match.html'));
-    fastify.get('/webapp/match.html', async (request, reply) => sendFileFromBase(reply, webappLegacyDir, 'match.html'));
-    fastify.get('/webapp/styles.css', async (request, reply) => sendFileFromBase(reply, webappLegacyDir, 'styles.css'));
-    fastify.get('/webapp/app.js', async (request, reply) => sendFileFromBase(reply, webappLegacyDir, 'app.js'));
-    fastify.get('/webapp/match.js', async (request, reply) => sendFileFromBase(reply, webappLegacyDir, 'match.js'));
+  function isReactDistReady() {
+    return fs.existsSync(path.join(reactDistDir, 'index.html'));
   }
+
+  function sendReactIndex(reply) {
+    if (!isReactDistReady()) {
+      return reply
+        .status(503)
+        .type('application/json; charset=utf-8')
+        .send(buildMissingDistMessage(reactDistDir));
+    }
+
+    return sendFileFromBase(reply, reactDistDir, 'index.html');
+  }
+
+  fastify.get('/health', async () => ({ ok: true }));
+  fastify.get('/webapp', async (request, reply) => sendReactIndex(reply));
+  fastify.get('/webapp/', async (request, reply) => sendReactIndex(reply));
+  fastify.get('/webapp/match.html', async (request, reply) => sendReactIndex(reply));
+
+  fastify.get('/webapp/*', async (request, reply) => {
+    if (!isReactDistReady()) {
+      return reply
+        .status(503)
+        .type('application/json; charset=utf-8')
+        .send(buildMissingDistMessage(reactDistDir));
+    }
+
+    const rawPath = String(request.params['*'] || '').replace(/^\/+/, '');
+
+    if (!rawPath) {
+      return sendFileFromBase(reply, reactDistDir, 'index.html');
+    }
+
+    const targetPath = resolveSafePath(reactDistDir, rawPath);
+    if (targetPath && fs.existsSync(targetPath)) {
+      return sendFileFromBase(reply, reactDistDir, rawPath);
+    }
+
+    if (!path.extname(rawPath)) {
+      return sendFileFromBase(reply, reactDistDir, 'index.html');
+    }
+
+    return reply.status(404).send('Not Found');
+  });
 
   registerRecommendationsRoutes(fastify);
   registerFavoritesRoutes(fastify);

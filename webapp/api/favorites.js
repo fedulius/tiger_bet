@@ -3,7 +3,6 @@ const { getGuestFavorites, saveGuestFavorites } = require('../services/favorites
 function tryExtractTelegramUserId(initDataRaw = '') {
   try {
     const params = new URLSearchParams(String(initDataRaw || ''));
-    console.log(params);
     const userRaw = params.get('user');
     if (!userRaw) return null;
 
@@ -25,7 +24,6 @@ function registerFavoritesRoutes(fastify) {
     if (telegramUserId) {
       request.log.info({ telegramUserId }, 'favorites request from telegram webapp user');
     }
-    console.log(initData);
 
     return getGuestFavorites();
   });

@@ -8,6 +8,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<RecommendationsPage />} />
       <Route path="/match/:id" element={<MatchPage />} />
+      <Route path="/match.html" element={<MatchPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

@@ -50,14 +50,8 @@ function getListenConfig(env = process.env) {
   };
 }
 
-function getWebAppFrontendMode(env = process.env) {
-  const normalized = String(env.WEBAPP_FRONTEND_MODE || '').trim().toLowerCase();
-  return normalized === 'react' ? 'react' : 'legacy';
-}
-
 module.exports = {
   getWebAppUrl,
   getHttpsOptions,
   getListenConfig,
-  getWebAppFrontendMode,
 };

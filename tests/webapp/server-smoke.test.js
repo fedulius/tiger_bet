@@ -6,10 +6,12 @@ const path = require('path');
 
 const { buildApp } = require('../../server/app');
 
-test('GET /webapp returns 200 and html', async () => {
+test('GET /webapp returns 503 when react dist is missing', async () => {
+  const missingDir = path.join(os.tmpdir(), `tiger-bet-react-missing-${Date.now()}`);
   const app = buildApp({
     pg: null,
     bot: null,
+    reactDistDir: missingDir,
   });
 
   await app.ready();
@@ -20,14 +22,14 @@ test('GET /webapp returns 200 and html', async () => {
       url: '/webapp',
     });
 
-    assert.equal(response.statusCode, 200);
-    assert.match(String(response.headers['content-type'] || ''), /text\/html/);
+    assert.equal(response.statusCode, 503);
+    assert.match(response.body, /index\.html/);
   } finally {
     await app.close();
   }
 });
 
-test('GET /webapp serves React dist index when webappFrontendMode=react', async () => {
+test('GET /webapp serves React dist index', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tiger-bet-react-dist-'));
   const assetsDir = path.join(dir, 'assets');
   fs.mkdirSync(assetsDir, { recursive: true });
@@ -37,7 +39,6 @@ test('GET /webapp serves React dist index when webappFrontendMode=react', async 
   const app = buildApp({
     pg: null,
     bot: null,
-    webappFrontendMode: 'react',
     reactDistDir: dir,
   });
 
@@ -67,6 +68,14 @@ test('GET /webapp serves React dist index when webappFrontendMode=react', async 
 
     assert.equal(matchCompatResponse.statusCode, 200);
     assert.match(matchCompatResponse.body, /id="root">React</);
+
+    const matchRouteResponse = await app.inject({
+      method: 'GET',
+      url: '/webapp/match/fallback-1',
+    });
+
+    assert.equal(matchRouteResponse.statusCode, 200);
+    assert.match(matchRouteResponse.body, /id="root">React</);
   } finally {
     await app.close();
     fs.rmSync(dir, { recursive: true, force: true });
