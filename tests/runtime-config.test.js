@@ -8,6 +8,7 @@ const {
   getWebAppUrl,
   getHttpsOptions,
   getListenConfig,
+  getWebAppFrontendMode,
 } = require('../server/runtimeConfig');
 
 test('getWebAppUrl defaults to bet.twfed.com/webapp over https', () => {
@@ -49,4 +50,19 @@ test('getListenConfig uses 443 by default in HTTPS mode', () => {
   const config = getListenConfig({ HTTPS_ENABLE: '1' });
   assert.equal(config.port, 443);
   assert.equal(config.host, '0.0.0.0');
+});
+
+test('getWebAppFrontendMode defaults to legacy', () => {
+  const mode = getWebAppFrontendMode({});
+  assert.equal(mode, 'legacy');
+});
+
+test('getWebAppFrontendMode accepts react and normalizes case/spaces', () => {
+  const mode = getWebAppFrontendMode({ WEBAPP_FRONTEND_MODE: ' React ' });
+  assert.equal(mode, 'react');
+});
+
+test('getWebAppFrontendMode falls back to legacy for unknown values', () => {
+  const mode = getWebAppFrontendMode({ WEBAPP_FRONTEND_MODE: 'nextjs' });
+  assert.equal(mode, 'legacy');
 });

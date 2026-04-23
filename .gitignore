@@ -1,6 +1,8 @@
 /bot/lib/Telegram.js
 
 /node_modules/
+/webapp-react/node_modules/
+/webapp-react/dist/
 /.gitignore
 /config
 
