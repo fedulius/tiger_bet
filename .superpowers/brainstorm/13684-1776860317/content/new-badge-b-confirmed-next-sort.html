@@ -1,0 +1,41 @@
+<h2>Зафиксировано ✅</h2>
+<p class="subtitle">После автообновления новые рекомендации помечаются бейджем «Новые» (1-2 минуты)</p>
+
+<div class="mockup">
+  <div class="mockup-header">Текущее UX-ядро MVP</div>
+  <div class="mockup-body">
+    <p>• Single-page кабинет без отдельной навигации</p>
+    <p>• Sticky-хедер с якорями + кнопка «Обновить сейчас»</p>
+    <p>• Рекомендации: карточка B, авто+ручное обновление</p>
+    <p>• Новые рекомендации: бейдж «Новые»</p>
+    <p>• Избранное: +Добавить → модалка (поиск + чекбоксы)</p>
+    <p>• Последние прогнозы: карточка A (минимум)</p>
+    <p>• Empty state: fallback топ-матчи</p>
+    <p>• Тема: Auto (light/dark)</p>
+  </div>
+</div>
+
+<h3>Следующий шаг: сортировка рекомендаций по умолчанию</h3>
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>По времени матча (ближайшие сверху)</h3>
+      <p>Понятно и привычно для пользователя.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>По уверенности прогноза (высокая сверху)</h3>
+      <p>Сначала самые сильные сигналы.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Гибрид: сначала высокая уверенность, затем время</h3>
+      <p>Сильные сигналы, но без потери актуальности по времени.</p>
+    </div>
+  </div>
+</div>

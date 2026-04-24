@@ -1,0 +1,39 @@
+<h2>Зафиксировано ✅</h2>
+<p class="subtitle">Блок «Последние прогнозы» = вариант A (минимум)</p>
+
+<div class="mockup">
+  <div class="mockup-header">Карточка «Последний прогноз» (MVP)</div>
+  <div class="mockup-body">
+    <div style="border:1px solid #2a2a2a;border-radius:10px;padding:10px;">
+      <div style="display:flex;justify-content:space-between"><b>Team A vs Team B</b><span>19:30</span></div>
+      <div style="margin-top:6px">Premier League</div>
+      <div style="margin-top:6px">Мысль: Победа Team A</div>
+      <div style="margin-top:6px">Уверенность: <b>72%</b></div>
+    </div>
+  </div>
+</div>
+
+<h3>Следующий шаг: что показываем, если рекомендаций пока нет?</h3>
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Пустой блок с CTA</h3>
+      <p>«Добавьте спорт/лиги в избранное» + кнопка «+ Добавить».</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Fallback общими топ-матчами</h3>
+      <p>Показываем нейтральную общую подборку до настройки избранного.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Комбинированно</h3>
+      <p>Сверху CTA на избранное, ниже 3 общих матча как временная подложка.</p>
+    </div>
+  </div>
+</div>

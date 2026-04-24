@@ -1,11 +1,25 @@
 const lib = require('./lib');
 const messageList = require('./helper/messageList');
+const { getWebAppUrl } = require('../server/runtimeConfig');
 
 module.exports = {
   sendTextMessage: (chatId, messageText) => {
     lib.bot.sendMessage(chatId, messageText);
   },
   run: (db) => {
+    const webAppUrl = getWebAppUrl(process.env);
+    if (/^https:\/\//i.test(webAppUrl)) {
+      lib.bot.setChatMenuButton({
+        menu_button: {
+          type: 'web_app',
+          text: 'Tiger Bet WebApp',
+          web_app: { url: webAppUrl },
+        },
+      }).catch((error) => {
+        console.log('setChatMenuButton error:', error?.message || error);
+      });
+    }
+
     lib.bot.onText(/\/start/, message => {
       console.log(message);
       let data = 'begin_greet';

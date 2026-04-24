@@ -1,0 +1,48 @@
+<h2>Зафиксировано ✅</h2>
+<p class="subtitle">Если рекомендаций по избранному нет — показываем fallback с общими топ-матчами (вариант B).</p>
+
+<div class="mockup">
+  <div class="mockup-header">Пустое состояние блока «Рекомендованные матчи»</div>
+  <div class="mockup-body">
+    <div style="border:1px solid #2a2a2a;border-radius:10px;padding:10px;margin-bottom:8px;">
+      <div class="label">Топ-матч #1</div>
+      <b>Team A vs Team B</b>
+      <div style="margin-top:4px">League · 19:30</div>
+    </div>
+    <div style="border:1px solid #2a2a2a;border-radius:10px;padding:10px;margin-bottom:8px;">
+      <div class="label">Топ-матч #2</div>
+      <b>Team C vs Team D</b>
+      <div style="margin-top:4px">League · 21:00</div>
+    </div>
+    <div style="border:1px solid #2a2a2a;border-radius:10px;padding:10px;">
+      <div class="label">Топ-матч #3</div>
+      <b>Team E vs Team F</b>
+      <div style="margin-top:4px">League · 22:15</div>
+    </div>
+  </div>
+</div>
+
+<h3>Следующий шаг: базовый визуальный стиль MVP</h3>
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Dark (как Telegram/беттинг-приложения)</h3>
+      <p>Тёмный фон, акцентные бейджи, удобнее вечером и для частого мониторинга.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Light (чистый дашборд)</h3>
+      <p>Светлый фон, высокая читабельность, «офисный» стиль.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Auto (под системную тему)</h3>
+      <p>Автоматическое переключение light/dark по устройству.</p>
+    </div>
+  </div>
+</div>

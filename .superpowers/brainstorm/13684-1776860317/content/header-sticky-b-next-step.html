@@ -1,0 +1,44 @@
+<h2>Зафиксировано: sticky-хедер с якорями = вариант B ✅</h2>
+<p class="subtitle">Рекомендации / Спорт / Лиги / История всегда доступны при скролле</p>
+
+<div class="section">
+  <div class="mockup">
+    <div class="mockup-header">Верхняя зона (превью поведения)</div>
+    <div class="mockup-body">
+      <div style="position:sticky;top:0;border:1px solid #2a2a2a;border-radius:10px;padding:8px;background:#111;margin-bottom:10px;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <span style="padding:4px 8px;border:1px solid #444;border-radius:999px;">Рекомендации</span>
+          <span style="padding:4px 8px;border:1px solid #444;border-radius:999px;">Спорт</span>
+          <span style="padding:4px 8px;border:1px solid #444;border-radius:999px;">Лиги</span>
+          <span style="padding:4px 8px;border:1px solid #444;border-radius:999px;">История</span>
+        </div>
+      </div>
+      <p>Дальше контент одной длинной страницы.</p>
+    </div>
+  </div>
+</div>
+
+<h3>Следующий шаг: как редактируем избранные спорт/лиги?</h3>
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Inline-редактирование в блоке</h3>
+      <p>Кнопка «+ Добавить» и крестики на чипах прямо в секциях «Спорт»/«Лиги».</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Модальное окно «Управление избранным»</h3>
+      <p>Отдельное окно с поиском и чекбоксами, изменения применяются одной кнопкой.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Правый drawer-панель</h3>
+      <p>Выезжающая панель для редактирования без ухода со страницы.</p>
+    </div>
+  </div>
+</div>

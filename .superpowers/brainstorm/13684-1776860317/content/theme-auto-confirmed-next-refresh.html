@@ -1,0 +1,44 @@
+<h2>Зафиксировано ✅</h2>
+<p class="subtitle">Базовый стиль MVP = Auto (под системную тему устройства)</p>
+
+<div class="section">
+  <div class="mockup">
+    <div class="mockup-header">Текущее согласованное ядро</div>
+    <div class="mockup-body">
+      <p>• Один длинный экран (без отдельной навигации)</p>
+      <p>• Sticky-хедер с якорями</p>
+      <p>• Рекомендованные матчи — карточка B</p>
+      <p>• Избранное: +Добавить → модалка (поиск + чекбоксы) + удаление чипов</p>
+      <p>• Последние прогнозы — карточка A (минимум)</p>
+      <p>• Empty state рекомендаций — fallback топ-матчи</p>
+      <p>• Тема — Auto (light/dark)</p>
+    </div>
+  </div>
+</div>
+
+<h3>Следующий шаг: как обновлять ленту рекомендаций?</h3>
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Только кнопка «Обновить»</h3>
+      <p>Пользователь сам инициирует обновление, предсказуемо и прозрачно.</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Авто + ручное</h3>
+      <p>Автообновление каждые N минут и дополнительная кнопка «Обновить сейчас».</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Только авто</h3>
+      <p>Фоновое обновление без ручной кнопки, максимально «живой» экран.</p>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,55 @@
+<h2>Принято: навигация = вариант 3 ✅</h2>
+<p class="subtitle">Один длинный экран без отдельного меню</p>
+
+<div class="section">
+  <div class="mockup">
+    <div class="mockup-header">Структура главного экрана (single-page)</div>
+    <div class="mockup-body">
+      <div style="border:1px solid #2a2a2a;border-radius:10px;padding:10px;margin-bottom:10px;">
+        <div class="label">Блок 1</div>
+        <h3 style="margin:6px 0">Рекомендованные матчи</h3>
+        <p>Карточки формата B</p>
+      </div>
+      <div style="border:1px solid #2a2a2a;border-radius:10px;padding:10px;margin-bottom:10px;">
+        <div class="label">Блок 2</div>
+        <h3 style="margin:6px 0">Избранные виды спорта</h3>
+        <p>Чипы/список с быстрым редактированием</p>
+      </div>
+      <div style="border:1px solid #2a2a2a;border-radius:10px;padding:10px;margin-bottom:10px;">
+        <div class="label">Блок 3</div>
+        <h3 style="margin:6px 0">Избранные лиги</h3>
+        <p>Чипы/список с быстрым редактированием</p>
+      </div>
+      <div style="border:1px solid #2a2a2a;border-radius:10px;padding:10px;">
+        <div class="label">Блок 4</div>
+        <h3 style="margin:6px 0">Последние прогнозы</h3>
+        <p>Лента последних 5-10 прогнозов</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h3>Выбери поведение верхней зоны экрана</h3>
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Простой статичный хедер</h3>
+      <p>Название + приветствие. Минимум отвлечений, максимум простоты.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Sticky-хедер с быстрыми якорями</h3>
+      <p>При скролле всегда видны 4 мини-кнопки: Рекомендации / Спорт / Лиги / История.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Компактный sticky только с поиском</h3>
+      <p>Без якорей, но с поиском матча/лиги наверху во время скролла.</p>
+    </div>
+  </div>
+</div>

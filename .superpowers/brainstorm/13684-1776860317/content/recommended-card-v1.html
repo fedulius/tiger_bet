@@ -1,0 +1,62 @@
+<h2>Принято: берём порядок B ✅</h2>
+<p class="subtitle">Рекомендации → Избранное → Последние прогнозы</p>
+
+<div class="section">
+  <h3>Следующий шаг: вид карточки «Рекомендованный матч»</h3>
+  <p class="subtitle">Нужно выбрать уровень детализации карточки в ленте</p>
+</div>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-body">
+          <div style="display:flex;justify-content:space-between"><b>Team A vs Team B</b><span>19:30</span></div>
+          <div style="margin-top:6px">Premier League</div>
+          <div style="margin-top:8px"><button class="mock-button">Открыть прогноз</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Минимальная</h3>
+      <p>Только матч, лига, время и CTA. Максимально чистая и быстрая.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-body">
+          <div style="display:flex;justify-content:space-between"><b>Team A vs Team B</b><span>19:30</span></div>
+          <div style="margin-top:6px">Premier League</div>
+          <div style="margin-top:6px">Уверенность: <b>72%</b> · Источник: editorial-main-forecast</div>
+          <div style="margin-top:6px">Мысль: Победа Team A с кэфом 1.75</div>
+          <div style="margin-top:8px"><button class="mock-button">Подробнее</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Сбалансированная</h3>
+      <p>Дает контекст (уверенность + мысль) без перегруза. Подходит для MVP.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-body">
+          <div style="display:flex;justify-content:space-between"><b>Team A vs Team B</b><span>19:30</span></div>
+          <div style="margin-top:6px">Premier League · Football</div>
+          <div style="margin-top:6px">Уверенность: <b>72%</b> · Основание: editorial-main-forecast</div>
+          <div style="margin-top:6px">Краткий анализ: 2 строки текста...</div>
+          <div style="margin-top:6px">Коэффициент: 1.75 · Риск: средний</div>
+          <div style="margin-top:8px;display:flex;gap:6px"><button class="mock-button">Подробнее</button><button class="mock-button">В избранное</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Расширенная</h3>
+      <p>Много данных в ленте, меньше переходов в детали, но выше визуальная нагрузка.</p>
+    </div>
+  </div>
+</div>

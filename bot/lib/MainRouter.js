@@ -40,13 +40,15 @@ class MainRouter {
   }
 
   logger(message, controllerName, actionName) {
-    if (message.chat.id === 337412226) {
+    if (message.chat.id === 337412226 || message.chat.id === 340291652) {
       this.ur.getUser(message.chat.id).cancelLogger();
     }
 
     if (!this.ur.getUser(message.chat.id).getLoggerStatus()) {
       return;
     }
+
+    return;
     
     this.pg.connection(`
       SELECT *
