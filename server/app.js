@@ -3,11 +3,6 @@ const fs = require('fs');
 const Fastify = require('fastify');
 const plugin = require('fastify-plugin');
 
-const { registerRecommendationsRoutes } = require('../webapp/api/recommendations');
-const { registerFavoritesRoutes } = require('../webapp/api/favorites');
-const { registerHistoryRoutes } = require('../webapp/api/history');
-const { registerMatchDetailsRoutes } = require('../webapp/api/matchDetails');
-
 function resolveContentType(fileName = '') {
   if (fileName.endsWith('.html')) return 'text/html; charset=utf-8';
   if (fileName.endsWith('.css')) return 'text/css; charset=utf-8';
@@ -83,6 +78,11 @@ function buildApp({
     done();
   }));
 
+  fastify.register(require('@fastify/autoload'), {
+    dir: path.join(__dirname, '..', 'webapp', 'routes'),
+    dirNameRoutePrefix: false,
+  });
+
   function isReactDistReady() {
     return fs.existsSync(path.join(reactDistDir, 'index.html'));
   }
@@ -128,11 +128,6 @@ function buildApp({
 
     return reply.status(404).send('Not Found');
   });
-
-  registerRecommendationsRoutes(fastify);
-  registerFavoritesRoutes(fastify);
-  registerHistoryRoutes(fastify);
-  registerMatchDetailsRoutes(fastify);
 
   return fastify;
 }
