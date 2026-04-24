@@ -80,7 +80,6 @@ function buildApp({
 
   fastify.register(require('@fastify/autoload'), {
     dir: path.join(__dirname, '..', 'webapp', 'routes'),
-    dirNameRoutePrefix: false,
   });
 
   function isReactDistReady() {
@@ -128,7 +127,6 @@ function buildApp({
 
     return reply.status(404).send('Not Found');
   });
-
   return fastify;
 }
 

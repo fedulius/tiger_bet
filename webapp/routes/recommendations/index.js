@@ -1,8 +1,8 @@
-const { getRecommendations } = require('../services/recommendationService');
+const { getRecommendations } = require('../../services/recommendationService');
 
 async function recommendationsRoutes(fastify) {
   // Endpoint MVP-контракта для рекомендаций в webApp.
-  fastify.get('/recommendations', async () => {
+  fastify.get('/', async () => {
     return await getRecommendations();
   });
 }

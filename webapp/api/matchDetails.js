@@ -1,3 +1,3 @@
 module.exports = {
-  registerMatchDetailsRoutes: require('../routes/matchDetails'),
+  registerMatchDetailsRoutes: require('../routes/match'),
 };

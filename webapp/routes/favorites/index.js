@@ -1,4 +1,4 @@
-const { getGuestFavorites, saveGuestFavorites } = require('../services/favoritesStore');
+const { getGuestFavorites, saveGuestFavorites } = require('../../services/favoritesStore');
 
 function tryExtractTelegramUserId(initDataRaw = '') {
   try {
@@ -15,7 +15,7 @@ function tryExtractTelegramUserId(initDataRaw = '') {
 }
 
 async function favoritesRoutes(fastify) {
-  fastify.get('/favorites', async (request) => {
+  fastify.get('/', async (request) => {
     // В WebApp window.* доступен только в браузере.
     // На backend получаем initData через заголовок от фронта.
     const initData = request.headers['x-telegram-init-data'] || '';
@@ -28,7 +28,7 @@ async function favoritesRoutes(fastify) {
     return getGuestFavorites();
   });
 
-  fastify.put('/favorites', async (request, reply) => {
+  fastify.put('/', async (request, reply) => {
     const payload = request.body || {};
 
     try {

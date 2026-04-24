@@ -1,7 +1,7 @@
-const { getHistory } = require('../services/historyService');
+const { getHistory } = require('../../services/historyService');
 
 async function historyRoutes(fastify) {
-  fastify.get('/history', async (request) => {
+  fastify.get('/', async (request) => {
     const sample = String(request.query?.sample || '') === '1';
     return getHistory({ sample });
   });

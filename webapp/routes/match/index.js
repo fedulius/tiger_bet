@@ -1,7 +1,7 @@
-const { getMatchDetailsById } = require('../services/matchDetailsService');
+const { getMatchDetailsById } = require('../../services/matchDetailsService');
 
-async function matchDetailsRoutes(fastify) {
-  fastify.get('/match/:id', async (request, reply) => {
+async function matchRoutes(fastify) {
+  fastify.get('/:id', async (request, reply) => {
     const { id } = request.params;
     const details = getMatchDetailsById(id);
 
@@ -15,4 +15,4 @@ async function matchDetailsRoutes(fastify) {
   });
 }
 
-module.exports = matchDetailsRoutes;
+module.exports = matchRoutes;
