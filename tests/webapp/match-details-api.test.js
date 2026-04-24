@@ -2,9 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { buildApp } = require('../../server/app');
+const { buildTestApp } = require('./testHelpers');
 
 test('GET /match/:id returns match details with required fields', async () => {
-  const app = buildApp({ pg: null, bot: null });
+  const app = buildTestApp(buildApp);
   await app.ready();
 
   try {
@@ -31,7 +32,7 @@ test('GET /match/:id returns match details with required fields', async () => {
 });
 
 test('GET /match/:id returns 404 for unknown id', async () => {
-  const app = buildApp({ pg: null, bot: null });
+  const app = buildTestApp(buildApp);
   await app.ready();
 
   try {

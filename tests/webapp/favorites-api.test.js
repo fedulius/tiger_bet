@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 
 const { buildApp } = require('../../server/app');
+const { buildTestApp, createFakePg } = require('./testHelpers');
 
 function makeTempFavoritesFile() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tiger-bet-favorites-'));
@@ -17,12 +18,15 @@ test('GET /favorites returns default guest favorites', async () => {
   const temp = makeTempFavoritesFile();
   process.env.WEBAPP_FAVORITES_FILE = temp.filePath;
 
-  const app = buildApp({ pg: null, bot: null });
+  const fakePg = createFakePg({ rows: [{ favorite_sport_id: 1, name: 'football' }] });
+  const app = buildTestApp(buildApp, { pg: fakePg });
   await app.ready();
 
   try {
     const response = await app.inject({ method: 'GET', url: '/favorites' });
     assert.equal(response.statusCode, 200);
+    assert.equal(fakePg.calls.length, 1);
+    assert.match(fakePg.calls[0].query, /FROM public\.favorite_sport/i);
     assert.deepEqual(response.json(), {
       sports: [],
       leagues: [],
@@ -39,7 +43,7 @@ test('PUT /favorites persists guest favorites', async () => {
   const temp = makeTempFavoritesFile();
   process.env.WEBAPP_FAVORITES_FILE = temp.filePath;
 
-  const app = buildApp({ pg: null, bot: null });
+  const app = buildTestApp(buildApp);
   await app.ready();
 
   try {
@@ -77,7 +81,7 @@ test('PUT /favorites validates payload arrays', async () => {
   const temp = makeTempFavoritesFile();
   process.env.WEBAPP_FAVORITES_FILE = temp.filePath;
 
-  const app = buildApp({ pg: null, bot: null });
+  const app = buildTestApp(buildApp);
   await app.ready();
 
   try {

@@ -2,12 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { buildApp } = require('../../server/app');
+const { buildTestApp } = require('./testHelpers');
 
 test('buildApp exposes health route', async () => {
-  const app = buildApp({
-    pg: null,
-    bot: null,
-  });
+  const app = buildTestApp(buildApp);
 
   await app.ready();
 

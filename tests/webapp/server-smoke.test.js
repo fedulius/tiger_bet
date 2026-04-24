@@ -5,12 +5,11 @@ const os = require('os');
 const path = require('path');
 
 const { buildApp } = require('../../server/app');
+const { buildTestApp } = require('./testHelpers');
 
 test('GET /webapp returns 503 when react dist is missing', async () => {
   const missingDir = path.join(os.tmpdir(), `tiger-bet-react-missing-${Date.now()}`);
-  const app = buildApp({
-    pg: null,
-    bot: null,
+  const app = buildTestApp(buildApp, {
     reactDistDir: missingDir,
   });
 
@@ -36,9 +35,7 @@ test('GET /webapp serves React dist index', async () => {
   fs.writeFileSync(path.join(dir, 'index.html'), '<!doctype html><html><body><div id="root">React</div></body></html>');
   fs.writeFileSync(path.join(assetsDir, 'app.js'), 'console.log("react")');
 
-  const app = buildApp({
-    pg: null,
-    bot: null,
+  const app = buildTestApp(buildApp, {
     reactDistDir: dir,
   });
 

@@ -12,6 +12,10 @@ async function getJson(url) {
   return response.json();
 }
 
+export function getUserInfo() {
+  return getJson('/user')
+}
+
 export function getRecommendations() {
   return getJson('/recommendations');
 }

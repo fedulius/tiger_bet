@@ -2,9 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { buildApp } = require('../../server/app');
+const { buildTestApp } = require('./testHelpers');
 
 test('GET /history returns empty-state payload', async () => {
-  const app = buildApp({ pg: null, bot: null });
+  const app = buildTestApp(buildApp);
   await app.ready();
 
   try {
@@ -27,10 +28,7 @@ test('GET /history returns empty-state payload', async () => {
 });
 
 test('GET /history item shape uses format A fields', async () => {
-  const app = buildApp({
-    pg: null,
-    bot: null,
-  });
+  const app = buildTestApp(buildApp);
   await app.ready();
 
   try {

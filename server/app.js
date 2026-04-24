@@ -39,6 +39,22 @@ function sendFileFromBase(reply, baseDir, fileName) {
   }
 }
 
+
+function tryExtractTelegramUserId(initDataRaw = '') {
+  try {
+    const params = new URLSearchParams(String(initDataRaw || ''));
+    const userRaw = params.get('user');
+    if (!userRaw) return null;
+
+    const user = JSON.parse(userRaw);
+    const userId = Number(user?.id);
+    return Number.isFinite(userId) ? userId : null;
+  } catch {
+    return null;
+  }
+}
+
+
 function buildMissingDistMessage(distDir) {
   return JSON.stringify({
     error: 'React build not found',
@@ -73,10 +89,7 @@ function buildApp({
     done();
   }));
 
-  fastify.register(plugin((fn, opts, done) => {
-    fastify.decorate('pg', { pg });
-    done();
-  }));
+  fastify.decorate('pg', pg);
 
   fastify.register(require('@fastify/autoload'), {
     dir: path.join(__dirname, '..', 'webapp', 'routes'),
@@ -98,7 +111,13 @@ function buildApp({
   }
 
   fastify.get('/health', async () => ({ ok: true }));
-  fastify.get('/webapp', async (request, reply) => sendReactIndex(reply));
+  fastify.get('/webapp', async (request, reply) => {
+    const initData = request.headers['x-telegram-init-data'] || '';
+    const telegramUserId = tryExtractTelegramUserId(initData);
+
+    console.log(telegramUserId);
+    sendReactIndex(reply)
+  });
   fastify.get('/webapp/', async (request, reply) => sendReactIndex(reply));
   fastify.get('/webapp/match.html', async (request, reply) => sendReactIndex(reply));
 
