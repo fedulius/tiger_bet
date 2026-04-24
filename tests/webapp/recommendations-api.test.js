@@ -3,14 +3,14 @@ const assert = require('node:assert/strict');
 
 const { buildApp } = require('../../server/app');
 
-test('GET /api/webapp/recommendations returns 3 items sorted by starts_at', async () => {
+test('GET /recommendations returns 3 items sorted by starts_at', async () => {
   const app = buildApp({ pg: null, bot: null });
   await app.ready();
 
   try {
     const response = await app.inject({
       method: 'GET',
-      url: '/api/webapp/recommendations',
+      url: '/recommendations',
     });
 
     assert.equal(response.statusCode, 200);

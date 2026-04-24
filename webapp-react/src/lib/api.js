@@ -13,19 +13,19 @@ async function getJson(url) {
 }
 
 export function getRecommendations() {
-  return getJson('/api/webapp/recommendations');
+  return getJson('/recommendations');
 }
 
 export function getHistory() {
-  return getJson('/api/webapp/history');
+  return getJson('/history');
 }
 
 export function getFavorites() {
-  return getJson('/api/webapp/favorites');
+  return getJson('/favorites');
 }
 
 export function setFavorites(payload) {
-  return fetch('/api/webapp/favorites', {
+  return fetch('/favorites', {
     method: 'PUT',
     headers: withTelegramInitDataHeaders({
       'content-type': 'application/json',
@@ -40,5 +40,5 @@ export function setFavorites(payload) {
 }
 
 export function getMatchDetails(id) {
-  return getJson(`/api/webapp/match/${encodeURIComponent(id)}`);
+  return getJson(`/match/${encodeURIComponent(id)}`);
 }

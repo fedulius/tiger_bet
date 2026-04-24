@@ -3,14 +3,14 @@ const assert = require('node:assert/strict');
 
 const { buildApp } = require('../../server/app');
 
-test('GET /api/webapp/history returns empty-state payload', async () => {
+test('GET /history returns empty-state payload', async () => {
   const app = buildApp({ pg: null, bot: null });
   await app.ready();
 
   try {
     const response = await app.inject({
       method: 'GET',
-      url: '/api/webapp/history',
+      url: '/history',
     });
 
     assert.equal(response.statusCode, 200);
@@ -26,7 +26,7 @@ test('GET /api/webapp/history returns empty-state payload', async () => {
   }
 });
 
-test('GET /api/webapp/history item shape uses format A fields', async () => {
+test('GET /history item shape uses format A fields', async () => {
   const app = buildApp({
     pg: null,
     bot: null,
@@ -36,7 +36,7 @@ test('GET /api/webapp/history item shape uses format A fields', async () => {
   try {
     const response = await app.inject({
       method: 'GET',
-      url: '/api/webapp/history?sample=1',
+      url: '/history?sample=1',
     });
 
     assert.equal(response.statusCode, 200);

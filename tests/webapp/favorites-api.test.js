@@ -13,7 +13,7 @@ function makeTempFavoritesFile() {
   return { dir, filePath };
 }
 
-test('GET /api/webapp/favorites returns default guest favorites', async () => {
+test('GET /favorites returns default guest favorites', async () => {
   const temp = makeTempFavoritesFile();
   process.env.WEBAPP_FAVORITES_FILE = temp.filePath;
 
@@ -21,7 +21,7 @@ test('GET /api/webapp/favorites returns default guest favorites', async () => {
   await app.ready();
 
   try {
-    const response = await app.inject({ method: 'GET', url: '/api/webapp/favorites' });
+    const response = await app.inject({ method: 'GET', url: '/favorites' });
     assert.equal(response.statusCode, 200);
     assert.deepEqual(response.json(), {
       sports: [],
@@ -35,7 +35,7 @@ test('GET /api/webapp/favorites returns default guest favorites', async () => {
   }
 });
 
-test('PUT /api/webapp/favorites persists guest favorites', async () => {
+test('PUT /favorites persists guest favorites', async () => {
   const temp = makeTempFavoritesFile();
   process.env.WEBAPP_FAVORITES_FILE = temp.filePath;
 
@@ -45,7 +45,7 @@ test('PUT /api/webapp/favorites persists guest favorites', async () => {
   try {
     const putResponse = await app.inject({
       method: 'PUT',
-      url: '/api/webapp/favorites',
+      url: '/favorites',
       payload: {
         sports: ['football', 'tennis'],
         leagues: ['Premier League', 'ATP'],
@@ -59,7 +59,7 @@ test('PUT /api/webapp/favorites persists guest favorites', async () => {
       profile: 'guest',
     });
 
-    const getResponse = await app.inject({ method: 'GET', url: '/api/webapp/favorites' });
+    const getResponse = await app.inject({ method: 'GET', url: '/favorites' });
     assert.equal(getResponse.statusCode, 200);
     assert.deepEqual(getResponse.json(), {
       sports: ['football', 'tennis'],
@@ -73,7 +73,7 @@ test('PUT /api/webapp/favorites persists guest favorites', async () => {
   }
 });
 
-test('PUT /api/webapp/favorites validates payload arrays', async () => {
+test('PUT /favorites validates payload arrays', async () => {
   const temp = makeTempFavoritesFile();
   process.env.WEBAPP_FAVORITES_FILE = temp.filePath;
 
@@ -83,7 +83,7 @@ test('PUT /api/webapp/favorites validates payload arrays', async () => {
   try {
     const response = await app.inject({
       method: 'PUT',
-      url: '/api/webapp/favorites',
+      url: '/favorites',
       payload: {
         sports: 'football',
         leagues: ['Premier League'],

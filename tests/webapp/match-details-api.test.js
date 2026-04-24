@@ -3,14 +3,14 @@ const assert = require('node:assert/strict');
 
 const { buildApp } = require('../../server/app');
 
-test('GET /api/webapp/match/:id returns match details with required fields', async () => {
+test('GET /match/:id returns match details with required fields', async () => {
   const app = buildApp({ pg: null, bot: null });
   await app.ready();
 
   try {
     const response = await app.inject({
       method: 'GET',
-      url: '/api/webapp/match/fallback-1',
+      url: '/match/fallback-1',
     });
 
     assert.equal(response.statusCode, 200);
@@ -30,14 +30,14 @@ test('GET /api/webapp/match/:id returns match details with required fields', asy
   }
 });
 
-test('GET /api/webapp/match/:id returns 404 for unknown id', async () => {
+test('GET /match/:id returns 404 for unknown id', async () => {
   const app = buildApp({ pg: null, bot: null });
   await app.ready();
 
   try {
     const response = await app.inject({
       method: 'GET',
-      url: '/api/webapp/match/unknown-id',
+      url: '/match/unknown-id',
     });
 
     assert.equal(response.statusCode, 404);
