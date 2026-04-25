@@ -7,7 +7,7 @@ class DAL {
   async getCategories() {
     return await this.pg.connection(`
       SELECT *
-      FROM public.sport_category
+      FROM public.sport
     `);
   }
 

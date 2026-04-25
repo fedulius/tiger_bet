@@ -12,8 +12,8 @@ async function getJson(url) {
   return response.json();
 }
 
-export function getUserInfo() {
-  return getJson('/user')
+export function auth() {
+  return getJson('/auth')
 }
 
 export function getRecommendations() {

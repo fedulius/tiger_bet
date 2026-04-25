@@ -5,16 +5,16 @@ async function favoritesRoutes(fastify) {
     // В WebApp window.* доступен только в браузере.
     // На backend получаем initData через заголовок от фронта.
 
-    const result = await fastify.pg.connection(`
-        SELECT *
-        FROM public.favorite_sport
-    `)
-
-    console.log(result);
-
-    if (telegramUserId) {
-      request.log.info({ telegramUserId }, 'favorites request from telegram webapp user');
-    }
+    // const result = await fastify.pg.connection(`
+    //     SELECT *
+    //     FROM public.favorite_sport
+    // `)
+    //
+    // console.log(result);
+    //
+    // if (telegramUserId) {
+    //   request.log.info({ telegramUserId }, 'favorites request from telegram webapp user');
+    // }
 
     return getGuestFavorites();
   });
@@ -37,4 +37,4 @@ async function favoritesRoutes(fastify) {
 }
 
 module.exports = favoritesRoutes;
-module.exports.tryExtractTelegramUserId = tryExtractTelegramUserId;
+// module.exports.tryExtractTelegramUserId = tryExtractTelegramUserId;

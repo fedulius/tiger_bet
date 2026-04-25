@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { getFavorites, getHistory, getRecommendations, setFavorites } from '../lib/api.js';
+import { getFavorites, getHistory, getRecommendations, setFavorites, auth } from '../lib/api.js';
 import { formatMoscowDateTime } from '../lib/format.js';
 import { formatRelativeUpdatedAt, getTopRecommendations } from '../lib/recommendations.js';
 
@@ -134,6 +134,7 @@ export function RecommendationsPage() {
 
     (async () => {
       await Promise.allSettled([
+        auth(),
         refreshRecommendations(),
         loadFavorites(),
         loadHistory(),
@@ -227,7 +228,6 @@ export function RecommendationsPage() {
           <a href="#recommendations">Рекомендации</a>
           <a href="#favorites-sports">Спорт</a>
           <a href="#favorites-leagues">Лиги</a>
-          <a href="#history">История</a>
         </nav>
 
         <div className="refresh-status" aria-live="polite">{refreshStatus}</div>
