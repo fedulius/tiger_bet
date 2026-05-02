@@ -53,6 +53,7 @@ export function RecommendationsPage() {
   const [recommendationsError, setRecommendationsError] = useState('');
   const [isRecommendationsLoading, setIsRecommendationsLoading] = useState(true);
   const [refreshStatus, setRefreshStatus] = useState('');
+  const [isUnauthorized, setIsUnauthorized] = useState(false);
 
   const [favorites, setFavoritesState] = useState({ sports: [], leagues: [] });
   const [history, setHistory] = useState({ items: [], empty_state: null, error: '' });
@@ -103,12 +104,14 @@ export function RecommendationsPage() {
     const authResult = await auth().then(() => ({ ok: true })).catch(() => ({ ok: false }));
 
     if (!authResult.ok) {
+      setIsUnauthorized(true);
       setRecommendationsError('Не удалось авторизоваться.');
       setRefreshStatus('Ошибка авторизации');
       setIsRecommendationsLoading(false);
       return;
     }
 
+    setIsUnauthorized(false);
     await refreshRecommendations();
   }
 
@@ -227,6 +230,18 @@ export function RecommendationsPage() {
     } catch {
       await loadFavorites();
     }
+  }
+
+  if (isUnauthorized) {
+    return (
+      <main className="layout" style={{ minHeight: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <section className="card" style={{ maxWidth: 520, textAlign: 'center' }}>
+          <h2>Доступ ограничен</h2>
+          <p>Вы не авторизованы в WebApp. Откройте приложение через кнопку в Telegram-боте.</p>
+          <button type="button" onClick={refreshRecommendationsWithAuth}>Повторить авторизацию</button>
+        </section>
+      </main>
+    );
   }
 
   return (
