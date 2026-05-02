@@ -5,7 +5,7 @@ const path = require('path');
 const fs = require('fs');
 
 const { buildApp } = require('../../server/app');
-const { buildTestApp, createFakePg } = require('./testHelpers');
+const { buildTestApp, createFakePg, makeAuthHeaders } = require('./testHelpers');
 
 function makeTempFavoritesFile() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tiger-bet-favorites-'));
@@ -23,7 +23,11 @@ test('GET /favorites returns default guest favorites', async () => {
   await app.ready();
 
   try {
-    const response = await app.inject({ method: 'GET', url: '/favorites' });
+    const response = await app.inject({
+      headers: makeAuthHeaders(app),
+      method: 'GET',
+      url: '/favorites',
+    });
     assert.equal(response.statusCode, 200);
     assert.equal(fakePg.calls.length, 1);
     assert.match(fakePg.calls[0].query, /FROM public\.favorite_sport/i);
@@ -48,6 +52,7 @@ test('PUT /favorites persists guest favorites', async () => {
 
   try {
     const putResponse = await app.inject({
+      headers: makeAuthHeaders(app),
       method: 'PUT',
       url: '/favorites',
       payload: {
@@ -63,7 +68,11 @@ test('PUT /favorites persists guest favorites', async () => {
       profile: 'guest',
     });
 
-    const getResponse = await app.inject({ method: 'GET', url: '/favorites' });
+    const getResponse = await app.inject({
+      headers: makeAuthHeaders(app),
+      method: 'GET',
+      url: '/favorites',
+    });
     assert.equal(getResponse.statusCode, 200);
     assert.deepEqual(getResponse.json(), {
       sports: ['football', 'tennis'],
@@ -86,6 +95,7 @@ test('PUT /favorites validates payload arrays', async () => {
 
   try {
     const response = await app.inject({
+      headers: makeAuthHeaders(app),
       method: 'PUT',
       url: '/favorites',
       payload: {

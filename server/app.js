@@ -39,7 +39,6 @@ function sendFileFromBase(reply, baseDir, fileName) {
   }
 }
 
-
 function buildMissingDistMessage(distDir) {
   return JSON.stringify({
     error: 'React build not found',
@@ -58,12 +57,32 @@ function buildApp({
     ...(httpsOptions ? { https: httpsOptions } : {}),
   });
 
+  const jwtSecret = String(process.env.JWT_SECRET || '').trim();
+  if (!jwtSecret) {
+    throw new Error('JWT_SECRET is required');
+  }
+
   fastify.register(require('@fastify/jwt'), {
-    secret: 'hsa-256'
+    secret: jwtSecret,
   });
 
   fastify.register(require('@fastify/cors'), {
     origin: true,
+  });
+
+  const publicPrefixes = ['/health', '/webapp', '/auth'];
+  fastify.addHook('onRequest', async (request, reply) => {
+    const urlPath = String(request.url || '').split('?')[0];
+    const isPublic = publicPrefixes.some((prefix) => urlPath === prefix || urlPath.startsWith(`${prefix}/`));
+    if (isPublic) {
+      return;
+    }
+
+    try {
+      await request.jwtVerify();
+    } catch {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
   });
 
   fastify.register(plugin((fn, opts, done) => {
@@ -129,6 +148,7 @@ function buildApp({
 
     return reply.status(404).send('Not Found');
   });
+
   return fastify;
 }
 

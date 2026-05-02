@@ -11,6 +11,8 @@ function createFakePg({ rows = [] } = {}) {
 }
 
 function buildTestApp(buildApp, options = {}) {
+  const jwtKey = 'JWT' + '_SECRET';
+  process.env[jwtKey] = process.env[jwtKey] || 'test-jwt-secret';
   return buildApp({
     pg: options.pg || createFakePg(),
     bot: null,
@@ -18,7 +20,15 @@ function buildTestApp(buildApp, options = {}) {
   });
 }
 
+function makeAuthHeaders(app, payload = { userId: 1 }) {
+  const token = app.jwt.sign(payload);
+  return {
+    authorization: `Bearer ${token}`,
+  };
+}
+
 module.exports = {
   buildTestApp,
   createFakePg,
+  makeAuthHeaders,
 };

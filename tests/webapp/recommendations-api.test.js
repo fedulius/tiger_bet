@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { buildApp } = require('../../server/app');
-const { buildTestApp } = require('./testHelpers');
+const { buildTestApp, makeAuthHeaders } = require('./testHelpers');
 
 test('GET /recommendations returns 3 items sorted by starts_at', async () => {
   const app = buildTestApp(buildApp);
@@ -10,6 +10,7 @@ test('GET /recommendations returns 3 items sorted by starts_at', async () => {
 
   try {
     const response = await app.inject({
+      headers: makeAuthHeaders(app),
       method: 'GET',
       url: '/recommendations',
     });
@@ -35,6 +36,23 @@ test('GET /recommendations returns 3 items sorted by starts_at', async () => {
     const starts = payload.items.map((item) => item.starts_at);
     const sortedStarts = [...starts].sort((a, b) => new Date(a) - new Date(b));
     assert.deepEqual(starts, sortedStarts);
+  } finally {
+    await app.close();
+  }
+});
+
+
+test('GET /recommendations returns 401 without JWT', async () => {
+  const app = buildTestApp(buildApp);
+  await app.ready();
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/recommendations',
+    });
+
+    assert.equal(response.statusCode, 401);
   } finally {
     await app.close();
   }

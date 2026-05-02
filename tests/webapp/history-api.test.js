@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { buildApp } = require('../../server/app');
-const { buildTestApp } = require('./testHelpers');
+const { buildTestApp, makeAuthHeaders } = require('./testHelpers');
 
 test('GET /history returns empty-state payload', async () => {
   const app = buildTestApp(buildApp);
@@ -10,6 +10,7 @@ test('GET /history returns empty-state payload', async () => {
 
   try {
     const response = await app.inject({
+      headers: makeAuthHeaders(app),
       method: 'GET',
       url: '/history',
     });
@@ -33,6 +34,7 @@ test('GET /history item shape uses format A fields', async () => {
 
   try {
     const response = await app.inject({
+      headers: makeAuthHeaders(app),
       method: 'GET',
       url: '/history?sample=1',
     });

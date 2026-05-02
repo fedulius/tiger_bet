@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { buildApp } = require('../../server/app');
-const { buildTestApp } = require('./testHelpers');
+const { buildTestApp, makeAuthHeaders } = require('./testHelpers');
 
 test('GET /match/:id returns match details with required fields', async () => {
   const app = buildTestApp(buildApp);
@@ -10,6 +10,7 @@ test('GET /match/:id returns match details with required fields', async () => {
 
   try {
     const response = await app.inject({
+      headers: makeAuthHeaders(app),
       method: 'GET',
       url: '/match/fallback-1',
     });
@@ -37,6 +38,7 @@ test('GET /match/:id returns 404 for unknown id', async () => {
 
   try {
     const response = await app.inject({
+      headers: makeAuthHeaders(app),
       method: 'GET',
       url: '/match/unknown-id',
     });

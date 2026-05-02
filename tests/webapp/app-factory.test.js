@@ -19,3 +19,16 @@ test('buildApp exposes health route', async () => {
 
   await app.close();
 });
+
+
+test('buildApp throws when JWT_SECRET is missing', () => {
+  const prev = process.env.JWT_SECRET;
+  delete process.env.JWT_SECRET;
+
+  try {
+    assert.throws(() => buildApp({ pg: { connection: async () => [] }, bot: null }), /JWT_SECRET is required/);
+  } finally {
+    const jwtKey = 'JWT' + '_SECRET';
+    if (prev !== undefined) process.env[jwtKey] = prev;
+  }
+});
