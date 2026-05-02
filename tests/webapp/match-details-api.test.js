@@ -27,6 +27,11 @@ test('GET /match/:id returns match details with required fields', async () => {
     assert.equal(typeof payload.basis, 'string');
     assert.equal(typeof payload.source_url, 'string');
     assert.match(payload.source_url, /^https?:\/\//i);
+    assert.equal(Array.isArray(payload.bets), true);
+    assert.equal(payload.bets.length, 3);
+    assert.equal(payload.bets[0].coeff >= 1.5 && payload.bets[0].coeff <= 1.9, true);
+    assert.equal(payload.bets[1].coeff >= 1.7 && payload.bets[1].coeff <= 2.2, true);
+    assert.match(String(payload.bets[2].forecast || ''), /точный счет\s+\d+:\d+/i);
   } finally {
     await app.close();
   }

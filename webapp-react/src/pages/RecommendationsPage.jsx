@@ -12,6 +12,26 @@ function uniqTrimmed(arr) {
   return [...new Set((Array.isArray(arr) ? arr : []).map((v) => String(v || '').trim()).filter(Boolean))];
 }
 
+function ForecastBlock({ item }) {
+  const bets = Array.isArray(item.bets) ? item.bets.slice(0, 3) : [];
+
+  return (
+    <div>
+      <p>Матч: {item.match || '—'}</p>
+      <p>Лига: {item.league || '—'}</p>
+      <p>Время начала: {formatMoscowDateTime(item.starts_at || '')}</p>
+      {bets.map((bet, index) => (
+        <div key={`${item.id || item.match}-bet-${index}`} style={{ marginTop: 10 }}>
+          <p>Прогноз: {bet.forecast || '—'}</p>
+          <p>Кэф: {bet.coeff ?? '—'}</p>
+          <p>Вероятность захода в % и/или уверенность: {bet.probability ?? '—'}% / {bet.confidence || '—'}</p>
+          <p>Краткое описание: {bet.description || '—'}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function RecommendationCard({ item }) {
   const detailsHref = `/match/${encodeURIComponent(item.id || '')}`;
 
@@ -21,9 +41,7 @@ function RecommendationCard({ item }) {
         <h3>{item.match || 'Матч'}</h3>
         {item.is_new ? <span className="recommendation-badge">Новые</span> : null}
       </div>
-      <div className="recommendation-meta">{item.league || ''} · {formatMoscowDateTime(item.starts_at || '')}</div>
-      <p>{item.main_thought || ''}</p>
-      <div className="recommendation-confidence">Уверенность: {item.confidence ?? '—'}%</div>
+      <ForecastBlock item={item} />
       <div className="recommendation-actions">
         {item.source_url ? (
           <a href={item.source_url} target="_blank" rel="noopener noreferrer">Открыть источник</a>
@@ -324,9 +342,7 @@ export function RecommendationsPage() {
             {!history.error && Array.isArray(history.items) && history.items.map((item) => (
               <article className="recommendation-card" key={`history-${item.id || item.match}`}>
                 <h3>{item.match || 'Матч'}</h3>
-                <div className="recommendation-meta">{item.league || ''} · {formatMoscowDateTime(item.starts_at || '')}</div>
-                <p>{item.main_thought || ''}</p>
-                <div className="recommendation-confidence">Уверенность: {item.confidence ?? '—'}%</div>
+                <ForecastBlock item={item} />
               </article>
             ))}
           </div>

@@ -144,6 +144,62 @@ function recommendationIdFromLink(link = '', index = 0) {
   return `stavka-${slug.replace(/[^a-zA-Z0-9-_]+/g, '-')}`;
 }
 
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function toCoeff(value, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Number(parsed.toFixed(2));
+}
+
+function buildBetLineup(item = {}) {
+  const confidence = clamp(Number(item.confidence) || 0, 35, 90);
+  const thought = String(item.main_thought || 'Ставка по текущей форме и контексту матча').trim();
+
+  const bet1Coeff = toCoeff(1.5 + (confidence % 40) / 100, 1.65);
+  const bet2Coeff = toCoeff(1.7 + ((confidence + 7) % 50) / 100, 1.95);
+  const exactHome = confidence >= 66 ? 2 : 1;
+  const exactAway = confidence >= 66 ? 1 : 0;
+
+  return [
+    {
+      type: 'primary',
+      forecast: thought,
+      coeff: bet1Coeff,
+      probability: clamp(Math.round((1 / bet1Coeff) * 100), 45, 70),
+      confidence: confidence >= 66 ? 'высокая' : 'средняя',
+      description: 'Базовый сценарий с умеренным риском.',
+    },
+    {
+      type: 'value',
+      forecast: `Альтернативный value-сценарий по матчу ${item.match || ''}`.trim(),
+      coeff: bet2Coeff,
+      probability: clamp(Math.round((1 / bet2Coeff) * 100), 40, 60),
+      confidence: confidence >= 60 ? 'средняя' : 'ниже средней',
+      description: 'Повышенный коэффициент при контролируемом риске.',
+    },
+    {
+      type: 'exact-score',
+      forecast: `Точный счет ${exactHome}:${exactAway}`,
+      coeff: 6.8,
+      probability: 14,
+      confidence: 'высокий риск',
+      description: 'Сценарная ставка на точный счет.',
+    },
+  ];
+}
+
+function withBetLineup(item = {}) {
+  return {
+    ...item,
+    bets: buildBetLineup(item),
+  };
+}
+
 function flattenLiveLeagues(leagues = [], baseNow = new Date()) {
   const flat = [];
 
@@ -240,7 +296,7 @@ async function loadLiveRecommendations({ liveLoader, matchPageLoader, categoryId
 }
 
 function buildPayload({ source, items, updatedAt }) {
-  const top3 = markNewItems(pickTopByTime(items, 3), updatedAt);
+  const top3 = markNewItems(pickTopByTime(items, 3), updatedAt).map(withBetLineup);
   return {
     items: top3,
     source,

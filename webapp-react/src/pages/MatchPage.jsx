@@ -62,9 +62,17 @@ export function MatchPage() {
           <div id="match-details">
             <article className="recommendation-card">
               <h3>{item.match || 'Матч'}</h3>
-              <div className="recommendation-meta">{item.league || ''} · {formatMoscowDateTime(item.starts_at || '')}</div>
-              <p>{item.main_thought || ''}</p>
-              <div className="recommendation-confidence">Уверенность: {item.confidence ?? '—'}%</div>
+              <p>Матч: {item.match || '—'}</p>
+              <p>Лига: {item.league || '—'}</p>
+              <p>Время начала: {formatMoscowDateTime(item.starts_at || '')}</p>
+              {(Array.isArray(item.bets) ? item.bets.slice(0, 3) : []).map((bet, index) => (
+                <div key={`${item.id || item.match}-bet-${index}`} style={{ marginTop: 10 }}>
+                  <p>Прогноз: {bet.forecast || '—'}</p>
+                  <p>Кэф: {bet.coeff ?? '—'}</p>
+                  <p>Вероятность захода в % и/или уверенность: {bet.probability ?? '—'}% / {bet.confidence || '—'}</p>
+                  <p>Краткое описание: {bet.description || '—'}</p>
+                </div>
+              ))}
               <p><strong>Основание:</strong> {item.basis || ''}</p>
             </article>
           </div>

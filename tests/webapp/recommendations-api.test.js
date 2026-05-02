@@ -31,6 +31,12 @@ test('GET /recommendations returns 3 items sorted by starts_at', async () => {
       assert.ok(item.main_thought);
       assert.equal(typeof item.confidence, 'number');
       assert.equal(typeof item.is_new, 'boolean');
+      assert.equal(Array.isArray(item.bets), true);
+      assert.equal(item.bets.length, 3);
+
+      assert.equal(item.bets[0].coeff >= 1.5 && item.bets[0].coeff <= 1.9, true);
+      assert.equal(item.bets[1].coeff >= 1.7 && item.bets[1].coeff <= 2.2, true);
+      assert.match(String(item.bets[2].forecast || ''), /точный счет\s+\d+:\d+/i);
     }
 
     const starts = payload.items.map((item) => item.starts_at);
