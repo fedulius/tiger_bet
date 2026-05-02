@@ -1,8 +1,21 @@
 import { withTelegramInitDataHeaders } from './telegram.js';
 
+let authToken = '';
+
+function buildHeaders(headers = {}) {
+  const base = withTelegramInitDataHeaders(headers);
+  if (authToken) {
+    return {
+      ...base,
+      authorization: `Bearer ${authToken}`,
+    };
+  }
+  return base;
+}
+
 async function getJson(url) {
   const response = await fetch(url, {
-    headers: withTelegramInitDataHeaders(),
+    headers: buildHeaders(),
   });
 
   if (!response.ok) {
@@ -12,8 +25,10 @@ async function getJson(url) {
   return response.json();
 }
 
-export function auth() {
-  return getJson('/auth')
+export async function auth() {
+  const payload = await getJson('/auth');
+  authToken = String(payload?.token || '').trim();
+  return payload;
 }
 
 export function getRecommendations() {
@@ -31,7 +46,7 @@ export function getFavorites() {
 export function setFavorites(payload) {
   return fetch('/favorites', {
     method: 'PUT',
-    headers: withTelegramInitDataHeaders({
+    headers: buildHeaders({
       'content-type': 'application/json',
     }),
     body: JSON.stringify(payload || {}),

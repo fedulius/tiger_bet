@@ -98,6 +98,20 @@ export function RecommendationsPage() {
     }
   }
 
+  async function refreshRecommendationsWithAuth() {
+    setIsRecommendationsLoading(true);
+    const authResult = await auth().then(() => ({ ok: true })).catch(() => ({ ok: false }));
+
+    if (!authResult.ok) {
+      setRecommendationsError('Не удалось авторизоваться.');
+      setRefreshStatus('Ошибка авторизации');
+      setIsRecommendationsLoading(false);
+      return;
+    }
+
+    await refreshRecommendations();
+  }
+
   async function loadFavorites() {
     try {
       const payload = await getFavorites();
@@ -134,15 +148,14 @@ export function RecommendationsPage() {
 
     (async () => {
       await Promise.allSettled([
-        auth(),
-        refreshRecommendations(),
+        refreshRecommendationsWithAuth(),
         loadFavorites(),
         loadHistory(),
       ]);
 
       if (!cancelled) {
         timerId = setInterval(() => {
-          refreshRecommendations();
+          refreshRecommendationsWithAuth();
         }, 180000);
       }
     })();
@@ -221,7 +234,7 @@ export function RecommendationsPage() {
       <header className="header" id="top-header">
         <div className="brand-row">
           <h1>Tiger Bet</h1>
-          <button id="refresh-btn" type="button" onClick={refreshRecommendations}>Обновить сейчас</button>
+          <button id="refresh-btn" type="button" onClick={refreshRecommendationsWithAuth}>Обновить сейчас</button>
         </div>
 
         <nav className="anchors" aria-label="Навигация по блокам">
@@ -240,7 +253,7 @@ export function RecommendationsPage() {
             {recommendationsError ? (
               <>
                 <span>{recommendationsError} </span>
-                <button type="button" onClick={refreshRecommendations}>Повторить</button>
+                <button type="button" onClick={refreshRecommendationsWithAuth}>Повторить</button>
               </>
             ) : null}
           </div>
