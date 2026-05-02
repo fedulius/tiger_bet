@@ -53,7 +53,7 @@ export function RecommendationsPage() {
   const [recommendationsError, setRecommendationsError] = useState('');
   const [isRecommendationsLoading, setIsRecommendationsLoading] = useState(true);
   const [refreshStatus, setRefreshStatus] = useState('');
-  const [isUnauthorized, setIsUnauthorized] = useState(false);
+  const [authGate, setAuthGate] = useState('pending');
 
   const [favorites, setFavoritesState] = useState({ sports: [], leagues: [] });
   const [history, setHistory] = useState({ items: [], empty_state: null, error: '' });
@@ -104,14 +104,14 @@ export function RecommendationsPage() {
     const authResult = await auth().then(() => ({ ok: true })).catch(() => ({ ok: false }));
 
     if (!authResult.ok) {
-      setIsUnauthorized(true);
+      setAuthGate('unauthorized');
       setRecommendationsError('Не удалось авторизоваться.');
       setRefreshStatus('Ошибка авторизации');
       setIsRecommendationsLoading(false);
       return;
     }
 
-    setIsUnauthorized(false);
+    setAuthGate('ok');
     await refreshRecommendations();
   }
 
@@ -232,7 +232,18 @@ export function RecommendationsPage() {
     }
   }
 
-  if (isUnauthorized) {
+  if (authGate === 'pending') {
+    return (
+      <main className="layout" style={{ minHeight: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <section className="card" style={{ maxWidth: 520, textAlign: 'center' }}>
+          <h2>Проверяем доступ…</h2>
+          <p>Подождите пару секунд.</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (authGate === 'unauthorized') {
     return (
       <main className="layout" style={{ minHeight: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <section className="card" style={{ maxWidth: 520, textAlign: 'center' }}>
