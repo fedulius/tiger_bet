@@ -13,7 +13,7 @@ function uniqTrimmed(arr) {
 }
 
 function RecommendationCard({ item }) {
-  const detailsHref = `/webapp/match/${encodeURIComponent(item.id || '')}`;
+  const detailsHref = `/match/${encodeURIComponent(item.id || '')}`;
 
   return (
     <article className="recommendation-card" data-id={item.id || ''}>
