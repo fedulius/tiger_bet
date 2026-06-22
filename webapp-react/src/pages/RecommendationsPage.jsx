@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { getFavorites, getHistory, getRecommendations, setFavorites, auth } from '../lib/api.js';
 import { formatMoscowDateTime } from '../lib/format.js';
 import { formatRelativeUpdatedAt, getTopRecommendations } from '../lib/recommendations.js';
@@ -46,7 +47,7 @@ function RecommendationCard({ item }) {
         {item.source_url ? (
           <a href={item.source_url} target="_blank" rel="noopener noreferrer">Открыть источник</a>
         ) : (
-          <a href={detailsHref}>Подробнее</a>
+          <Link to={detailsHref}>Подробнее</Link>
         )}
       </div>
     </article>
@@ -117,19 +118,29 @@ export function RecommendationsPage() {
     }
   }
 
-  async function refreshRecommendationsWithAuth() {
-    setIsRecommendationsLoading(true);
+  async function authorizeWebApp() {
     const authResult = await auth().then(() => ({ ok: true })).catch(() => ({ ok: false }));
 
     if (!authResult.ok) {
       setAuthGate('unauthorized');
       setRecommendationsError('Не удалось авторизоваться.');
       setRefreshStatus('Ошибка авторизации');
+      return false;
+    }
+
+    setAuthGate('ok');
+    return true;
+  }
+
+  async function refreshRecommendationsWithAuth() {
+    setIsRecommendationsLoading(true);
+    const authorized = await authorizeWebApp();
+
+    if (!authorized) {
       setIsRecommendationsLoading(false);
       return;
     }
 
-    setAuthGate('ok');
     await refreshRecommendations();
   }
 
@@ -168,11 +179,17 @@ export function RecommendationsPage() {
     let timerId = null;
 
     (async () => {
-      await Promise.allSettled([
-        refreshRecommendationsWithAuth(),
-        loadFavorites(),
-        loadHistory(),
-      ]);
+      const authorized = await authorizeWebApp();
+
+      if (authorized) {
+        await Promise.allSettled([
+          refreshRecommendations(),
+          loadFavorites(),
+          loadHistory(),
+        ]);
+      } else {
+        setIsRecommendationsLoading(false);
+      }
 
       if (!cancelled) {
         timerId = setInterval(() => {

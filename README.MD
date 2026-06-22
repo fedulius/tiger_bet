@@ -50,7 +50,7 @@ HTTP API (`fastify.listen`) по-прежнему выключен в текущ
 - `lib/aiForecastProvider.js` — провайдер прогноза с приоритетом редакционного блока
 - `lib/forecastAnalyzer.js` — извлечение мысли прогноза и fallback-анализ
 - `DataBase/Postgres.js` — обертка SQL-запросов к PostgreSQL
-- `lib/categoryEndpoint.js` — маппинг `prediction_category_id -> endpoint`
+- `lib/categoryEndpoint.js` — маппинг `sport_id -> endpoint`
 - `docs/plans/` — проектные планы и чеклисты
 
 ## Требования
@@ -90,7 +90,7 @@ npm test
 
 ## Используемые таблицы БД (ядро)
 
-- `public.prediction_category` — категории спорта и URL-slug
+- `public.sport` — категории спорта и URL-slug
 - `public.url` — сохраненные ссылки матчей, флаг верификации (`url_verified`)
 - `public.user`, `public.language`, `external.public_user`, `external.system` — контур пользователей и внешних систем
 

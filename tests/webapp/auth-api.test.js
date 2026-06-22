@@ -47,6 +47,10 @@ test('GET /auth returns token for valid telegram init data and allowed user', as
     assert.equal(response.statusCode, 200);
     const payload = response.json();
     assert.equal(typeof payload.token, 'string');
+    const decoded = app.jwt.verify(payload.token);
+    assert.equal(decoded.userId, 1);
+    assert.equal(decoded.telegram_user_id, 777);
+    assert.equal(decoded.profile, 'telegram:777');
   } finally {
     await app.close();
   }

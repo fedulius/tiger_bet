@@ -56,3 +56,19 @@ test('GET /history item shape uses format A fields', async () => {
     await app.close();
   }
 });
+
+test('GET /history returns 401 without JWT', async () => {
+  const app = buildTestApp(buildApp);
+  await app.ready();
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/history',
+    });
+
+    assert.equal(response.statusCode, 401);
+  } finally {
+    await app.close();
+  }
+});

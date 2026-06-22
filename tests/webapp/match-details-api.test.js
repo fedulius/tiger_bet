@@ -54,3 +54,19 @@ test('GET /match/:id returns 404 for unknown id', async () => {
     await app.close();
   }
 });
+
+test('GET /match/:id returns 401 without JWT', async () => {
+  const app = buildTestApp(buildApp);
+  await app.ready();
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/match/fallback-1',
+    });
+
+    assert.equal(response.statusCode, 401);
+  } finally {
+    await app.close();
+  }
+});

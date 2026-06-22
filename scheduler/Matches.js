@@ -12,7 +12,7 @@ class Matches {
     const categoriesList = await this.#getSportCategories();
 
     for (const category of categoriesList) {
-      const html = await this.#requestPrediction(category.prediction_category_id);
+      const html = await this.#requestPrediction(category.sport_id);
       console.log(this.#leagueParser(html));
     }
 
@@ -24,7 +24,7 @@ class Matches {
 
     const leagues = [];
 
-    $("section.MatchesTable.MatchesTable--football").each((i, el) => {
+    $('section.MatchesTable').each((i, el) => {
       const country = $(el).find('.title-country').text().trim();
       const league = $(el).find('.title-link').text().trim();
       const link = $(el).find('.title-link');
@@ -77,9 +77,6 @@ class Matches {
         url: link.attr("href"),
       });
     });
-
-    console.log(leagues);
-
     return leagues;
   }
 
@@ -107,8 +104,8 @@ class Matches {
 
   async #getSportCategories() {
     return await this.pg.connection(`
-    SELECT *
-    FROM public.prediction_category
+    SELECT sport_id, sport_name
+    FROM public.sport
     `)
   }
 

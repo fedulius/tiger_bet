@@ -1,10 +1,13 @@
-function createFakePg({ rows = [] } = {}) {
+function createFakePg({ rows = [], handler = null } = {}) {
   const calls = [];
 
   return {
     calls,
     async connection(query, params) {
       calls.push({ query, params });
+      if (typeof handler === 'function') {
+        return handler(query, params, calls);
+      }
       return rows;
     },
   };

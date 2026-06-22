@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { getMatchDetails } from '../lib/api.js';
+import { auth, getMatchDetails } from '../lib/api.js';
 import { formatMoscowDateTime } from '../lib/format.js';
 import { buildMatchBackLink, resolveMatchId } from '../lib/match.js';
 
@@ -13,27 +13,32 @@ export function MatchPage() {
     [routeParamId, location.search],
   );
 
-  const [state, setState] = useState({ loading: true, error: '', item: null });
+  const [state, setState] = useState({ loading: true, error: '', item: null, unauthorized: false });
 
   useEffect(() => {
     let cancelled = false;
 
     async function run() {
       if (!matchId) {
-        setState({ loading: false, error: 'Не указан id матча', item: null });
+        setState({ loading: false, error: 'Не указан id матча', item: null, unauthorized: false });
         return;
       }
 
-      setState({ loading: true, error: '', item: null });
+      setState({ loading: true, error: '', item: null, unauthorized: false });
 
       try {
+        await auth();
         const item = await getMatchDetails(matchId);
         if (!cancelled) {
-          setState({ loading: false, error: '', item });
+          setState({ loading: false, error: '', item, unauthorized: false });
         }
-      } catch {
+      } catch (error) {
         if (!cancelled) {
-          setState({ loading: false, error: 'Матч не найден', item: null });
+          if (String(error?.message || '') === 'HTTP 401') {
+            setState({ loading: false, error: '', item: null, unauthorized: true });
+          } else {
+            setState({ loading: false, error: 'Матч не найден', item: null, unauthorized: false });
+          }
         }
       }
     }
@@ -46,6 +51,17 @@ export function MatchPage() {
   }, [matchId]);
 
   const item = state.item;
+
+  if (state.unauthorized) {
+    return (
+      <main className="layout" style={{ minHeight: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <section className="card" style={{ maxWidth: 520, textAlign: 'center' }}>
+          <h2>Доступ ограничен</h2>
+          <p>Откройте приложение через кнопку в Telegram-боте и повторите попытку.</p>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main className="layout">

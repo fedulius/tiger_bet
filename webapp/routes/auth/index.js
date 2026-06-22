@@ -79,7 +79,16 @@ async function authRoutes(fastify) {
       return res.status(403).send({ error: 'Access denied' });
     }
 
-    const token = fastify.jwt.sign({ userId: telegramUserId });
+    const dbUserId = Number(users[0]?.user_id);
+    if (!Number.isFinite(dbUserId) || dbUserId <= 0) {
+      return res.status(403).send({ error: 'Access denied' });
+    }
+
+    const token = fastify.jwt.sign({
+      userId: dbUserId,
+      telegram_user_id: telegramUserId,
+      profile: `telegram:${telegramUserId}`,
+    });
     return res.send({ token });
   });
 }
