@@ -99,7 +99,7 @@ test('loadLiveRecommendations prefers upcoming matches for feed-oriented consume
       {
         league: 'Mixed League',
         matches: [
-          { team: 'Past One - Past Two', link: '/matches/soccer/past', time: '16:00', date: '23 июн' },
+          { team: 'Past One - Past Two', link: '/matches/soccer/past', time: '14:00', date: '23 июн' },
           { team: 'Soon One - Soon Two', link: '/matches/soccer/soon', time: '19:30', date: '23 июн' },
           { team: 'Tomorrow One - Tomorrow Two', link: '/matches/soccer/tomorrow', time: '11:00', date: '24 июн' },
         ],
@@ -159,11 +159,13 @@ test('loadLiveRecommendations rechecks recently-started rows against match page 
 
   assert.deepEqual(items.map((item) => item.match), ['Португалия vs Узбекистан', 'Англия vs Гана']);
   assert.equal(items[0].starts_at, '2026-06-23T17:00:00.000Z');
+  assert.equal(items[1].starts_at, '2026-06-23T20:00:00.000Z');
   assert.ok(items.every((item) => new Date(item.starts_at).getTime() > now));
 });
 
 test('getRecommendations returns Redis-cached payload on cache hit without calling live loader', async () => {
   const generationTime = '2026-06-23T10:00:00.000Z';
+
   const cachedPayload = {
     items: [{ id: 'cached-1', match: 'Cached vs Other', starts_at: '2026-06-23T12:00:00.000Z', is_new: false, bets: [] }],
     source: 'stavka-live',

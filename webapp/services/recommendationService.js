@@ -191,25 +191,28 @@ function markNewItems(items, nowIso) {
   });
 }
 
-function parseStartsAt({ dateText = '', timeText = '', index = 0, baseNow = new Date() }) {
+function parseStartsAt({ dateText = '', timeText = '', index = 0, baseNow = new Date(), displayTimeZone = 'utc' }) {
   const parsed = new Date(baseNow);
+
+  const yearMatch = String(dateText).match(/(20\d{2})/);
+  const dateMatch = String(dateText).toLowerCase().match(/(\d{1,2})\s+([а-яё]{3,})/i);
+  const day = dateMatch ? Number(dateMatch[1]) : parsed.getUTCDate();
+  const monthShort = dateMatch ? dateMatch[2].slice(0, 3) : null;
+  const month = monthShort ? MONTHS_RU[monthShort] : parsed.getUTCMonth();
+  const year = yearMatch ? Number(yearMatch[1]) : parsed.getUTCFullYear();
+
+  if (Number.isFinite(day) && Number.isInteger(month) && Number.isFinite(year)) {
+    parsed.setUTCFullYear(year, month, day);
+  }
 
   const timeMatch = String(timeText).match(/(\d{1,2}):(\d{2})/);
   if (timeMatch) {
-    parsed.setHours(Number(timeMatch[1]), Number(timeMatch[2]), 0, 0);
+    const hours = Number(timeMatch[1]);
+    const minutes = Number(timeMatch[2]);
+    const utcHours = displayTimeZone === 'msk' ? hours - 3 : hours;
+    parsed.setUTCHours(utcHours, minutes, 0, 0);
   } else {
     parsed.setTime(parsed.getTime() + index * 30 * 60 * 1000);
-  }
-
-  const dateMatch = String(dateText).toLowerCase().match(/(\d{1,2})\s+([а-яё]{3,})/i);
-  if (dateMatch) {
-    const day = Number(dateMatch[1]);
-    const monthShort = dateMatch[2].slice(0, 3);
-    const month = MONTHS_RU[monthShort];
-
-    if (Number.isFinite(day) && Number.isInteger(month)) {
-      parsed.setMonth(month, day);
-    }
   }
 
   return parsed.toISOString();
@@ -382,6 +385,7 @@ function extractMatchPageStartsAt(html, item = {}) {
         dateText: faqTime[1],
         timeText: faqTime[2],
         baseNow: new Date(item.starts_at || Date.now()),
+        displayTimeZone: 'msk',
       });
     } catch {
       // Fall through to header parsing.
