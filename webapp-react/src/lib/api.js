@@ -57,3 +57,14 @@ export function setFavorites(payload) {
 export function getMatchDetails(id) {
   return getJson(`/match/${encodeURIComponent(id)}`);
 }
+
+export function getFeed({ window, sport, country, league, limit = 10, offset = 0 } = {}) {
+  const params = new URLSearchParams();
+  if (window) params.set('window', window);
+  if (sport) params.set('sport', sport);
+  if (country) params.set('country', country);
+  if (league) params.set('league', league);
+  params.set('limit', String(limit));
+  params.set('offset', String(offset));
+  return getJson(`/feed?${params.toString()}`);
+}
