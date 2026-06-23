@@ -75,6 +75,7 @@ const liveCache = {
 
 const LIVE_CACHE_TTL_MS = 3 * 60 * 1000;
 const REDIS_TTL_SECONDS = 300;
+const RECENT_PAST_RECHECK_WINDOW_MS = 6 * 60 * 60 * 1000;
 
 let _defaultRedisClient = null;
 let _defaultRedisInit = false;
@@ -243,6 +244,21 @@ function recommendationIdFromLink(link = '', index = 0) {
   return `stavka-${slug.replace(/[^a-zA-Z0-9-_]+/g, '-')}`;
 }
 
+function dedupeById(items = []) {
+  const seen = new Set();
+  const result = [];
+
+  for (const item of items) {
+    if (!item?.id || seen.has(item.id)) {
+      continue;
+    }
+    seen.add(item.id);
+    result.push(item);
+  }
+
+  return result;
+}
+
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
@@ -353,22 +369,66 @@ function requestMatchPage(url) {
   });
 }
 
-async function enrichFromMatchPages(items, { matchPageLoader } = {}) {
+function extractMatchPageStartsAt(html, item = {}) {
+  const source = String(html || '');
+  if (!source) {
+    return null;
+  }
+
+  const faqTime = source.match(/пройд[её]т\s+(\d{1,2}\s+[а-яё]{3,}\s+\d{4}\s+года)\s+в\s+(\d{1,2}:\d{2})\s+по\s+московскому\s+времени/i);
+  if (faqTime) {
+    try {
+      return parseStartsAt({
+        dateText: faqTime[1],
+        timeText: faqTime[2],
+        baseNow: new Date(item.starts_at || Date.now()),
+      });
+    } catch {
+      // Fall through to header parsing.
+    }
+  }
+
+  const matchHeader = source.match(/<div class="text-h1 info-top"[^>]*>\s*([^<]+?)\s*<\/div>\s*<div class="info-bottom"[^>]*>\s*([^<]+?)\s*<\/div>/i);
+  if (!matchHeader) {
+    return null;
+  }
+
+  const timeText = String(matchHeader[1] || '').trim();
+  const dateText = String(matchHeader[2] || '').trim();
+  if (!timeText || !dateText) {
+    return null;
+  }
+
+  try {
+    return parseStartsAt({
+      dateText,
+      timeText,
+      baseNow: new Date(item.starts_at || Date.now()),
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function enrichFromMatchPages(items, { matchPageLoader, correctStartsAtIds = null } = {}) {
   const loader = matchPageLoader || requestMatchPage;
 
   const enriched = await Promise.all(items.map(async (item) => {
     try {
       const html = await loader(item.source_url);
       const editorial = extractEditorialForecast(html, { matchName: item.match });
+      const correctedStartsAt = extractMatchPageStartsAt(html, item);
+      const shouldCorrectStartsAt = !correctStartsAtIds || correctStartsAtIds.has(item.id);
 
-      if (!editorial || !editorial.mainThought) {
+      if (!editorial?.mainThought && !(shouldCorrectStartsAt && correctedStartsAt)) {
         return item;
       }
 
       return {
         ...item,
-        main_thought: editorial.mainThought,
-        confidence: Number.isFinite(editorial.probabilityPercent)
+        starts_at: shouldCorrectStartsAt && correctedStartsAt ? correctedStartsAt : item.starts_at,
+        main_thought: editorial?.mainThought || item.main_thought,
+        confidence: Number.isFinite(editorial?.probabilityPercent)
           ? editorial.probabilityPercent
           : item.confidence,
       };
@@ -411,15 +471,43 @@ async function loadLiveRecommendations({ liveLoader, matchPageLoader, favoriteSp
     return [];
   }
 
-  const selected = upcomingOnly
+  const upcomingSeed = upcomingOnly
     ? selectUpcomingItems(aggregated, { now, limit })
-    : pickTopByTime(aggregated, limit);
+    : [];
+  const recentPastCandidates = upcomingOnly
+    ? pickTopByTime(
+      aggregated.filter((item) => {
+        const startTs = new Date(item?.starts_at).getTime();
+        return Number.isFinite(startTs) && startTs <= now && startTs >= (now - RECENT_PAST_RECHECK_WINDOW_MS);
+      }),
+      limit,
+    )
+    : [];
+  const metadataCandidates = dedupeById([...upcomingSeed, ...recentPastCandidates]);
+  const recentPastCandidateIds = new Set(recentPastCandidates.map((item) => item.id));
+
+  let enrichedAggregated = aggregated;
+  if (metadataCandidates.length > 0) {
+    const correctedItems = await enrichFromMatchPages(metadataCandidates, {
+      matchPageLoader,
+      correctStartsAtIds: recentPastCandidateIds,
+    });
+    const correctedById = new Map(correctedItems.map((item) => [item.id, item]));
+    enrichedAggregated = aggregated.map((item) => correctedById.get(item.id) || item);
+  }
+
+  const selected = upcomingOnly
+    ? selectUpcomingItems(enrichedAggregated, { now, limit })
+    : pickTopByTime(enrichedAggregated, limit);
 
   const itemsForEnrichment = selected.length > 0
     ? selected
-    : pickTopByTime(aggregated, limit);
+    : pickTopByTime(enrichedAggregated, limit);
 
-  return await enrichFromMatchPages(itemsForEnrichment, { matchPageLoader });
+  return await enrichFromMatchPages(itemsForEnrichment, {
+    matchPageLoader,
+    correctStartsAtIds: new Set(),
+  });
 }
 
 function filterFallbackByFavoriteSports(favoriteSports = []) {

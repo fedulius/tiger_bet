@@ -113,6 +113,55 @@ test('loadLiveRecommendations prefers upcoming matches for feed-oriented consume
   assert.ok(items.every((item) => new Date(item.starts_at).getTime() > now));
 });
 
+test('loadLiveRecommendations rechecks recently-started rows against match page header before dropping them from feed', async () => {
+  const now = new Date('2026-06-23T16:00:00.000Z').getTime();
+  const items = await loadLiveRecommendations({
+    now,
+    limit: 10,
+    upcomingOnly: true,
+    favoriteSports: [{ sport_id: 1, sport_name: 'Футбол', leagues: [] }],
+    liveLoader: async () => ([
+      {
+        league: 'Мир: Чемпионат мира',
+        matches: [
+          { team: 'Португалия - Узбекистан', link: '/matches/soccer/portugal-uzbekistan', time: '17:00', date: '23 июн' },
+          { team: 'Англия - Гана', link: '/matches/soccer/england-ghana', time: '20:00', date: '23 июн' },
+        ],
+      },
+    ]),
+    matchPageLoader: async (url) => {
+      if (url.includes('portugal-uzbekistan')) {
+        return `
+          <div class="text-h1 info-top">17:00</div>
+          <div class="info-bottom">23 июня</div>
+          <script type="application/ld+json">{
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            "mainEntity": [{
+              "@type": "Question",
+              "name": "Когда состоится матч Португалия – Узбекистан?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Матч второго тура группового этапа чемпионата мира между сборными Португалии и Узбекистана пройдёт 23 июня 2026 года в 20:00 по московскому времени."
+              }
+            }]
+          }</script>
+          <div>Основной прогноз: П1</div>
+        `;
+      }
+      return `
+        <div class="text-h1 info-top">20:00</div>
+        <div class="info-bottom">23 июня</div>
+        <div>Основной прогноз: П1</div>
+      `;
+    },
+  });
+
+  assert.deepEqual(items.map((item) => item.match), ['Португалия vs Узбекистан', 'Англия vs Гана']);
+  assert.equal(items[0].starts_at, '2026-06-23T17:00:00.000Z');
+  assert.ok(items.every((item) => new Date(item.starts_at).getTime() > now));
+});
+
 test('getRecommendations returns Redis-cached payload on cache hit without calling live loader', async () => {
   const generationTime = '2026-06-23T10:00:00.000Z';
   const cachedPayload = {

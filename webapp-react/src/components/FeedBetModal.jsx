@@ -4,6 +4,9 @@ import { formatMoscowDateTime } from '../lib/format.js';
 export function FeedBetModal({ item, onClose }) {
   const { primary_bet } = item;
   const meta = [item.sport, item.country, item.league].filter(Boolean).join(' · ');
+  const compactDescription = primary_bet?.description
+    || (item.summary && item.summary !== primary_bet?.forecast ? item.summary : '')
+    || 'Короткое описание ставки появится после обновления данных.';
 
   return (
     <div className="modal" aria-hidden="false" onClick={onClose}>
@@ -34,14 +37,11 @@ export function FeedBetModal({ item, onClose }) {
               <span className="forecast-label">Коэффициент</span>
               <strong>× {primary_bet.coeff ?? '—'}</strong>
             </div>
-            {primary_bet.description ? (
-              <p className="bet-detail-desc">{primary_bet.description}</p>
-            ) : null}
+            <div className="bet-compact-desc">
+              <span className="bet-compact-label">Кратко</span>
+              <p>{compactDescription}</p>
+            </div>
           </div>
-        ) : null}
-
-        {item.summary ? (
-          <p className="feed-modal-summary">{item.summary}</p>
         ) : null}
 
         <div className="modal-actions">

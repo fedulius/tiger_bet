@@ -1,5 +1,29 @@
 {
   "guest": {
     "sport_settings": []
+  },
+  "telegram:337412226": {
+    "sport_settings": [
+      {
+        "name": "Дота2",
+        "leagues": []
+      },
+      {
+        "name": "Футбол",
+        "leagues": []
+      }
+    ]
+  },
+  "telegram:105108202": {
+    "sport_settings": [
+      {
+        "name": "Футбол",
+        "leagues": []
+      },
+      {
+        "name": "Дота2",
+        "leagues": []
+      }
+    ]
   }
 }
