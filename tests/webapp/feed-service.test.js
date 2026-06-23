@@ -1,0 +1,291 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+
+const {
+  normalizeFeedItem,
+  buildTimeWindowBounds,
+  filterByWindow,
+  filterByParams,
+  buildFeedPayload,
+} = require('../../webapp/services/feedService');
+
+// nowMs = 2026-06-23T15:00:00Z → Moscow 18:00
+// Moscow today:    [2026-06-22T21:00:00Z, 2026-06-23T21:00:00Z)
+// Moscow tomorrow: [2026-06-23T21:00:00Z, 2026-06-24T21:00:00Z)
+const NOW_MS = new Date('2026-06-23T15:00:00.000Z').getTime();
+
+const ITEMS = {
+  past: {
+    id: 'past-1',
+    match: 'Past Match',
+    sport_name: 'Футбол',
+    country: '',
+    league: 'Premier League',
+    starts_at: '2026-06-23T10:00:00.000Z',
+    main_thought: 'Past forecast',
+    confidence: 60,
+  },
+  today1: {
+    id: 'today-1',
+    match: 'Arsenal vs Chelsea',
+    sport_name: 'Футбол',
+    country: 'Англия',
+    league: 'Premier League',
+    starts_at: '2026-06-23T17:00:00.000Z',
+    main_thought: 'Арсенал выглядит сильнее',
+    confidence: 70,
+  },
+  today2: {
+    id: 'today-2',
+    match: 'Real vs Barca',
+    sport_name: 'Футбол',
+    country: 'Испания',
+    league: 'La Liga',
+    starts_at: '2026-06-23T19:00:00.000Z',
+    main_thought: 'Реал на своём поле',
+    confidence: 65,
+  },
+  tomorrow1: {
+    id: 'tomorrow-1',
+    match: 'Djokovic vs Medvedev',
+    sport_name: 'Теннис',
+    country: 'Франция',
+    league: 'ATP',
+    starts_at: '2026-06-23T22:00:00.000Z',
+    main_thought: 'Джокович в форме',
+    confidence: 72,
+  },
+  tooFar: {
+    id: 'too-far',
+    match: 'Far Future',
+    sport_name: 'Теннис',
+    country: '',
+    league: 'WTA',
+    starts_at: '2026-06-25T00:00:00.000Z',
+    main_thought: 'Будущий матч',
+    confidence: 50,
+  },
+};
+
+// ─── normalizeFeedItem ────────────────────────────────────────────────────────
+
+test('normalizeFeedItem: returns valid feed item from raw match', () => {
+  const item = normalizeFeedItem(ITEMS.today1);
+  assert.ok(item);
+  assert.equal(item.id, 'today-1');
+  assert.equal(item.match_id, 'today-1');
+  assert.equal(item.match, 'Arsenal vs Chelsea');
+  assert.equal(item.sport, 'Футбол');
+  assert.equal(item.country, 'Англия');
+  assert.equal(item.league, 'Premier League');
+  assert.equal(item.starts_at, '2026-06-23T17:00:00.000Z');
+  assert.equal(typeof item.summary, 'string');
+  assert.ok(item.primary_bet);
+  assert.ok(item.primary_bet.forecast);
+  assert.ok(typeof item.primary_bet.coeff === 'number');
+  assert.equal(typeof item.primary_bet.description, 'string');
+});
+
+test('normalizeFeedItem: country is empty string when missing', () => {
+  const item = normalizeFeedItem(ITEMS.past);
+  assert.ok(item);
+  assert.equal(item.country, '');
+});
+
+test('normalizeFeedItem: extracts primary_bet from bets array', () => {
+  const raw = {
+    id: 'bet-item',
+    match: 'A vs B',
+    sport_name: 'Теннис',
+    country: '',
+    league: 'ATP',
+    starts_at: '2026-06-23T20:00:00.000Z',
+    main_thought: 'ignored',
+    confidence: 60,
+    bets: [
+      { type: 'primary', forecast: 'П1 победа', coeff: 1.75, description: 'Базовый вариант.' },
+      { type: 'value', forecast: 'Альтернатива', coeff: 2.1, description: '' },
+    ],
+  };
+  const item = normalizeFeedItem(raw);
+  assert.ok(item);
+  assert.equal(item.primary_bet.forecast, 'П1 победа');
+  assert.equal(item.primary_bet.coeff, 1.75);
+  assert.equal(item.primary_bet.description, 'Базовый вариант.');
+});
+
+test('normalizeFeedItem: returns null when id is missing', () => {
+  const item = normalizeFeedItem({ match: 'X vs Y', starts_at: '2026-06-23T20:00:00Z', main_thought: 'ok', confidence: 60 });
+  assert.equal(item, null);
+});
+
+test('normalizeFeedItem: returns null when starts_at is missing', () => {
+  const item = normalizeFeedItem({ id: 'x', match: 'X vs Y', main_thought: 'ok', confidence: 60 });
+  assert.equal(item, null);
+});
+
+test('normalizeFeedItem: returns null when no valid primary bet', () => {
+  const item = normalizeFeedItem({ id: 'x', match: 'X vs Y', starts_at: '2026-06-23T20:00:00Z' });
+  assert.equal(item, null);
+});
+
+// ─── buildTimeWindowBounds ────────────────────────────────────────────────────
+
+test('buildTimeWindowBounds: today window is Moscow calendar day in UTC', () => {
+  const bounds = buildTimeWindowBounds('today', NOW_MS);
+  // Moscow today: June 23 00:00 Moscow = June 22 21:00 UTC → June 24 00:00 Moscow = June 23 21:00 UTC
+  assert.equal(new Date(bounds.start).toISOString(), '2026-06-22T21:00:00.000Z');
+  assert.equal(new Date(bounds.end).toISOString(), '2026-06-23T21:00:00.000Z');
+});
+
+test('buildTimeWindowBounds: tomorrow window follows today', () => {
+  const bounds = buildTimeWindowBounds('tomorrow', NOW_MS);
+  assert.equal(new Date(bounds.start).toISOString(), '2026-06-23T21:00:00.000Z');
+  assert.equal(new Date(bounds.end).toISOString(), '2026-06-24T21:00:00.000Z');
+});
+
+test('buildTimeWindowBounds: all window spans today+tomorrow', () => {
+  const bounds = buildTimeWindowBounds('all', NOW_MS);
+  assert.equal(new Date(bounds.start).toISOString(), '2026-06-22T21:00:00.000Z');
+  assert.equal(new Date(bounds.end).toISOString(), '2026-06-24T21:00:00.000Z');
+});
+
+// ─── filterByWindow ───────────────────────────────────────────────────────────
+
+function makeItems(raws) {
+  return raws.map(normalizeFeedItem).filter(Boolean);
+}
+
+test('filterByWindow: excludes past matches', () => {
+  const items = makeItems([ITEMS.past, ITEMS.today1]);
+  const result = filterByWindow(items, 'all', NOW_MS);
+  assert.equal(result.length, 1);
+  assert.equal(result[0].id, 'today-1');
+});
+
+test('filterByWindow: all returns today and tomorrow matches', () => {
+  const items = makeItems([ITEMS.past, ITEMS.today1, ITEMS.today2, ITEMS.tomorrow1, ITEMS.tooFar]);
+  const result = filterByWindow(items, 'all', NOW_MS);
+  assert.equal(result.length, 3);
+  const ids = result.map((i) => i.id);
+  assert.ok(ids.includes('today-1'));
+  assert.ok(ids.includes('today-2'));
+  assert.ok(ids.includes('tomorrow-1'));
+});
+
+test('filterByWindow: today excludes tomorrow matches', () => {
+  const items = makeItems([ITEMS.today1, ITEMS.today2, ITEMS.tomorrow1]);
+  const result = filterByWindow(items, 'today', NOW_MS);
+  assert.equal(result.length, 2);
+  assert.ok(result.every((i) => ['today-1', 'today-2'].includes(i.id)));
+});
+
+test('filterByWindow: tomorrow excludes today matches', () => {
+  const items = makeItems([ITEMS.today1, ITEMS.tomorrow1]);
+  const result = filterByWindow(items, 'tomorrow', NOW_MS);
+  assert.equal(result.length, 1);
+  assert.equal(result[0].id, 'tomorrow-1');
+});
+
+test('filterByWindow: excludes matches beyond tomorrow', () => {
+  const items = makeItems([ITEMS.tomorrow1, ITEMS.tooFar]);
+  const result = filterByWindow(items, 'all', NOW_MS);
+  assert.equal(result.length, 1);
+  assert.equal(result[0].id, 'tomorrow-1');
+});
+
+// ─── filterByParams ───────────────────────────────────────────────────────────
+
+test('filterByParams: filters by sport (case insensitive)', () => {
+  const items = makeItems([ITEMS.today1, ITEMS.today2, ITEMS.tomorrow1]);
+  const result = filterByParams(items, { sport: 'Теннис' });
+  assert.equal(result.length, 1);
+  assert.equal(result[0].id, 'tomorrow-1');
+});
+
+test('filterByParams: filters by league (case insensitive)', () => {
+  const items = makeItems([ITEMS.today1, ITEMS.today2]);
+  const result = filterByParams(items, { league: 'la liga' });
+  assert.equal(result.length, 1);
+  assert.equal(result[0].id, 'today-2');
+});
+
+test('filterByParams: filters by country', () => {
+  const items = makeItems([ITEMS.today1, ITEMS.today2, ITEMS.tomorrow1]);
+  const result = filterByParams(items, { country: 'Англия' });
+  assert.equal(result.length, 1);
+  assert.equal(result[0].id, 'today-1');
+});
+
+test('filterByParams: combined sport and league filters', () => {
+  const items = makeItems([ITEMS.today1, ITEMS.today2, ITEMS.tomorrow1]);
+  const result = filterByParams(items, { sport: 'Футбол', league: 'La Liga' });
+  assert.equal(result.length, 1);
+  assert.equal(result[0].id, 'today-2');
+});
+
+test('filterByParams: no filters returns all items', () => {
+  const items = makeItems([ITEMS.today1, ITEMS.today2, ITEMS.tomorrow1]);
+  const result = filterByParams(items, {});
+  assert.equal(result.length, 3);
+});
+
+// ─── buildFeedPayload ─────────────────────────────────────────────────────────
+
+test('buildFeedPayload: sorts items by starts_at ascending', () => {
+  const rawItems = [ITEMS.today2, ITEMS.today1, ITEMS.tomorrow1];
+  const payload = buildFeedPayload(rawItems, { nowMs: NOW_MS });
+  const starts = payload.items.map((i) => i.starts_at);
+  const sorted = [...starts].sort((a, b) => new Date(a) - new Date(b));
+  assert.deepEqual(starts, sorted);
+});
+
+test('buildFeedPayload: paginates with limit and offset', () => {
+  const rawItems = [ITEMS.today1, ITEMS.today2, ITEMS.tomorrow1];
+  const page1 = buildFeedPayload(rawItems, { nowMs: NOW_MS, limit: 2, offset: 0 });
+  assert.equal(page1.items.length, 2);
+  assert.equal(page1.next_offset, 2);
+  assert.equal(page1.has_more, true);
+
+  const page2 = buildFeedPayload(rawItems, { nowMs: NOW_MS, limit: 2, offset: 2 });
+  assert.equal(page2.items.length, 1);
+  assert.equal(page2.next_offset, 4);
+  assert.equal(page2.has_more, false);
+});
+
+test('buildFeedPayload: default window=all', () => {
+  const rawItems = [ITEMS.today1, ITEMS.tomorrow1, ITEMS.tooFar];
+  const payload = buildFeedPayload(rawItems, { nowMs: NOW_MS });
+  assert.equal(payload.window, 'all');
+  assert.equal(payload.items.length, 2);
+});
+
+test('buildFeedPayload: response includes required fields', () => {
+  const payload = buildFeedPayload([ITEMS.today1], { nowMs: NOW_MS });
+  assert.ok(payload.generated_at);
+  assert.equal(payload.window, 'all');
+  assert.ok('filters' in payload);
+  assert.ok(Array.isArray(payload.items));
+  assert.equal(typeof payload.next_offset, 'number');
+  assert.equal(typeof payload.has_more, 'boolean');
+});
+
+test('buildFeedPayload: filters object includes null for unset params', () => {
+  const payload = buildFeedPayload([ITEMS.today1], { nowMs: NOW_MS });
+  assert.equal(payload.filters.sport, null);
+  assert.equal(payload.filters.country, null);
+  assert.equal(payload.filters.league, null);
+});
+
+test('buildFeedPayload: empty result when all items are past', () => {
+  const payload = buildFeedPayload([ITEMS.past], { nowMs: NOW_MS });
+  assert.equal(payload.items.length, 0);
+  assert.equal(payload.has_more, false);
+});
+
+test('buildFeedPayload: items include country even when empty', () => {
+  const payload = buildFeedPayload([ITEMS.past, ITEMS.today1], { nowMs: NOW_MS });
+  for (const item of payload.items) {
+    assert.ok('country' in item);
+  }
+});

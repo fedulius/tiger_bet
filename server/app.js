@@ -53,6 +53,7 @@ function buildApp({
   httpsOptions = null,
   reactDistDir = path.join(__dirname, '..', 'webapp-react', 'dist'),
   recommendationsRedis = null,
+  feedLoader = null,
 } = {}) {
   const fastify = new Fastify({
     logger: true,
@@ -101,6 +102,7 @@ function buildApp({
 
   fastify.decorate('pg', pg);
   fastify.decorate('recommendationsRedis', recommendationsRedis);
+  fastify.decorate('feedLoader', feedLoader);
 
   fastify.register(require('@fastify/autoload'), {
     dir: path.join(__dirname, '..', 'webapp', 'routes'),
