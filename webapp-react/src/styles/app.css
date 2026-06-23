@@ -354,7 +354,8 @@ section h2,
 .primary-button,
 .secondary-button,
 .modal-switch,
-#favorites-close-btn {
+#favorites-close-btn,
+.modal-close-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -383,6 +384,154 @@ section h2,
   color: var(--text-soft);
 }
 
+/* Compact card time */
+.card-time {
+  margin: 0 0 10px;
+  font-size: 0.85rem;
+  color: var(--text-soft);
+}
+
+/* Risk buttons */
+.risk-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.risk-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 6px 14px;
+  border-radius: 12px;
+  border: 1.5px solid;
+  font-size: 0.88rem;
+  font-weight: 600;
+  flex: 1;
+  justify-content: center;
+}
+
+.risk-btn-coeff {
+  font-weight: 400;
+  opacity: 0.75;
+  font-size: 0.82rem;
+}
+
+.risk-btn-low {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.risk-btn-mid {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.risk-btn-high {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+/* Risk badge */
+.risk-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  border: 1.5px solid;
+}
+
+.risk-badge-low {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.risk-badge-mid {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.risk-badge-high {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+/* Bet card risk border */
+.bet-card-low {
+  border-color: #bbf7d0;
+}
+
+.bet-card-mid {
+  border-color: #fde68a;
+}
+
+.bet-card-high {
+  border-color: #fecaca;
+}
+
+/* Modal risk switchers */
+.modal-risk-switch {
+  flex: 1;
+}
+
+.modal-risk-switch-low.active {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.modal-risk-switch-mid.active {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.modal-risk-switch-high.active {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+/* Bet detail block in modal */
+.bet-detail {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  margin-bottom: 10px;
+  display: grid;
+  gap: 10px;
+  background: color-mix(in oklab, var(--surface) 88%, var(--surface-muted));
+}
+
+.bet-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.bet-detail-row .forecast-label {
+  flex-shrink: 0;
+  margin-bottom: 0;
+}
+
+.bet-detail-desc {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-soft);
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
 .basis-box {
   margin-top: 12px;
   padding: 12px;
@@ -398,6 +547,7 @@ section h2,
 .modal {
   position: fixed;
   inset: 0;
+  z-index: 100;
   background: rgba(9, 13, 22, 0.56);
   display: flex;
   align-items: center;
@@ -473,7 +623,22 @@ section h2,
 .modal-actions {
   margin-top: 12px;
   display: flex;
+  gap: 10px;
   justify-content: flex-end;
+}
+
+.card-link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  margin-bottom: 10px;
+  background: none;
+  border: none;
+  padding: 0;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
 }
 
 @media (max-width: 720px) {
@@ -484,6 +649,12 @@ section h2,
   .header {
     position: static;
     border-radius: 16px;
+  }
+
+  .modal {
+    align-items: flex-start;
+    padding: 24px 12px 12px;
+    overflow-y: auto;
   }
 
   .brand-row,
@@ -499,6 +670,11 @@ section h2,
 
   .forecast-summary {
     grid-template-columns: 1fr;
+  }
+
+  .modal-switches,
+  .modal-actions {
+    flex-direction: column;
   }
 
   section,
@@ -521,5 +697,32 @@ section h2,
     --link: #7aa2ff;
     --link-strong: #5c8fff;
     --shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+  }
+
+  .risk-btn-low,
+  .risk-badge-low,
+  .bet-card-low,
+  .modal-risk-switch-low.active {
+    border-color: #166534;
+    background: rgba(22, 101, 52, 0.18);
+    color: #4ade80;
+  }
+
+  .risk-btn-mid,
+  .risk-badge-mid,
+  .bet-card-mid,
+  .modal-risk-switch-mid.active {
+    border-color: #92400e;
+    background: rgba(146, 64, 14, 0.18);
+    color: #fbbf24;
+  }
+
+  .risk-btn-high,
+  .risk-badge-high,
+  .bet-card-high,
+  .modal-risk-switch-high.active {
+    border-color: #991b1b;
+    background: rgba(153, 27, 27, 0.18);
+    color: #f87171;
   }
 }

@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { getFavorites, getRecommendations, setFavorites, auth } from '../lib/api.js';
 import { formatMoscowDateTime } from '../lib/format.js';
 import { formatRelativeUpdatedAt, getTopRecommendations } from '../lib/recommendations.js';
+import { BetModal, RISK_LEVELS } from '../components/BetModal.jsx';
 
 const DEFAULT_CATALOG = {
   sports: [],
@@ -49,57 +49,43 @@ function normalizeFavoritesPayload(payload) {
   };
 }
 
-function ForecastBlock({ item }) {
+function RecommendationCard({ item, onOpenBet }) {
   const bets = Array.isArray(item.bets) ? item.bets.slice(0, 3) : [];
-
-  return (
-    <div className="forecast-block">
-      <div className="forecast-summary">
-        <div className="forecast-summary-item">
-          <span className="forecast-label">Матч</span>
-          <strong>{item.match || '—'}</strong>
-        </div>
-        <div className="forecast-summary-item">
-          <span className="forecast-label">Лига</span>
-          <strong>{item.league || '—'}</strong>
-        </div>
-        <div className="forecast-summary-item">
-          <span className="forecast-label">Время начала</span>
-          <strong>{formatMoscowDateTime(item.starts_at || '') || '—'}</strong>
-        </div>
-      </div>
-
-      {bets.map((bet, index) => (
-        <div className="bet-card" key={`${item.id || item.match}-bet-${index}`}>
-          <div className="bet-card-head">
-            <span className="bet-index">Прогноз #{index + 1}</span>
-            <span className="bet-coeff">Кэф: {bet.coeff ?? '—'}</span>
-          </div>
-          <p><span className="forecast-label">Прогноз</span>{bet.forecast || '—'}</p>
-          <p><span className="forecast-label">Вероятность / уверенность</span>{bet.probability ?? '—'}% / {bet.confidence || '—'}</p>
-          <p><span className="forecast-label">Краткое описание</span>{bet.description || '—'}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function RecommendationCard({ item }) {
-  const detailsHref = `/match/${encodeURIComponent(item.id || '')}`;
+  const defaultBetIndex = bets.findIndex(Boolean);
 
   return (
     <article className="recommendation-card" data-id={item.id || ''}>
-      <div className="recommendation-head">
-        <div>
-          <h3>{item.match || 'Матч'}</h3>
-          <p className="recommendation-subtitle">{item.league || 'Лига не указана'}</p>
+      <button
+        type="button"
+        className="card-link"
+        onClick={defaultBetIndex >= 0 ? () => onOpenBet(item, defaultBetIndex) : undefined}
+      >
+        <div className="recommendation-head">
+          <div>
+            <h3>{item.match || 'Матч'}</h3>
+            <p className="recommendation-subtitle">{item.league || 'Лига не указана'}</p>
+          </div>
+          {item.is_new ? <span className="recommendation-badge">Новый</span> : null}
         </div>
-        {item.is_new ? <span className="recommendation-badge">Новый прогноз</span> : null}
-      </div>
-      <ForecastBlock item={item} />
-      <div className="recommendation-actions">
-        <Link className="button-link button-link-primary" to={detailsHref}>Подробнее</Link>
-      </div>
+        <p className="card-time">{formatMoscowDateTime(item.starts_at || '') || '—'}</p>
+      </button>
+      {bets.length > 0 ? (
+        <div className="risk-buttons">
+          {RISK_LEVELS.map((risk, i) => (
+            bets[i] ? (
+              <button
+                key={risk.key}
+                className={`risk-btn risk-btn-${risk.key}`}
+                type="button"
+                onClick={() => onOpenBet(item, i)}
+              >
+                {risk.label}
+                <span className="risk-btn-coeff">× {bets[i].coeff ?? '—'}</span>
+              </button>
+            ) : null
+          ))}
+        </div>
+      ) : null}
     </article>
   );
 }
@@ -130,6 +116,8 @@ export function RecommendationsPage() {
 
   const [favorites, setFavoritesState] = useState({ sports: [] });
   const [catalog, setCatalog] = useState(DEFAULT_CATALOG);
+
+  const [betModal, setBetModal] = useState({ isOpen: false, item: null, betIndex: 0 });
 
   const [modal, setModal] = useState({
     isOpen: false,
@@ -273,6 +261,14 @@ export function RecommendationsPage() {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function openBetModal(item, betIndex) {
+    setBetModal({ isOpen: true, item, betIndex });
+  }
+
+  function closeBetModal() {
+    setBetModal((prev) => ({ ...prev, isOpen: false }));
+  }
 
   function openSportsModal() {
     setModal({
@@ -452,7 +448,9 @@ export function RecommendationsPage() {
           <div id="recommendations-list">
             {isRecommendationsLoading ? <div>Загрузка...</div> : null}
             {!isRecommendationsLoading && recommendations.length === 0 ? <div className="recommendations-empty">Нет рекомендаций</div> : null}
-            {!isRecommendationsLoading && recommendations.map((item) => <RecommendationCard item={item} key={item.id || item.match} />)}
+            {!isRecommendationsLoading && recommendations.map((item) => (
+              <RecommendationCard item={item} key={item.id || item.match} onOpenBet={openBetModal} />
+            ))}
           </div>
         </section>
 
@@ -473,6 +471,10 @@ export function RecommendationsPage() {
           </div>
         </section>
       </main>
+
+      {betModal.isOpen && betModal.item ? (
+        <BetModal item={betModal.item} betIndex={betModal.betIndex} onClose={closeBetModal} />
+      ) : null}
 
       {modal.isOpen ? (
         <div id="favorites-modal" className="modal" aria-hidden="false">

@@ -3,41 +3,7 @@ import { Link, useLocation, useParams } from 'react-router-dom';
 import { auth, getMatchDetails } from '../lib/api.js';
 import { formatMoscowDateTime } from '../lib/format.js';
 import { buildMatchBackLink, resolveMatchId } from '../lib/match.js';
-
-function MatchForecastBlock({ item }) {
-  const bets = Array.isArray(item.bets) ? item.bets.slice(0, 3) : [];
-
-  return (
-    <div className="forecast-block">
-      <div className="forecast-summary">
-        <div className="forecast-summary-item">
-          <span className="forecast-label">Матч</span>
-          <strong>{item.match || '—'}</strong>
-        </div>
-        <div className="forecast-summary-item">
-          <span className="forecast-label">Лига</span>
-          <strong>{item.league || '—'}</strong>
-        </div>
-        <div className="forecast-summary-item">
-          <span className="forecast-label">Время начала</span>
-          <strong>{formatMoscowDateTime(item.starts_at || '') || '—'}</strong>
-        </div>
-      </div>
-
-      {bets.map((bet, index) => (
-        <div className="bet-card" key={`${item.id || item.match}-bet-${index}`}>
-          <div className="bet-card-head">
-            <span className="bet-index">Прогноз #{index + 1}</span>
-            <span className="bet-coeff">Кэф: {bet.coeff ?? '—'}</span>
-          </div>
-          <p><span className="forecast-label">Прогноз</span>{bet.forecast || '—'}</p>
-          <p><span className="forecast-label">Вероятность / уверенность</span>{bet.probability ?? '—'}% / {bet.confidence || '—'}</p>
-          <p><span className="forecast-label">Краткое описание</span>{bet.description || '—'}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
+import { BetModal, RISK_LEVELS } from '../components/BetModal.jsx';
 
 export function MatchPage() {
   const { id: routeParamId } = useParams();
@@ -49,6 +15,7 @@ export function MatchPage() {
   );
 
   const [state, setState] = useState({ loading: true, error: '', item: null, unauthorized: false });
+  const [betModal, setBetModal] = useState({ isOpen: false, betIndex: 0 });
 
   useEffect(() => {
     let cancelled = false;
@@ -98,13 +65,14 @@ export function MatchPage() {
     );
   }
 
+  const bets = Array.isArray(item?.bets) ? item.bets.slice(0, 3) : [];
+
   return (
     <main className="layout">
       <section>
         <div className="section-head">
           <div>
-            <h2>Детали матча</h2>
-            <p className="section-description">Расширенная карточка с прогнозами и временем старта матча.</p>
+            <h2>Матч</h2>
           </div>
           <Link className="button-link" to={buildMatchBackLink()}>← Назад</Link>
         </div>
@@ -114,25 +82,51 @@ export function MatchPage() {
 
         {!state.loading && !state.error && item ? (
           <div id="match-details">
-            <article className="recommendation-card recommendation-card-detailed">
+            <article className="recommendation-card">
               <div className="recommendation-head">
                 <div>
                   <h3>{item.match || 'Матч'}</h3>
                   <p className="recommendation-subtitle">{item.league || 'Лига не указана'}</p>
                 </div>
-                <span className="recommendation-badge">Матч</span>
               </div>
-              <MatchForecastBlock item={item} />
+              <p className="card-time">{formatMoscowDateTime(item.starts_at || '') || '—'}</p>
+              {bets.length > 0 ? (
+                <div className="risk-buttons">
+                  {RISK_LEVELS.map((risk, i) => (
+                    bets[i] ? (
+                      <button
+                        key={risk.key}
+                        className={`risk-btn risk-btn-${risk.key}`}
+                        type="button"
+                        onClick={() => setBetModal({ isOpen: true, betIndex: i })}
+                      >
+                        {risk.label}
+                        <span className="risk-btn-coeff">× {bets[i].coeff ?? '—'}</span>
+                      </button>
+                    ) : null
+                  ))}
+                </div>
+              ) : null}
+            </article>
+
+            {item.basis ? (
               <div className="basis-box">
                 <span className="forecast-label">Основание</span>
-                <p>{item.basis || 'Нет дополнительного описания'}</p>
+                <p>{item.basis}</p>
               </div>
-            </article>
+            ) : null}
           </div>
         ) : null}
-
-
       </section>
+
+      {betModal.isOpen && item ? (
+        <BetModal
+          item={item}
+          betIndex={betModal.betIndex}
+          onClose={() => setBetModal((prev) => ({ ...prev, isOpen: false }))}
+          hideMatchLink
+        />
+      ) : null}
     </main>
   );
 }
