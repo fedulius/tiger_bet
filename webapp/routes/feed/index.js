@@ -1,9 +1,17 @@
 const { buildFeedPayload } = require('../../services/feedService');
-const { getRecommendations } = require('../../services/recommendationService');
+const { FALLBACK_TOP_MATCHES, loadLiveRecommendations } = require('../../services/recommendationService');
 
 async function defaultFeedLoader() {
-  const result = await getRecommendations({ enableLive: false });
-  return Array.isArray(result.items) ? result.items : [];
+  const liveItems = await loadLiveRecommendations({
+    limit: 50,
+    upcomingOnly: true,
+  }).catch(() => []);
+
+  if (Array.isArray(liveItems) && liveItems.length > 0) {
+    return liveItems;
+  }
+
+  return FALLBACK_TOP_MATCHES;
 }
 
 async function feedRoutes(fastify) {

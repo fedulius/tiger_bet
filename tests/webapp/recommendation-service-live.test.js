@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { getRecommendations, invalidateRecommendationsCache } = require('../../webapp/services/recommendationService');
+const { getRecommendations, invalidateRecommendationsCache, loadLiveRecommendations } = require('../../webapp/services/recommendationService');
 
 function makeFakeRedis({ store = {}, getError = null, setError = null } = {}) {
   const deletedKeys = [];
@@ -86,6 +86,31 @@ test('getRecommendations falls back to fallback-top when live loader returns emp
 
   assert.equal(payload.source, 'fallback-top');
   assert.equal(payload.items.length, 3);
+});
+
+test('loadLiveRecommendations prefers upcoming matches for feed-oriented consumers', async () => {
+  const now = new Date('2026-06-23T15:00:00.000Z').getTime();
+  const items = await loadLiveRecommendations({
+    now,
+    limit: 10,
+    upcomingOnly: true,
+    favoriteSports: [{ sport_id: 1, sport_name: 'Футбол', leagues: [] }],
+    liveLoader: async () => ([
+      {
+        league: 'Mixed League',
+        matches: [
+          { team: 'Past One - Past Two', link: '/matches/soccer/past', time: '16:00', date: '23 июн' },
+          { team: 'Soon One - Soon Two', link: '/matches/soccer/soon', time: '19:30', date: '23 июн' },
+          { team: 'Tomorrow One - Tomorrow Two', link: '/matches/soccer/tomorrow', time: '11:00', date: '24 июн' },
+        ],
+      },
+    ]),
+    matchPageLoader: async () => '<div>Основной прогноз: П1</div>',
+  });
+
+  assert.equal(items.length, 2);
+  assert.deepEqual(items.map((item) => item.match), ['Soon One vs Soon Two', 'Tomorrow One vs Tomorrow Two']);
+  assert.ok(items.every((item) => new Date(item.starts_at).getTime() > now));
 });
 
 test('getRecommendations returns Redis-cached payload on cache hit without calling live loader', async () => {

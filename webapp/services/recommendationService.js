@@ -117,9 +117,27 @@ function toIsoDate(value) {
 }
 
 function pickTopByTime(items, limit = 3) {
-  return [...items]
-    .sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at))
-    .slice(0, limit);
+  const sorted = [...items]
+    .sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
+
+  if (limit == null) {
+    return sorted;
+  }
+
+  return sorted.slice(0, limit);
+}
+
+function selectUpcomingItems(items = [], { now = Date.now(), limit = null } = {}) {
+  const upcoming = pickTopByTime(
+    items.filter((item) => new Date(item?.starts_at).getTime() > now),
+    null,
+  );
+
+  if (limit == null) {
+    return upcoming;
+  }
+
+  return upcoming.slice(0, limit);
 }
 
 function normalizeLeagueName(value = '') {
@@ -362,12 +380,13 @@ async function enrichFromMatchPages(items, { matchPageLoader } = {}) {
   return enriched;
 }
 
-async function loadLiveRecommendations({ liveLoader, matchPageLoader, favoriteSports = [] } = {}) {
+async function loadLiveRecommendations({ liveLoader, matchPageLoader, favoriteSports = [], limit = 6, upcomingOnly = true, now = Date.now() } = {}) {
   const sports = Array.isArray(favoriteSports) && favoriteSports.length > 0
     ? favoriteSports
     : [{ sport_id: 1, sport_name: 'Футбол' }];
 
   const aggregated = [];
+  const baseNow = new Date(now);
   for (const sport of sports) {
     const categoryId = Number(sport?.sport_id);
     if (!Number.isFinite(categoryId)) {
@@ -381,7 +400,7 @@ async function loadLiveRecommendations({ liveLoader, matchPageLoader, favoriteSp
     }
 
     const filteredLeagues = filterItemsByFavoriteLeagues(
-      flattenLiveLeagues(leagues, new Date(), sport),
+      flattenLiveLeagues(leagues, baseNow, sport),
       [sport],
     );
 
@@ -392,7 +411,15 @@ async function loadLiveRecommendations({ liveLoader, matchPageLoader, favoriteSp
     return [];
   }
 
-  return await enrichFromMatchPages(pickTopByTime(aggregated, 6), { matchPageLoader });
+  const selected = upcomingOnly
+    ? selectUpcomingItems(aggregated, { now, limit })
+    : pickTopByTime(aggregated, limit);
+
+  const itemsForEnrichment = selected.length > 0
+    ? selected
+    : pickTopByTime(aggregated, limit);
+
+  return await enrichFromMatchPages(itemsForEnrichment, { matchPageLoader });
 }
 
 function filterFallbackByFavoriteSports(favoriteSports = []) {
@@ -533,4 +560,5 @@ module.exports = {
   FALLBACK_TOP_MATCHES,
   getRecommendations,
   invalidateRecommendationsCache,
+  loadLiveRecommendations,
 };
