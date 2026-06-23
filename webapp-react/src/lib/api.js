@@ -35,10 +35,6 @@ export function getRecommendations() {
   return getJson('/recommendations');
 }
 
-export function getHistory() {
-  return getJson('/history');
-}
-
 export function getFavorites() {
   return getJson('/favorites');
 }

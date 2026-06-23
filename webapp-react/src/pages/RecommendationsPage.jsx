@@ -1,32 +1,83 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getFavorites, getHistory, getRecommendations, setFavorites, auth } from '../lib/api.js';
+import { getFavorites, getRecommendations, setFavorites, auth } from '../lib/api.js';
 import { formatMoscowDateTime } from '../lib/format.js';
 import { formatRelativeUpdatedAt, getTopRecommendations } from '../lib/recommendations.js';
 
-const CATALOG = {
-  sports: ['football', 'tennis', 'basketball', 'hockey', 'esports'],
-  leagues: ['Premier League', 'ATP', 'NBA', 'KHL', 'ESL Pro League', 'La Liga'],
+const DEFAULT_CATALOG = {
+  sports: [],
+  leaguesBySport: {},
 };
 
 function uniqTrimmed(arr) {
   return [...new Set((Array.isArray(arr) ? arr : []).map((v) => String(v || '').trim()).filter(Boolean))];
 }
 
+function normalizeSportSetting(item) {
+  if (!item || typeof item !== 'object') {
+    return null;
+  }
+
+  const name = String(item.name || item.sport || '').trim();
+  if (!name) {
+    return null;
+  }
+
+  const leagues = uniqTrimmed(item.leagues);
+  const availableLeagues = uniqTrimmed(item.available_leagues);
+
+  return {
+    name,
+    leagues,
+    allLeagues: item.all_leagues !== false ? leagues.length === 0 : false,
+    availableLeagues,
+    summary: String(item.leagues_summary || '').trim() || (leagues.length === 0 ? 'Все лиги' : leagues.join(', ')),
+  };
+}
+
+function normalizeFavoritesPayload(payload) {
+  const sports = (Array.isArray(payload?.sports) ? payload.sports : [])
+    .map(normalizeSportSetting)
+    .filter(Boolean);
+
+  return {
+    sports,
+    availableSports: uniqTrimmed(payload?.available_sports),
+    leaguesBySport: payload?.leagues_catalog && typeof payload.leagues_catalog === 'object'
+      ? Object.fromEntries(Object.entries(payload.leagues_catalog).map(([key, value]) => [String(key || '').trim(), uniqTrimmed(value)]))
+      : {},
+  };
+}
+
 function ForecastBlock({ item }) {
   const bets = Array.isArray(item.bets) ? item.bets.slice(0, 3) : [];
 
   return (
-    <div>
-      <p>Матч: {item.match || '—'}</p>
-      <p>Лига: {item.league || '—'}</p>
-      <p>Время начала: {formatMoscowDateTime(item.starts_at || '')}</p>
+    <div className="forecast-block">
+      <div className="forecast-summary">
+        <div className="forecast-summary-item">
+          <span className="forecast-label">Матч</span>
+          <strong>{item.match || '—'}</strong>
+        </div>
+        <div className="forecast-summary-item">
+          <span className="forecast-label">Лига</span>
+          <strong>{item.league || '—'}</strong>
+        </div>
+        <div className="forecast-summary-item">
+          <span className="forecast-label">Время начала</span>
+          <strong>{formatMoscowDateTime(item.starts_at || '') || '—'}</strong>
+        </div>
+      </div>
+
       {bets.map((bet, index) => (
-        <div key={`${item.id || item.match}-bet-${index}`} style={{ marginTop: 10 }}>
-          <p>Прогноз: {bet.forecast || '—'}</p>
-          <p>Кэф: {bet.coeff ?? '—'}</p>
-          <p>Вероятность захода в % и/или уверенность: {bet.probability ?? '—'}% / {bet.confidence || '—'}</p>
-          <p>Краткое описание: {bet.description || '—'}</p>
+        <div className="bet-card" key={`${item.id || item.match}-bet-${index}`}>
+          <div className="bet-card-head">
+            <span className="bet-index">Прогноз #{index + 1}</span>
+            <span className="bet-coeff">Кэф: {bet.coeff ?? '—'}</span>
+          </div>
+          <p><span className="forecast-label">Прогноз</span>{bet.forecast || '—'}</p>
+          <p><span className="forecast-label">Вероятность / уверенность</span>{bet.probability ?? '—'}% / {bet.confidence || '—'}</p>
+          <p><span className="forecast-label">Краткое описание</span>{bet.description || '—'}</p>
         </div>
       ))}
     </div>
@@ -39,32 +90,35 @@ function RecommendationCard({ item }) {
   return (
     <article className="recommendation-card" data-id={item.id || ''}>
       <div className="recommendation-head">
-        <h3>{item.match || 'Матч'}</h3>
-        {item.is_new ? <span className="recommendation-badge">Новые</span> : null}
+        <div>
+          <h3>{item.match || 'Матч'}</h3>
+          <p className="recommendation-subtitle">{item.league || 'Лига не указана'}</p>
+        </div>
+        {item.is_new ? <span className="recommendation-badge">Новый прогноз</span> : null}
       </div>
       <ForecastBlock item={item} />
       <div className="recommendation-actions">
-        {item.source_url ? (
-          <a href={item.source_url} target="_blank" rel="noopener noreferrer">Открыть источник</a>
-        ) : (
-          <Link to={detailsHref}>Подробнее</Link>
-        )}
+        <Link className="button-link button-link-primary" to={detailsHref}>Подробнее</Link>
       </div>
     </article>
   );
 }
 
-function ChipsRow({ values, onRemove, type }) {
-  if (!values.length) {
-    return <span className="recommendations-empty">Пока пусто</span>;
-  }
-
-  return values.map((value) => (
-    <span className="chip" key={`${type}-${value}`}>
-      {value}
-      <button type="button" onClick={() => onRemove(type, value)}>×</button>
-    </span>
-  ));
+function SportSettingCard({ item, onConfigure, onRemove }) {
+  return (
+    <article className="recommendation-card" data-id={`favorite-sport-${item.name}`}>
+      <div className="recommendation-head">
+        <div>
+          <h3>{item.name}</h3>
+          <p className="recommendation-subtitle">{item.summary || 'Все лиги'}</p>
+        </div>
+      </div>
+      <div className="recommendation-actions">
+        <button className="secondary-button" type="button" onClick={() => onConfigure(item.name)}>Настроить лиги</button>
+        <button className="secondary-button" type="button" onClick={() => onRemove(item.name)}>Удалить</button>
+      </div>
+    </article>
+  );
 }
 
 export function RecommendationsPage() {
@@ -74,30 +128,46 @@ export function RecommendationsPage() {
   const [refreshStatus, setRefreshStatus] = useState('');
   const [authGate, setAuthGate] = useState('pending');
 
-  const [favorites, setFavoritesState] = useState({ sports: [], leagues: [] });
-  const [history, setHistory] = useState({ items: [], empty_state: null, error: '' });
+  const [favorites, setFavoritesState] = useState({ sports: [] });
+  const [catalog, setCatalog] = useState(DEFAULT_CATALOG);
 
   const [modal, setModal] = useState({
     isOpen: false,
-    openedFor: 'sports',
+    mode: 'sports',
     query: '',
-    pending: {
-      sports: [],
-      leagues: [],
-    },
+    pendingSports: [],
+    selectedSportName: '',
+    pendingLeagues: [],
   });
 
-  const currentOptions = useMemo(() => {
-    const kind = modal.openedFor;
-    const options = CATALOG[kind] || [];
+  const availableSportsToAdd = useMemo(() => {
+    const selected = new Set(favorites.sports.map((item) => item.name));
     const query = String(modal.query || '').toLowerCase().trim();
 
-    if (!query) {
-      return options;
-    }
+    return (catalog.sports || []).filter((name) => {
+      if (selected.has(name)) {
+        return false;
+      }
 
-    return options.filter((name) => name.toLowerCase().includes(query));
-  }, [modal.openedFor, modal.query]);
+      if (!query) {
+        return true;
+      }
+
+      return name.toLowerCase().includes(query);
+    });
+  }, [catalog.sports, favorites.sports, modal.query]);
+
+  const availableLeaguesForSelectedSport = useMemo(() => {
+    const query = String(modal.query || '').toLowerCase().trim();
+    const options = catalog.leaguesBySport?.[modal.selectedSportName] || [];
+
+    return options.filter((name) => (!query ? true : name.toLowerCase().includes(query)));
+  }, [catalog.leaguesBySport, modal.query, modal.selectedSportName]);
+
+  const stats = useMemo(() => ({
+    recommendations: recommendations.length,
+    sports: favorites.sports.length,
+  }), [favorites.sports.length, recommendations.length]);
 
   async function refreshRecommendations() {
     setRefreshStatus('Обновляем...');
@@ -147,31 +217,29 @@ export function RecommendationsPage() {
   async function loadFavorites() {
     try {
       const payload = await getFavorites();
-      setFavoritesState({
-        sports: uniqTrimmed(payload?.sports),
-        leagues: uniqTrimmed(payload?.leagues),
+      const normalized = normalizeFavoritesPayload(payload);
+      setFavoritesState({ sports: normalized.sports });
+      setCatalog({
+        sports: normalized.availableSports,
+        leaguesBySport: normalized.leaguesBySport,
       });
     } catch {
-      setFavoritesState({ sports: [], leagues: [] });
+      setFavoritesState({ sports: [] });
+      setCatalog(DEFAULT_CATALOG);
     }
   }
 
   async function persistFavorites(nextFavorites) {
     setFavoritesState(nextFavorites);
-    await setFavorites(nextFavorites);
-  }
+    const payload = await setFavorites({
+      sports: nextFavorites.sports.map((item) => ({
+        name: item.name,
+        leagues: item.allLeagues ? [] : uniqTrimmed(item.leagues),
+      })),
+    });
 
-  async function loadHistory() {
-    try {
-      const payload = await getHistory();
-      setHistory({
-        items: Array.isArray(payload?.items) ? payload.items : [],
-        empty_state: payload?.empty_state || null,
-        error: '',
-      });
-    } catch {
-      setHistory({ items: [], empty_state: null, error: 'Не удалось загрузить историю' });
-    }
+    const normalized = normalizeFavoritesPayload(payload);
+    setFavoritesState({ sports: normalized.sports });
   }
 
   useEffect(() => {
@@ -185,7 +253,6 @@ export function RecommendationsPage() {
         await Promise.allSettled([
           refreshRecommendations(),
           loadFavorites(),
-          loadHistory(),
         ]);
       } else {
         setIsRecommendationsLoading(false);
@@ -207,17 +274,27 @@ export function RecommendationsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function openFavoritesModal(kind = 'sports') {
-    const openedFor = kind === 'leagues' ? 'leagues' : 'sports';
+  function openSportsModal() {
+    setModal({
+      isOpen: true,
+      mode: 'sports',
+      query: '',
+      pendingSports: [],
+      selectedSportName: '',
+      pendingLeagues: [],
+    });
+  }
+
+  function openLeagueModal(sportName) {
+    const current = favorites.sports.find((item) => item.name === sportName);
 
     setModal({
       isOpen: true,
-      openedFor,
+      mode: 'leagues',
       query: '',
-      pending: {
-        sports: [...favorites.sports],
-        leagues: [...favorites.leagues],
-      },
+      pendingSports: [],
+      selectedSportName: sportName,
+      pendingLeagues: current?.allLeagues ? [] : [...(current?.leagues || [])],
     });
   }
 
@@ -225,39 +302,79 @@ export function RecommendationsPage() {
     setModal((prev) => ({ ...prev, isOpen: false }));
   }
 
-  function toggleOption(value, checked) {
-    const kind = modal.openedFor;
-    const current = new Set(modal.pending[kind] || []);
-    if (checked) current.add(value);
-    else current.delete(value);
+  function togglePendingSport(value, checked) {
+    const next = new Set(modal.pendingSports || []);
+    if (checked) next.add(value);
+    else next.delete(value);
 
     setModal((prev) => ({
       ...prev,
-      pending: {
-        ...prev.pending,
-        [kind]: [...current],
-      },
+      pendingSports: [...next],
+    }));
+  }
+
+  function togglePendingLeague(value, checked) {
+    const next = new Set(modal.pendingLeagues || []);
+    if (checked) next.add(value);
+    else next.delete(value);
+
+    setModal((prev) => ({
+      ...prev,
+      pendingLeagues: [...next],
     }));
   }
 
   async function applyFavorites() {
-    const next = {
-      sports: uniqTrimmed(modal.pending.sports),
-      leagues: uniqTrimmed(modal.pending.leagues),
-    };
+    if (modal.mode === 'sports') {
+      const selectedSports = uniqTrimmed(modal.pendingSports);
+      const existingByName = new Map(favorites.sports.map((item) => [item.name, item]));
+      const nextSports = [
+        ...favorites.sports,
+        ...selectedSports
+          .filter((name) => !existingByName.has(name))
+          .map((name) => ({
+            name,
+            leagues: [],
+            allLeagues: true,
+            availableLeagues: catalog.leaguesBySport?.[name] || [],
+            summary: 'Все лиги',
+          })),
+      ];
+
+      closeFavoritesModal();
+      try {
+        await persistFavorites({ sports: nextSports });
+      } catch {
+        await loadFavorites();
+      }
+      return;
+    }
+
+    const nextSports = favorites.sports.map((item) => {
+      if (item.name !== modal.selectedSportName) {
+        return item;
+      }
+
+      const leagues = uniqTrimmed(modal.pendingLeagues);
+      return {
+        ...item,
+        leagues,
+        allLeagues: leagues.length === 0,
+        summary: leagues.length === 0 ? 'Все лиги' : leagues.join(', '),
+      };
+    });
 
     closeFavoritesModal();
     try {
-      await persistFavorites(next);
+      await persistFavorites({ sports: nextSports });
     } catch {
       await loadFavorites();
     }
   }
 
-  async function removeFavorite(type, value) {
+  async function removeFavoriteSport(sportName) {
     const next = {
-      sports: type === 'sports' ? favorites.sports.filter((item) => item !== value) : [...favorites.sports],
-      leagues: type === 'leagues' ? favorites.leagues.filter((item) => item !== value) : [...favorites.leagues],
+      sports: favorites.sports.filter((item) => item.name !== sportName),
     };
 
     try {
@@ -269,8 +386,8 @@ export function RecommendationsPage() {
 
   if (authGate === 'pending') {
     return (
-      <main className="layout" style={{ minHeight: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <section className="card" style={{ maxWidth: 520, textAlign: 'center' }}>
+      <main className="layout centered-layout">
+        <section className="card auth-card">
           <h2>Проверяем доступ…</h2>
           <p>Подождите пару секунд.</p>
         </section>
@@ -280,11 +397,11 @@ export function RecommendationsPage() {
 
   if (authGate === 'unauthorized') {
     return (
-      <main className="layout" style={{ minHeight: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <section className="card" style={{ maxWidth: 520, textAlign: 'center' }}>
+      <main className="layout centered-layout">
+        <section className="card auth-card">
           <h2>Доступ ограничен</h2>
           <p>Вы не авторизованы в WebApp. Откройте приложение через кнопку в Telegram-боте.</p>
-          <button type="button" onClick={refreshRecommendationsWithAuth}>Повторить авторизацию</button>
+          <button className="primary-button" type="button" onClick={refreshRecommendationsWithAuth}>Повторить авторизацию</button>
         </section>
       </main>
     );
@@ -294,27 +411,40 @@ export function RecommendationsPage() {
     <>
       <header className="header" id="top-header">
         <div className="brand-row">
-          <h1>Tiger Bet</h1>
-          <button id="refresh-btn" type="button" onClick={refreshRecommendationsWithAuth}>Обновить сейчас</button>
+          <div>
+            <p className="eyebrow">Telegram WebApp</p>
+            <h1>Tiger Bet</h1>
+            <p className="header-subtitle">Живые рекомендации и избранные фильтры в одном экране.</p>
+          </div>
+          <button className="primary-button" id="refresh-btn" type="button" onClick={refreshRecommendationsWithAuth}>Обновить сейчас</button>
         </div>
 
         <nav className="anchors" aria-label="Навигация по блокам">
           <a href="#recommendations">Рекомендации</a>
           <a href="#favorites-sports">Спорт</a>
-          <a href="#favorites-leagues">Лиги</a>
         </nav>
+
+        <div className="stats-grid" aria-label="Краткая сводка">
+          <div className="stat-card"><span>Карточек</span><strong>{stats.recommendations}</strong></div>
+          <div className="stat-card"><span>Спорт</span><strong>{stats.sports}</strong></div>
+        </div>
 
         <div className="refresh-status" aria-live="polite">{refreshStatus}</div>
       </header>
 
       <main className="layout">
         <section id="recommendations">
-          <h2>Рекомендованные матчи</h2>
+          <div className="section-head section-head-stack">
+            <div>
+              <h2>Рекомендованные матчи</h2>
+              <p className="section-description">Топ-матчи с тремя ставками, коэффициентами и кратким обоснованием.</p>
+            </div>
+          </div>
           <div className="block-error" aria-live="polite">
             {recommendationsError ? (
               <>
                 <span>{recommendationsError} </span>
-                <button type="button" onClick={refreshRecommendationsWithAuth}>Повторить</button>
+                <button className="secondary-button" type="button" onClick={refreshRecommendationsWithAuth}>Повторить</button>
               </>
             ) : null}
           </div>
@@ -328,39 +458,17 @@ export function RecommendationsPage() {
 
         <section id="favorites-sports">
           <div className="section-head">
-            <h2>Избранные виды спорта</h2>
-            <button id="add-sports-btn" type="button" onClick={() => openFavoritesModal('sports')}>+ Добавить</button>
+            <div>
+              <h2>Избранные виды спорта</h2>
+              <p className="section-description">Для каждого выбранного спорта можно отдельно оставить все лиги или сузить выбор до нужных турниров.</p>
+            </div>
+            <button className="secondary-button" id="add-sports-btn" type="button" onClick={openSportsModal}>+ Добавить</button>
           </div>
           <div id="sports-chips" className="chips-row">
-            <ChipsRow values={favorites.sports} onRemove={removeFavorite} type="sports" />
-          </div>
-        </section>
-
-        <section id="favorites-leagues">
-          <div className="section-head">
-            <h2>Избранные лиги</h2>
-            <button id="add-leagues-btn" type="button" onClick={() => openFavoritesModal('leagues')}>+ Добавить</button>
-          </div>
-          <div id="leagues-chips" className="chips-row">
-            <ChipsRow values={favorites.leagues} onRemove={removeFavorite} type="leagues" />
-          </div>
-        </section>
-
-        <section id="history">
-          <h2>Последние прогнозы</h2>
-          <div id="history-list">
-            {history.error ? history.error : null}
-            {!history.error && (!Array.isArray(history.items) || history.items.length === 0) ? (
-              <>
-                {history.empty_state?.message || 'История пока пустая'}{' '}
-                <a href={history.empty_state?.cta?.target || '#recommendations'}>{history.empty_state?.cta?.label || 'Открыть рекомендации'}</a>
-              </>
-            ) : null}
-            {!history.error && Array.isArray(history.items) && history.items.map((item) => (
-              <article className="recommendation-card" key={`history-${item.id || item.match}`}>
-                <h3>{item.match || 'Матч'}</h3>
-                <ForecastBlock item={item} />
-              </article>
+            {favorites.sports.length === 0 ? (
+              <span className="recommendations-empty">Пока пусто</span>
+            ) : favorites.sports.map((item) => (
+              <SportSettingCard item={item} key={item.name} onConfigure={openLeagueModal} onRemove={removeFavoriteSport} />
             ))}
           </div>
         </section>
@@ -370,40 +478,76 @@ export function RecommendationsPage() {
         <div id="favorites-modal" className="modal" aria-hidden="false">
           <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="favorites-modal-title">
             <div className="modal-head">
-              <h3 id="favorites-modal-title">Управление избранным</h3>
+              <h3 id="favorites-modal-title">
+                {modal.mode === 'sports' ? 'Добавить виды спорта' : `Лиги: ${modal.selectedSportName}`}
+              </h3>
               <button id="favorites-close-btn" type="button" aria-label="Закрыть" onClick={closeFavoritesModal}>×</button>
             </div>
 
             <input
               id="favorites-search"
               type="search"
-              placeholder="Поиск по спорту и лигам"
+              placeholder={modal.mode === 'sports' ? 'Поиск по видам спорта' : 'Поиск по лигам'}
               value={modal.query}
               onChange={(event) => setModal((prev) => ({ ...prev, query: event.target.value || '' }))}
             />
 
-            <div id="favorites-options" className="favorites-options">
-              {currentOptions.length === 0 ? (
-                <div className="recommendations-empty">Ничего не найдено</div>
-              ) : currentOptions.map((value) => {
-                const kind = modal.openedFor;
-                const isChecked = (modal.pending[kind] || []).includes(value);
+            {modal.mode === 'sports' ? (
+              <div id="favorites-options" className="favorites-options">
+                {availableSportsToAdd.length === 0 ? (
+                  <div className="recommendations-empty">Ничего не найдено</div>
+                ) : availableSportsToAdd.map((value) => {
+                  const isChecked = (modal.pendingSports || []).includes(value);
 
-                return (
-                  <label className="favorite-option" key={`${kind}-${value}`}>
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      onChange={(event) => toggleOption(value, event.target.checked)}
-                    />
-                    {value}
-                  </label>
-                );
-              })}
-            </div>
+                  return (
+                    <label className="favorite-option" key={`sport-${value}`}>
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(event) => togglePendingSport(value, event.target.checked)}
+                      />
+                      {value}
+                    </label>
+                  );
+                })}
+              </div>
+            ) : (
+              <>
+                <label className="favorite-option" key="all-leagues-option">
+                  <input
+                    type="checkbox"
+                    checked={modal.pendingLeagues.length === 0}
+                    onChange={(event) => {
+                      if (event.target.checked) {
+                        setModal((prev) => ({ ...prev, pendingLeagues: [] }));
+                      }
+                    }}
+                  />
+                  Все лиги
+                </label>
+                <div id="favorites-options" className="favorites-options">
+                  {availableLeaguesForSelectedSport.length === 0 ? (
+                    <div className="recommendations-empty">Для этого спорта пока нет каталога лиг</div>
+                  ) : availableLeaguesForSelectedSport.map((value) => {
+                    const isChecked = (modal.pendingLeagues || []).includes(value);
+
+                    return (
+                      <label className="favorite-option" key={`league-${value}`}>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(event) => togglePendingLeague(value, event.target.checked)}
+                        />
+                        {value}
+                      </label>
+                    );
+                  })}
+                </div>
+              </>
+            )}
 
             <div className="modal-actions">
-              <button id="favorites-apply-btn" type="button" onClick={applyFavorites}>Применить</button>
+              <button className="primary-button" id="favorites-apply-btn" type="button" onClick={applyFavorites}>Применить</button>
             </div>
           </div>
         </div>

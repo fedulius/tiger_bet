@@ -1,11 +1,141 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
 const { buildApp } = require('../../server/app');
-const { buildTestApp, makeAuthHeaders } = require('./testHelpers');
+const { buildTestApp, createFakePg, makeAuthHeaders } = require('./testHelpers');
+
+function withTempFavoritesFile(contents = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tiger-bet-recommendations-'));
+  const filePath = path.join(dir, 'favorites.json');
+  process.env.WEBAPP_FAVORITES_FILE = filePath;
+  fs.writeFileSync(filePath, JSON.stringify(contents, null, 2));
+  return () => {
+    delete process.env.WEBAPP_FAVORITES_FILE;
+    fs.rmSync(dir, { force: true, recursive: true });
+  };
+}
+
+test('GET /recommendations returns favorite-based items when user has favorite sports', async () => {
+  const cleanup = withTempFavoritesFile();
+  const fakePg = createFakePg({
+    handler(query) {
+      if (/FROM public\.favorite_sport fs/i.test(query)) {
+        return [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' }];
+      }
+      return [];
+    },
+  });
+
+  const app = buildTestApp(buildApp, { pg: fakePg });
+  await app.ready();
+
+  try {
+    const response = await app.inject({
+      headers: makeAuthHeaders(app, { userId: 77, telegram_user_id: 777, profile: 'telegram:777' }),
+      method: 'GET',
+      url: '/recommendations',
+    });
+
+    assert.equal(response.statusCode, 200);
+
+    const payload = response.json();
+    assert.equal(payload.source, 'favorites');
+    assert.equal(Array.isArray(payload.items), true);
+    assert.ok(payload.items.length >= 1);
+    assert.ok(payload.items.every((item) => item.sport_name === 'Футбол'));
+  } finally {
+    await app.close();
+    cleanup();
+  }
+});
+
+test('GET /recommendations respects per-sport leagues for fallback items', async () => {
+  const cleanup = withTempFavoritesFile({
+    'telegram:777': {
+      sport_settings: [
+        { name: 'Футбол', leagues: ['La Liga'] },
+      ],
+    },
+  });
+
+  const fakePg = createFakePg({
+    handler(query) {
+      if (/FROM public\.favorite_sport fs/i.test(query)) {
+        return [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' }];
+      }
+      return [];
+    },
+  });
+
+  const app = buildTestApp(buildApp, { pg: fakePg });
+  await app.ready();
+
+  try {
+    const response = await app.inject({
+      headers: makeAuthHeaders(app, { userId: 77, telegram_user_id: 777, profile: 'telegram:777' }),
+      method: 'GET',
+      url: '/recommendations',
+    });
+
+    assert.equal(response.statusCode, 200);
+    const payload = response.json();
+    assert.equal(payload.source, 'favorites');
+    assert.equal(payload.items.length, 1);
+    assert.equal(payload.items[0].league, 'La Liga');
+    assert.equal(payload.items[0].sport_name, 'Футбол');
+  } finally {
+    await app.close();
+    cleanup();
+  }
+});
+
+test('GET /recommendations does not fall back to football when user favorites have no matching items', async () => {
+  const cleanup = withTempFavoritesFile({
+    'telegram:778': {
+      sport_settings: [
+        { name: 'Теннис', leagues: ['ATP'] },
+      ],
+    },
+  });
+
+  const fakePg = createFakePg({
+    handler(query) {
+      if (/FROM public\.favorite_sport fs/i.test(query)) {
+        return [{ sport_id: 2, sport_name: 'Теннис', sport_url: 'tennis' }];
+      }
+      return [];
+    },
+  });
+
+  const app = buildTestApp(buildApp, { pg: fakePg });
+  await app.ready();
+
+  try {
+    const response = await app.inject({
+      headers: makeAuthHeaders(app, { userId: 78, telegram_user_id: 778, profile: 'telegram:778' }),
+      method: 'GET',
+      url: '/recommendations',
+    });
+
+    assert.equal(response.statusCode, 200);
+
+    const payload = response.json();
+    assert.equal(payload.source, 'favorites');
+    assert.equal(Array.isArray(payload.items), true);
+    assert.equal(payload.items.length, 0);
+  } finally {
+    await app.close();
+    cleanup();
+  }
+});
 
 test('GET /recommendations returns 3 items sorted by starts_at', async () => {
-  const app = buildTestApp(buildApp);
+  const cleanup = withTempFavoritesFile();
+  const fakePg = createFakePg({ rows: [] });
+  const app = buildTestApp(buildApp, { pg: fakePg });
   await app.ready();
 
   try {
@@ -44,6 +174,7 @@ test('GET /recommendations returns 3 items sorted by starts_at', async () => {
     assert.deepEqual(starts, sortedStarts);
   } finally {
     await app.close();
+    cleanup();
   }
 });
 

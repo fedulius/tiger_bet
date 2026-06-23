@@ -8,6 +8,8 @@ const { extractEditorialForecast } = require('../../lib/forecastAnalyzer');
 const FALLBACK_TOP_MATCHES = [
   {
     id: 'fallback-3',
+    sport_id: 10,
+    sport_name: 'КС:ГО',
     match: 'Fnatic vs G2',
     league: 'ESL Pro League',
     starts_at: '2026-04-22T20:00:00.000Z',
@@ -17,6 +19,8 @@ const FALLBACK_TOP_MATCHES = [
   },
   {
     id: 'fallback-1',
+    sport_id: 1,
+    sport_name: 'Футбол',
     match: 'Arsenal vs Chelsea',
     league: 'Premier League',
     starts_at: '2026-04-22T17:30:00.000Z',
@@ -26,15 +30,19 @@ const FALLBACK_TOP_MATCHES = [
   },
   {
     id: 'fallback-4',
+    sport_id: 11,
+    sport_name: 'Дота2',
     match: 'NAVI vs Spirit',
     league: 'BLAST Premier',
     starts_at: '2026-04-22T22:15:00.000Z',
     main_thought: 'NAVI через плотный матч',
     confidence: 64,
-    source_url: 'https://stavka.tv/matches/csgo',
+    source_url: 'https://stavka.tv/matches/dota2',
   },
   {
     id: 'fallback-2',
+    sport_id: 1,
+    sport_name: 'Футбол',
     match: 'Real Madrid vs Sevilla',
     league: 'La Liga',
     starts_at: '2026-04-22T19:00:00.000Z',
@@ -76,6 +84,42 @@ function pickTopByTime(items, limit = 3) {
     .slice(0, limit);
 }
 
+function normalizeLeagueName(value = '') {
+  return String(value || '').trim().toLowerCase();
+}
+
+function buildFavoriteLeagueMap(favoriteSports = []) {
+  const entries = new Map();
+
+  for (const sport of Array.isArray(favoriteSports) ? favoriteSports : []) {
+    const sportId = Number(sport?.sport_id);
+    if (!Number.isFinite(sportId)) {
+      continue;
+    }
+
+    const leagues = Array.isArray(sport?.leagues)
+      ? sport.leagues.map(normalizeLeagueName).filter(Boolean)
+      : [];
+
+    entries.set(sportId, new Set(leagues));
+  }
+
+  return entries;
+}
+
+function filterItemsByFavoriteLeagues(items = [], favoriteSports = []) {
+  const leagueMap = buildFavoriteLeagueMap(favoriteSports);
+
+  return items.filter((item) => {
+    const selectedLeagues = leagueMap.get(Number(item?.sport_id));
+    if (!selectedLeagues || selectedLeagues.size === 0) {
+      return true;
+    }
+
+    return selectedLeagues.has(normalizeLeagueName(item?.league));
+  });
+}
+
 function markNewItems(items, nowIso) {
   const nowTs = new Date(nowIso).getTime();
 
@@ -85,7 +129,6 @@ function markNewItems(items, nowIso) {
 
     return {
       ...item,
-      // В MVP считаем «новыми» ближайшие события в окне 120 минут.
       is_new: diffMinutes <= 120,
     };
   });
@@ -200,7 +243,7 @@ function withBetLineup(item = {}) {
   };
 }
 
-function flattenLiveLeagues(leagues = [], baseNow = new Date()) {
+function flattenLiveLeagues(leagues = [], baseNow = new Date(), sportMeta = {}) {
   const flat = [];
 
   for (const leagueRow of leagues) {
@@ -214,6 +257,8 @@ function flattenLiveLeagues(leagues = [], baseNow = new Date()) {
 
       flat.push({
         id: recommendationIdFromLink(match.link, flat.length),
+        sport_id: sportMeta.sport_id,
+        sport_name: sportMeta.sport_name,
         match: normalizeMatchTitle(match.team),
         league: leagueName,
         starts_at: parseStartsAt({
@@ -279,20 +324,52 @@ async function enrichFromMatchPages(items, { matchPageLoader } = {}) {
   return enriched;
 }
 
-async function loadLiveRecommendations({ liveLoader, matchPageLoader, categoryId } = {}) {
-  const loader = liveLoader || (async () => getLeaguesByCategory(categoryId || 1));
-  const leagues = await loader();
+async function loadLiveRecommendations({ liveLoader, matchPageLoader, favoriteSports = [] } = {}) {
+  const sports = Array.isArray(favoriteSports) && favoriteSports.length > 0
+    ? favoriteSports
+    : [{ sport_id: 1, sport_name: 'Футбол' }];
 
-  if (!Array.isArray(leagues) || leagues.length === 0) {
+  const aggregated = [];
+  for (const sport of sports) {
+    const categoryId = Number(sport?.sport_id);
+    if (!Number.isFinite(categoryId)) {
+      continue;
+    }
+
+    const loader = liveLoader || (async () => getLeaguesByCategory(categoryId));
+    const leagues = await loader(categoryId);
+    if (!Array.isArray(leagues) || leagues.length === 0) {
+      continue;
+    }
+
+    const filteredLeagues = filterItemsByFavoriteLeagues(
+      flattenLiveLeagues(leagues, new Date(), sport),
+      [sport],
+    );
+
+    aggregated.push(...filteredLeagues);
+  }
+
+  if (aggregated.length === 0) {
     return [];
   }
 
-  const rawItems = flattenLiveLeagues(leagues, new Date());
-  if (rawItems.length === 0) {
+  return await enrichFromMatchPages(pickTopByTime(aggregated, 6), { matchPageLoader });
+}
+
+function filterFallbackByFavoriteSports(favoriteSports = []) {
+  const ids = new Set((Array.isArray(favoriteSports) ? favoriteSports : [])
+    .map((item) => Number(item?.sport_id))
+    .filter(Number.isFinite));
+
+  if (ids.size === 0) {
     return [];
   }
 
-  return await enrichFromMatchPages(rawItems.slice(0, 3), { matchPageLoader });
+  return filterItemsByFavoriteLeagues(
+    FALLBACK_TOP_MATCHES.filter((item) => ids.has(Number(item.sport_id))),
+    favoriteSports,
+  );
 }
 
 function buildPayload({ source, items, updatedAt }) {
@@ -308,6 +385,8 @@ async function getRecommendations(options = {}) {
   const updatedAt = new Date().toISOString();
   const source = options.source || null;
   const sourceItems = Array.isArray(options.items) ? options.items : [];
+  const favoriteSports = Array.isArray(options.favoriteSports) ? options.favoriteSports : [];
+  const hasFavoriteSports = favoriteSports.length > 0;
 
   if (source) {
     if (sourceItems.length > 0) {
@@ -317,11 +396,12 @@ async function getRecommendations(options = {}) {
     return buildPayload({ source: 'fallback-top', items: FALLBACK_TOP_MATCHES, updatedAt });
   }
 
+  const favoriteFallback = filterFallbackByFavoriteSports(favoriteSports);
   const enableLive = options.enableLive ?? process.env.NODE_ENV !== 'test';
   const disableCache = options.disableCache === true;
   const nowTs = Date.now();
 
-  if (enableLive && !disableCache && liveCache.items.length > 0 && (nowTs - liveCache.updatedAt) < LIVE_CACHE_TTL_MS) {
+  if (enableLive && !hasFavoriteSports && !disableCache && liveCache.items.length > 0 && (nowTs - liveCache.updatedAt) < LIVE_CACHE_TTL_MS) {
     return buildPayload({ source: 'stavka-live', items: liveCache.items, updatedAt });
   }
 
@@ -330,22 +410,33 @@ async function getRecommendations(options = {}) {
       const liveItems = await loadLiveRecommendations({
         liveLoader: options.liveLoader,
         matchPageLoader: options.matchPageLoader,
-        categoryId: options.categoryId,
+        favoriteSports,
       });
 
       if (liveItems.length > 0) {
-        liveCache.items = liveItems;
-        liveCache.updatedAt = nowTs;
-        return buildPayload({ source: 'stavka-live', items: liveItems, updatedAt });
+        if (!hasFavoriteSports) {
+          liveCache.items = liveItems;
+          liveCache.updatedAt = nowTs;
+        }
+        return buildPayload({ source: hasFavoriteSports ? 'favorites' : 'stavka-live', items: liveItems, updatedAt });
       }
     } catch {
       // Молча переключаемся на fallback, чтобы UI всегда оставался рабочим.
     }
   }
 
+  if (favoriteFallback.length > 0) {
+    return buildPayload({ source: 'favorites', items: favoriteFallback, updatedAt });
+  }
+
+  if (hasFavoriteSports) {
+    return buildPayload({ source: 'favorites', items: [], updatedAt });
+  }
+
   return buildPayload({ source: 'fallback-top', items: FALLBACK_TOP_MATCHES, updatedAt });
 }
 
 module.exports = {
+  FALLBACK_TOP_MATCHES,
   getRecommendations,
 };

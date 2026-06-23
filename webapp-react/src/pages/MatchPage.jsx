@@ -4,6 +4,41 @@ import { auth, getMatchDetails } from '../lib/api.js';
 import { formatMoscowDateTime } from '../lib/format.js';
 import { buildMatchBackLink, resolveMatchId } from '../lib/match.js';
 
+function MatchForecastBlock({ item }) {
+  const bets = Array.isArray(item.bets) ? item.bets.slice(0, 3) : [];
+
+  return (
+    <div className="forecast-block">
+      <div className="forecast-summary">
+        <div className="forecast-summary-item">
+          <span className="forecast-label">Матч</span>
+          <strong>{item.match || '—'}</strong>
+        </div>
+        <div className="forecast-summary-item">
+          <span className="forecast-label">Лига</span>
+          <strong>{item.league || '—'}</strong>
+        </div>
+        <div className="forecast-summary-item">
+          <span className="forecast-label">Время начала</span>
+          <strong>{formatMoscowDateTime(item.starts_at || '') || '—'}</strong>
+        </div>
+      </div>
+
+      {bets.map((bet, index) => (
+        <div className="bet-card" key={`${item.id || item.match}-bet-${index}`}>
+          <div className="bet-card-head">
+            <span className="bet-index">Прогноз #{index + 1}</span>
+            <span className="bet-coeff">Кэф: {bet.coeff ?? '—'}</span>
+          </div>
+          <p><span className="forecast-label">Прогноз</span>{bet.forecast || '—'}</p>
+          <p><span className="forecast-label">Вероятность / уверенность</span>{bet.probability ?? '—'}% / {bet.confidence || '—'}</p>
+          <p><span className="forecast-label">Краткое описание</span>{bet.description || '—'}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function MatchPage() {
   const { id: routeParamId } = useParams();
   const location = useLocation();
@@ -54,8 +89,8 @@ export function MatchPage() {
 
   if (state.unauthorized) {
     return (
-      <main className="layout" style={{ minHeight: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <section className="card" style={{ maxWidth: 520, textAlign: 'center' }}>
+      <main className="layout centered-layout">
+        <section className="card auth-card">
           <h2>Доступ ограничен</h2>
           <p>Откройте приложение через кнопку в Telegram-боте и повторите попытку.</p>
         </section>
@@ -67,38 +102,36 @@ export function MatchPage() {
     <main className="layout">
       <section>
         <div className="section-head">
-          <h2>Детали матча</h2>
-          <Link to={buildMatchBackLink()}>← Назад</Link>
+          <div>
+            <h2>Детали матча</h2>
+            <p className="section-description">Расширенная карточка с прогнозами и временем старта матча.</p>
+          </div>
+          <Link className="button-link" to={buildMatchBackLink()}>← Назад</Link>
         </div>
 
-        {state.loading ? <div id="match-details">Загрузка...</div> : null}
-        {!state.loading && state.error ? <div id="match-details">{state.error}</div> : null}
+        {state.loading ? <div id="match-details" className="recommendations-empty">Загрузка...</div> : null}
+        {!state.loading && state.error ? <div id="match-details" className="recommendations-empty">{state.error}</div> : null}
 
         {!state.loading && !state.error && item ? (
           <div id="match-details">
-            <article className="recommendation-card">
-              <h3>{item.match || 'Матч'}</h3>
-              <p>Матч: {item.match || '—'}</p>
-              <p>Лига: {item.league || '—'}</p>
-              <p>Время начала: {formatMoscowDateTime(item.starts_at || '')}</p>
-              {(Array.isArray(item.bets) ? item.bets.slice(0, 3) : []).map((bet, index) => (
-                <div key={`${item.id || item.match}-bet-${index}`} style={{ marginTop: 10 }}>
-                  <p>Прогноз: {bet.forecast || '—'}</p>
-                  <p>Кэф: {bet.coeff ?? '—'}</p>
-                  <p>Вероятность захода в % и/или уверенность: {bet.probability ?? '—'}% / {bet.confidence || '—'}</p>
-                  <p>Краткое описание: {bet.description || '—'}</p>
+            <article className="recommendation-card recommendation-card-detailed">
+              <div className="recommendation-head">
+                <div>
+                  <h3>{item.match || 'Матч'}</h3>
+                  <p className="recommendation-subtitle">{item.league || 'Лига не указана'}</p>
                 </div>
-              ))}
-              <p><strong>Основание:</strong> {item.basis || ''}</p>
+                <span className="recommendation-badge">Матч</span>
+              </div>
+              <MatchForecastBlock item={item} />
+              <div className="basis-box">
+                <span className="forecast-label">Основание</span>
+                <p>{item.basis || 'Нет дополнительного описания'}</p>
+              </div>
             </article>
           </div>
         ) : null}
 
-        <div id="match-external-link" className="match-external-link">
-          {!state.loading && !state.error && item?.source_url ? (
-            <a href={item.source_url} target="_blank" rel="noopener noreferrer">Открыть источник</a>
-          ) : null}
-        </div>
+
       </section>
     </main>
   );

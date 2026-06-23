@@ -3,16 +3,16 @@ const path = require('path');
 
 const DEFAULT_PROFILE = 'guest';
 
-function normalizeStringArray(value) {
+function normalizeStringArray(value, errorMessage = 'value must be an array') {
   if (!Array.isArray(value)) {
-    throw new Error('sports and leagues must be arrays');
+    throw new Error(errorMessage);
   }
 
-  const normalized = value
-    .map((item) => String(item || '').trim())
-    .filter(Boolean);
-
-  return [...new Set(normalized)];
+  return [...new Set(
+    value
+      .map((item) => String(item || '').trim())
+      .filter(Boolean),
+  )];
 }
 
 function ensureStoreFile(filePath) {
@@ -20,14 +20,7 @@ function ensureStoreFile(filePath) {
   fs.mkdirSync(dir, { recursive: true });
 
   if (!fs.existsSync(filePath)) {
-    const initial = {
-      [DEFAULT_PROFILE]: {
-        sports: [],
-        leagues: [],
-      },
-    };
-
-    fs.writeFileSync(filePath, JSON.stringify(initial, null, 2));
+    fs.writeFileSync(filePath, JSON.stringify({}, null, 2));
   }
 }
 
@@ -37,10 +30,7 @@ function readStore(filePath) {
   try {
     const raw = fs.readFileSync(filePath, 'utf-8');
     const parsed = JSON.parse(raw || '{}');
-    if (!parsed || typeof parsed !== 'object') {
-      return {};
-    }
-    return parsed;
+    return parsed && typeof parsed === 'object' ? parsed : {};
   } catch {
     return {};
   }
@@ -57,40 +47,103 @@ function getFavoritesFilePath() {
     || path.join(__dirname, '..', 'data', 'favorites.json');
 }
 
-function getGuestFavorites() {
-  const filePath = getFavoritesFilePath();
-  const store = readStore(filePath);
-  const profileData = store[DEFAULT_PROFILE] || { sports: [], leagues: [] };
+function normalizeSportSetting(value) {
+  if (typeof value === 'string') {
+    const name = String(value || '').trim();
+    return name ? { name, leagues: [] } : null;
+  }
+
+  if (!value || typeof value !== 'object') {
+    throw new Error('sports must contain strings or objects');
+  }
+
+  const name = String(value.name || value.sport || '').trim();
+  if (!name) {
+    throw new Error('sport name is required');
+  }
+
+  const leagues = value.leagues == null
+    ? []
+    : normalizeStringArray(value.leagues, 'sport leagues must be arrays');
+
+  return { name, leagues };
+}
+
+function normalizeSportsSettings(value) {
+  if (!Array.isArray(value)) {
+    throw new Error('sports must be an array');
+  }
+
+  const byName = new Map();
+
+  for (const item of value) {
+    const normalized = normalizeSportSetting(item);
+    if (!normalized) {
+      continue;
+    }
+    byName.set(normalized.name, normalized);
+  }
+
+  return [...byName.values()];
+}
+
+function normalizeLegacyEntry(profileData = {}) {
+  const sports = normalizeStringArray(profileData.sports || [], 'sports must be an array');
+  const sportSettings = Array.isArray(profileData.sport_settings)
+    ? normalizeSportsSettings(profileData.sport_settings)
+    : sports.map((name) => ({ name, leagues: [] }));
 
   return {
-    sports: normalizeStringArray(profileData.sports || []),
-    leagues: normalizeStringArray(profileData.leagues || []),
-    profile: DEFAULT_PROFILE,
+    sport_settings: sportSettings,
   };
 }
 
-function saveGuestFavorites(input) {
-  const sports = normalizeStringArray(input.sports);
-  const leagues = normalizeStringArray(input.leagues);
+function getProfileKey(profile = DEFAULT_PROFILE) {
+  const clean = String(profile || '').trim();
+  return clean || DEFAULT_PROFILE;
+}
 
+function getFavoritesByProfile(profile = DEFAULT_PROFILE) {
   const filePath = getFavoritesFilePath();
   const store = readStore(filePath);
+  const normalized = normalizeLegacyEntry(store[getProfileKey(profile)] || {});
 
-  store[DEFAULT_PROFILE] = {
-    sports,
-    leagues,
+  return {
+    sport_settings: normalized.sport_settings,
+    profile: getProfileKey(profile),
+  };
+}
+
+function saveFavoritesByProfile(profile = DEFAULT_PROFILE, input = {}) {
+  const sportSettings = normalizeSportsSettings(input.sport_settings || input.sports || []);
+  const filePath = getFavoritesFilePath();
+  const store = readStore(filePath);
+  const profileKey = getProfileKey(profile);
+
+  store[profileKey] = {
+    sport_settings: sportSettings,
   };
 
   writeStoreAtomic(filePath, store);
 
   return {
-    sports,
-    leagues,
-    profile: DEFAULT_PROFILE,
+    sport_settings: sportSettings,
+    profile: profileKey,
   };
 }
 
+function getGuestFavorites() {
+  return getFavoritesByProfile(DEFAULT_PROFILE);
+}
+
+function saveGuestFavorites(input) {
+  return saveFavoritesByProfile(DEFAULT_PROFILE, input);
+}
+
 module.exports = {
+  getFavoritesByProfile,
   getGuestFavorites,
+  normalizeSportsSettings,
+  saveFavoritesByProfile,
   saveGuestFavorites,
 };
