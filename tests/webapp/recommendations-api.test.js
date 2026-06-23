@@ -4,6 +4,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+process.env.NODE_ENV = 'test';
+
 const { buildApp } = require('../../server/app');
 const { buildTestApp, createFakePg, makeAuthHeaders } = require('./testHelpers');
 
@@ -178,6 +180,71 @@ test('GET /recommendations returns 3 items sorted by starts_at', async () => {
   }
 });
 
+
+test('GET /recommendations reflects updated favorites immediately after PUT /favorites', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tiger-bet-rec-sequence-'));
+  const filePath = path.join(dir, 'favorites.json');
+  process.env.WEBAPP_FAVORITES_FILE = filePath;
+  fs.writeFileSync(filePath, JSON.stringify({
+    'telegram:799': {
+      sport_settings: [{ name: 'Футбол', leagues: [] }],
+    },
+  }, null, 2));
+
+  const cleanup = () => {
+    delete process.env.WEBAPP_FAVORITES_FILE;
+    fs.rmSync(dir, { force: true, recursive: true });
+  };
+
+  const fakeRedis = { async del() {} };
+  let sportsDeleted = false;
+  const fakePg = createFakePg({
+    handler(query) {
+      if (/DELETE FROM public\.favorite_sport/i.test(query)) {
+        sportsDeleted = true;
+        return [];
+      }
+      if (/FROM public\.favorite_sport fs/i.test(query)) {
+        return sportsDeleted ? [] : [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' }];
+      }
+      if (/FROM public\.sport/i.test(query)) {
+        return [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' }];
+      }
+      return [];
+    },
+  });
+
+  const app = buildTestApp(buildApp, { pg: fakePg, recommendationsRedis: fakeRedis });
+  await app.ready();
+
+  try {
+    const before = await app.inject({
+      headers: makeAuthHeaders(app, { userId: 99, telegram_user_id: 799, profile: 'telegram:799' }),
+      method: 'GET',
+      url: '/recommendations',
+    });
+    assert.equal(before.statusCode, 200);
+    assert.equal(before.json().source, 'favorites');
+
+    await app.inject({
+      headers: makeAuthHeaders(app, { userId: 99, telegram_user_id: 799, profile: 'telegram:799' }),
+      method: 'PUT',
+      url: '/favorites',
+      payload: { sports: [] },
+    });
+
+    const after = await app.inject({
+      headers: makeAuthHeaders(app, { userId: 99, telegram_user_id: 799, profile: 'telegram:799' }),
+      method: 'GET',
+      url: '/recommendations',
+    });
+    assert.equal(after.statusCode, 200);
+    assert.notEqual(after.json().source, 'favorites');
+  } finally {
+    await app.close();
+    cleanup();
+  }
+});
 
 test('GET /recommendations returns 401 without JWT', async () => {
   const app = buildTestApp(buildApp);

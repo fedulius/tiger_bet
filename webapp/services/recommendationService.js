@@ -3,6 +3,7 @@
 
 const { getLeaguesByCategory } = require('../../lib/stavkaMatches');
 const request = require('request');
+const { createClient } = require('redis');
 const { extractEditorialForecast } = require('../../lib/forecastAnalyzer');
 
 const FALLBACK_TOP_MATCHES = [
@@ -73,6 +74,43 @@ const liveCache = {
 };
 
 const LIVE_CACHE_TTL_MS = 3 * 60 * 1000;
+const REDIS_TTL_SECONDS = 300;
+
+let _defaultRedisClient = null;
+let _defaultRedisInit = false;
+
+async function resolveRedisClient(provided) {
+  if (provided !== undefined) return provided;
+  if (_defaultRedisInit) return _defaultRedisClient;
+  _defaultRedisInit = true;
+  try {
+    const client = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
+    await client.connect();
+    _defaultRedisClient = client;
+  } catch {
+    // Redis unavailable — run without cache
+  }
+  return _defaultRedisClient;
+}
+
+function resetLiveCache() {
+  liveCache.updatedAt = 0;
+  liveCache.items = [];
+}
+
+function buildCacheKey(favoriteSports) {
+  if (!Array.isArray(favoriteSports) || favoriteSports.length === 0) {
+    return 'recommendations:default';
+  }
+  const fingerprint = [...favoriteSports]
+    .sort((a, b) => Number(a.sport_id) - Number(b.sport_id))
+    .map((s) => {
+      const leagues = [...(Array.isArray(s.leagues) ? s.leagues : [])].sort().join(',');
+      return `${Number(s.sport_id)}:${leagues}`;
+    })
+    .join('|');
+  return `recommendations:${fingerprint}`;
+}
 
 function toIsoDate(value) {
   return new Date(value).toISOString();
@@ -381,28 +419,68 @@ function buildPayload({ source, items, updatedAt }) {
   };
 }
 
+async function invalidateRecommendationsCache(options = {}) {
+  const favoriteSportsSets = Array.isArray(options.favoriteSportsSets)
+    ? options.favoriteSportsSets
+    : [options.favoriteSports || []];
+  const keys = [...new Set(favoriteSportsSets.map((item) => buildCacheKey(item)).filter(Boolean))];
+
+  if (keys.includes('recommendations:default')) {
+    resetLiveCache();
+  }
+
+  const redis = await resolveRedisClient(options.redisClient);
+  if (!redis || keys.length === 0 || typeof redis.del !== 'function') {
+    return { invalidated_keys: keys, redis: false };
+  }
+
+  try {
+    await redis.del(...keys);
+    return { invalidated_keys: keys, redis: true };
+  } catch {
+    return { invalidated_keys: keys, redis: false };
+  }
+}
+
 async function getRecommendations(options = {}) {
-  const updatedAt = new Date().toISOString();
   const source = options.source || null;
   const sourceItems = Array.isArray(options.items) ? options.items : [];
   const favoriteSports = Array.isArray(options.favoriteSports) ? options.favoriteSports : [];
   const hasFavoriteSports = favoriteSports.length > 0;
-
-  if (source) {
-    if (sourceItems.length > 0) {
-      return buildPayload({ source, items: sourceItems, updatedAt });
-    }
-
-    return buildPayload({ source: 'fallback-top', items: FALLBACK_TOP_MATCHES, updatedAt });
-  }
-
-  const favoriteFallback = filterFallbackByFavoriteSports(favoriteSports);
   const enableLive = options.enableLive ?? process.env.NODE_ENV !== 'test';
   const disableCache = options.disableCache === true;
   const nowTs = Date.now();
 
+  if (source) {
+    const updatedAt = new Date(nowTs).toISOString();
+    if (sourceItems.length > 0) {
+      return buildPayload({ source, items: sourceItems, updatedAt });
+    }
+    return buildPayload({ source: 'fallback-top', items: FALLBACK_TOP_MATCHES, updatedAt });
+  }
+
+  const favoriteFallback = filterFallbackByFavoriteSports(favoriteSports);
+
+  // Redis cache check (covers both default and favoriteSports requests)
+  const redis = !disableCache && enableLive
+    ? await resolveRedisClient(options.redisClient)
+    : null;
+  const cacheKey = buildCacheKey(favoriteSports);
+
+  if (redis) {
+    try {
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch {
+      // Redis unavailable — continue without cache
+    }
+  }
+
+  // In-memory cache (secondary layer for non-favorites when Redis is down)
   if (enableLive && !hasFavoriteSports && !disableCache && liveCache.items.length > 0 && (nowTs - liveCache.updatedAt) < LIVE_CACHE_TTL_MS) {
-    return buildPayload({ source: 'stavka-live', items: liveCache.items, updatedAt });
+    return buildPayload({ source: 'stavka-live', items: liveCache.items, updatedAt: new Date(liveCache.updatedAt).toISOString() });
   }
 
   if (enableLive) {
@@ -414,16 +492,31 @@ async function getRecommendations(options = {}) {
       });
 
       if (liveItems.length > 0) {
+        const liveUpdatedAt = new Date(nowTs).toISOString();
         if (!hasFavoriteSports) {
           liveCache.items = liveItems;
           liveCache.updatedAt = nowTs;
         }
-        return buildPayload({ source: hasFavoriteSports ? 'favorites' : 'stavka-live', items: liveItems, updatedAt });
+        const result = buildPayload({
+          source: hasFavoriteSports ? 'favorites' : 'stavka-live',
+          items: liveItems,
+          updatedAt: liveUpdatedAt,
+        });
+        if (redis) {
+          try {
+            await redis.set(cacheKey, JSON.stringify(result), { EX: REDIS_TTL_SECONDS });
+          } catch {
+            // Non-fatal — result is returned regardless of cache write failure
+          }
+        }
+        return result;
       }
     } catch {
       // Молча переключаемся на fallback, чтобы UI всегда оставался рабочим.
     }
   }
+
+  const updatedAt = new Date().toISOString();
 
   if (favoriteFallback.length > 0) {
     return buildPayload({ source: 'favorites', items: favoriteFallback, updatedAt });
@@ -439,4 +532,5 @@ async function getRecommendations(options = {}) {
 module.exports = {
   FALLBACK_TOP_MATCHES,
   getRecommendations,
+  invalidateRecommendationsCache,
 };

@@ -1,5 +1,6 @@
 const { getCatalogBySportNames, getAvailableLeaguesForSport } = require('../../services/sportLeaguesCatalog');
 const { getFavoritesByProfile, normalizeSportsSettings, saveFavoritesByProfile } = require('../../services/favoritesStore');
+const { invalidateRecommendationsCache } = require('../../services/recommendationService');
 
 function buildSportLookupKeys(name = '') {
   const normalized = String(name || '').trim().toLowerCase();
@@ -16,6 +17,29 @@ function buildSportLookupKeys(name = '') {
 
 function normalizeSportOutput(row = {}) {
   return String(row.sport_name || row.sport_url || '').trim();
+}
+
+async function loadResolvedFavoriteSports(fastify, userId, profile) {
+  const rows = await fastify.pg.connection(`
+    SELECT s.sport_id, s.sport_name, s.sport_url
+    FROM public.favorite_sport fs
+    JOIN public.sport s ON s.sport_id = fs.sport_id
+    WHERE fs.user_id = $1
+    ORDER BY fs.sport_id
+  `, [userId]);
+  const stored = getFavoritesByProfile(profile);
+  const sportSettingsMap = new Map((stored.sport_settings || []).map((item) => [item.name, item]));
+
+  return rows.map((row) => {
+    const resolvedName = normalizeSportOutput(row);
+    const existing = sportSettingsMap.get(resolvedName);
+
+    return {
+      sport_id: Number(row.sport_id),
+      sport_name: resolvedName,
+      leagues: Array.isArray(existing?.leagues) ? existing.leagues : [],
+    };
+  });
 }
 
 function buildResponseSportSetting(setting = {}) {
@@ -72,6 +96,7 @@ async function favoritesRoutes(fastify) {
       const requestedSports = normalizeSportsSettings(payload.sports);
       const userId = Number(request.user?.userId);
       const profile = String(request.user?.profile || '');
+      const previousFavorites = await loadResolvedFavoriteSports(fastify, userId, profile);
 
       const allSports = await fastify.pg.connection(`
         SELECT sport_id, sport_name, sport_url
@@ -103,18 +128,27 @@ async function favoritesRoutes(fastify) {
         );
       }
 
-      const persistedSettings = resolvedRows.map(({ row, setting }) => {
+      const updatedFavorites = resolvedRows.map(({ row, setting }) => {
         const resolvedName = normalizeSportOutput(row);
         const allowedLeagues = new Set(getAvailableLeaguesForSport(resolvedName));
         const leagues = (setting.leagues || []).filter((league) => allowedLeagues.has(league));
 
         return {
-          name: resolvedName,
+          sport_id: Number(row.sport_id),
+          sport_name: resolvedName,
           leagues,
         };
       });
+      const persistedSettings = updatedFavorites.map(({ sport_name, leagues }) => ({
+        name: sport_name,
+        leagues,
+      }));
 
       saveFavoritesByProfile(profile, { sport_settings: persistedSettings });
+      await invalidateRecommendationsCache({
+        favoriteSportsSets: [previousFavorites, updatedFavorites],
+        redisClient: fastify.recommendationsRedis,
+      });
 
       return {
         sports: persistedSettings.map(buildResponseSportSetting),
@@ -127,8 +161,19 @@ async function favoritesRoutes(fastify) {
     }
   });
 
-  fastify.delete('/', async (req, res) => {
-    res.send(1);
+  fastify.delete('/', async (request, reply) => {
+    const userId = Number(request.user?.userId);
+    const profile = String(request.user?.profile || '');
+    const previousFavorites = await loadResolvedFavoriteSports(fastify, userId, profile);
+
+    await fastify.pg.connection('DELETE FROM public.favorite_sport WHERE user_id = $1', [userId]);
+    saveFavoritesByProfile(profile, { sport_settings: [] });
+    await invalidateRecommendationsCache({
+      favoriteSportsSets: [previousFavorites, []],
+      redisClient: fastify.recommendationsRedis,
+    });
+
+    return reply.send(1);
   });
 }
 

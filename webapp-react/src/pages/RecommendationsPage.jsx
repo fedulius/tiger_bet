@@ -228,6 +228,7 @@ export function RecommendationsPage() {
 
     const normalized = normalizeFavoritesPayload(payload);
     setFavoritesState({ sports: normalized.sports });
+    await refreshRecommendations();
   }
 
   useEffect(() => {

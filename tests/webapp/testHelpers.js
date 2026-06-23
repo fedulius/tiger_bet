@@ -19,6 +19,7 @@ function buildTestApp(buildApp, options = {}) {
   return buildApp({
     pg: options.pg || createFakePg(),
     bot: null,
+    recommendationsRedis: options.recommendationsRedis || null,
     ...options,
   });
 }
