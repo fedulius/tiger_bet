@@ -1,5 +1,6 @@
-const { buildFeedPayload } = require('../../services/feedService');
+const { buildFeedPayload, buildFeedPayloadFromNormalized } = require('../../services/feedService');
 const { FALLBACK_TOP_MATCHES, loadLiveRecommendations } = require('../../services/recommendationService');
+const { getOrBuildSnapshot } = require('../../services/feedSnapshotService');
 
 const DEFAULT_FEED_SPORTS = [
   { sport_id: 1, sport_name: 'Футбол' },
@@ -35,10 +36,15 @@ async function defaultFeedLoader() {
 async function feedRoutes(fastify) {
   fastify.get('/', async (request) => {
     const { window = 'all', sport, country, league, limit, offset } = request.query;
-
     const loader = fastify.feedLoader || defaultFeedLoader;
-    const rawItems = await loader();
 
+    const snapshot = await getOrBuildSnapshot(fastify.feedRedis, loader);
+    if (snapshot) {
+      const payload = buildFeedPayloadFromNormalized(snapshot.items, { window, sport, country, league, limit, offset });
+      return { ...payload, feed_version: snapshot.feed_version };
+    }
+
+    const rawItems = await loader();
     return buildFeedPayload(rawItems, { window, sport, country, league, limit, offset });
   });
 }

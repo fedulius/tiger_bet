@@ -122,10 +122,37 @@ function buildFeedPayload(rawItems, { window = 'all', sport, country, league, li
   };
 }
 
+function buildFeedPayloadFromNormalized(normalizedItems, { window = 'all', sport, country, league, limit, offset, nowMs } = {}) {
+  const now = nowMs != null ? Number(nowMs) : Date.now();
+  const lim = Math.min(100, Math.max(1, Number(limit) || 10));
+  const off = Math.max(0, Number(offset) || 0);
+
+  const sorted = [...normalizedItems].sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
+  const windowed = filterByWindow(sorted, window, now);
+  const filtered = filterByParams(windowed, { sport, country, league });
+
+  const pageItems = filtered.slice(off, off + lim);
+  const nextOffset = off + lim;
+
+  return {
+    generated_at: new Date(now).toISOString(),
+    window: window || 'all',
+    filters: {
+      sport: sport || null,
+      country: country || null,
+      league: league || null,
+    },
+    items: pageItems,
+    next_offset: nextOffset,
+    has_more: nextOffset < filtered.length,
+  };
+}
+
 module.exports = {
   normalizeFeedItem,
   buildTimeWindowBounds,
   filterByWindow,
   filterByParams,
   buildFeedPayload,
+  buildFeedPayloadFromNormalized,
 };
