@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { getRecommendations, invalidateRecommendationsCache, loadLiveRecommendations } = require('../../webapp/services/recommendationService');
+const { getRecommendations, invalidateRecommendationsCache, loadLiveRecommendations, loadWideFeedRecommendations } = require('../../webapp/services/recommendationService');
 
 function makeFakeRedis({ store = {}, getError = null, setError = null } = {}) {
   const deletedKeys = [];
@@ -75,6 +75,30 @@ test('getRecommendations uses live loader data from stavka when available', asyn
   assert.match(payload.items[0].match, /vs/);
   assert.match(payload.items[0].source_url, /^https:\/\/stavka\.tv\//);
   assert.match(payload.items[0].main_thought, /Победа хозяев|П1/i);
+  assert.equal(payload.items[0].bets[0].coeff, 1.9, 'editorial coeff should drive primary bet coeff when present');
+});
+
+test('loadLiveRecommendations populates editorial_rationale from match page when rationale sentences present', async () => {
+  const now = new Date('2026-06-23T15:00:00.000Z').getTime();
+  const items = await loadLiveRecommendations({
+    now,
+    limit: 1,
+    upcomingOnly: true,
+    favoriteSports: [{ sport_id: 1, sport_name: 'Футбол', leagues: [] }],
+    liveLoader: async () => ([{
+      league: 'Test League',
+      matches: [{ team: 'Alpha - Beta', link: '/matches/soccer/alpha-beta', time: '19:00', date: '23 июн' }],
+    }]),
+    matchPageLoader: async () => `
+      <div>Основной прогноз: Победа хозяев с кэфом: 1.72. Команда в хорошей форме последние 4 матча. Гости ослаблены травмами.</div>
+    `,
+  });
+
+  assert.equal(items.length, 1);
+  const rationale = items[0].editorial_rationale;
+  assert.equal(typeof rationale, 'string', 'editorial_rationale must be a string');
+  assert.ok(rationale.length > 0, 'editorial_rationale must not be empty when rationale sentences present in page');
+  assert.ok(!rationale.includes('Победа хозяев'), 'editorial_rationale must not repeat the main pick sentence');
 });
 
 test('getRecommendations falls back to fallback-top when live loader returns empty', async () => {
@@ -111,6 +135,35 @@ test('loadLiveRecommendations prefers upcoming matches for feed-oriented consume
   assert.equal(items.length, 2);
   assert.deepEqual(items.map((item) => item.match), ['Soon One vs Soon Two', 'Tomorrow One vs Tomorrow Two']);
   assert.ok(items.every((item) => new Date(item.starts_at).getTime() > now));
+});
+
+test('loadWideFeedRecommendations uses global /matches source and keeps only next 2 hours', async () => {
+  const now = new Date('2026-06-23T15:00:00.000Z').getTime();
+  const items = await loadWideFeedRecommendations({
+    now,
+    horizonMs: 2 * 60 * 60 * 1000,
+    liveLoader: async () => ([
+      {
+        league: 'England: Premier League',
+        matches: [
+          { team: 'Arsenal - Chelsea', link: '/matches/soccer/arsenal-chelsea', time: '16:50', date: '23 июн' },
+          { team: 'Late Match - Later Opponent', link: '/matches/soccer/late-match', time: '18:30', date: '23 июн' },
+        ],
+      },
+      {
+        league: 'ATP Halle',
+        matches: [
+          { team: 'Sinner - Medvedev', link: '/matches/tennis/sinner-medvedev', time: '16:30', date: '23 июн' },
+        ],
+      },
+    ]),
+    matchPageLoader: async () => '<div>Основной прогноз: П1</div>',
+  });
+
+  assert.deepEqual(items.map((item) => item.match), ['Sinner vs Medvedev', 'Arsenal vs Chelsea']);
+  assert.deepEqual(items.map((item) => item.sport_name), ['Теннис', 'Футбол']);
+  assert.ok(items.every((item) => new Date(item.starts_at).getTime() > now));
+  assert.ok(items.every((item) => new Date(item.starts_at).getTime() <= now + (2 * 60 * 60 * 1000)));
 });
 
 test('loadLiveRecommendations rechecks recently-started rows against match page header before dropping them from feed', async () => {

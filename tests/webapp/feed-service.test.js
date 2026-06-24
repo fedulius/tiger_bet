@@ -7,6 +7,7 @@ const {
   filterByWindow,
   filterByParams,
   buildFeedPayload,
+  buildFeedPayloadFromNormalized,
 } = require('../../webapp/services/feedService');
 
 // nowMs = 2026-06-23T15:00:00Z → Moscow 18:00
@@ -92,6 +93,66 @@ test('normalizeFeedItem: country is empty string when missing', () => {
   assert.equal(item.country, '');
 });
 
+test('normalizeFeedItem: bets path prefers source_coeff over stale primary.coeff', () => {
+  const raw = {
+    id: 'coeff-stale',
+    match: 'GamerLegion vs Astralis',
+    sport_name: 'КС:ГО',
+    country: '',
+    league: 'ESL Pro League',
+    starts_at: '2026-06-23T20:00:00.000Z',
+    main_thought: 'Победа GamerLegion со счетом 2:0 с кэфом: 1.65',
+    source_coeff: 1.65,
+    confidence: 61,
+    bets: [
+      { type: 'primary', forecast: 'Победа GamerLegion со счетом 2:0 с кэфом: 1.65', coeff: 1.71, description: 'Базовый сценарий.' },
+    ],
+  };
+  const item = normalizeFeedItem(raw);
+  assert.ok(item);
+  assert.equal(item.primary_bet.forecast, 'Победа GamerLegion со счетом 2:0', 'coeff phrase must be stripped from forecast text');
+  assert.equal(item.primary_bet.coeff, 1.65, 'coeff must match source_coeff (editorial), not stale bets coeff');
+});
+
+test('normalizeFeedItem: main_thought path uses editorial_rationale as description, not forecast duplicate', () => {
+  const raw = {
+    id: 'rationale-test',
+    match: 'A vs B',
+    sport_name: 'Футбол',
+    country: '',
+    league: 'Test',
+    starts_at: '2026-06-23T20:00:00.000Z',
+    main_thought: 'Победа команды A',
+    summary: 'Победа команды A',
+    editorial_rationale: 'Команда A сильнее по форме последних 5 матчей.',
+    source_coeff: 1.7,
+    confidence: 60,
+  };
+  const item = normalizeFeedItem(raw);
+  assert.ok(item);
+  assert.equal(item.primary_bet.forecast, 'Победа команды A');
+  assert.notEqual(item.primary_bet.description, item.primary_bet.forecast, 'description must not duplicate forecast');
+  assert.equal(item.primary_bet.description, 'Команда A сильнее по форме последних 5 матчей.');
+});
+
+test('normalizeFeedItem: main_thought path description is empty when summary equals main_thought and no editorial_rationale', () => {
+  const raw = {
+    id: 'no-rationale',
+    match: 'A vs B',
+    sport_name: 'Футбол',
+    country: '',
+    league: 'Test',
+    starts_at: '2026-06-23T20:00:00.000Z',
+    main_thought: 'Победа команды A',
+    summary: 'Победа команды A',
+    confidence: 60,
+  };
+  const item = normalizeFeedItem(raw);
+  assert.ok(item);
+  assert.equal(item.primary_bet.forecast, 'Победа команды A');
+  assert.equal(item.primary_bet.description, '', 'description should be empty to avoid duplicating forecast');
+});
+
 test('normalizeFeedItem: extracts primary_bet from bets array', () => {
   const raw = {
     id: 'bet-item',
@@ -112,6 +173,46 @@ test('normalizeFeedItem: extracts primary_bet from bets array', () => {
   assert.equal(item.primary_bet.forecast, 'П1 победа');
   assert.equal(item.primary_bet.coeff, 1.75);
   assert.equal(item.primary_bet.description, 'Базовый вариант.');
+});
+
+test('normalizeFeedItem: strips coeff phrase from main_thought forecast and summary', () => {
+  const raw = {
+    id: 'strip-coeff',
+    match: 'Тaусон vs Opponent',
+    sport_name: 'Теннис',
+    country: '',
+    league: 'WTA',
+    starts_at: '2026-06-23T20:00:00.000Z',
+    main_thought: 'Победа Таусон с кэфом: 2.08',
+    summary: 'Победа Таусон с кэфом: 2.08',
+    source_coeff: 1.9,
+    confidence: 60,
+  };
+  const item = normalizeFeedItem(raw);
+  assert.ok(item);
+  assert.equal(item.primary_bet.forecast, 'Победа Таусон', 'coeff phrase must be stripped from main_thought forecast');
+  assert.equal(item.summary, 'Победа Таусон', 'coeff phrase must be stripped from summary');
+  assert.equal(item.primary_bet.coeff, 1.9, 'coeff comes from source_coeff, not text');
+});
+
+test('normalizeFeedItem: strips integer coeff phrase from forecast and summary', () => {
+  const raw = {
+    id: 'strip-integer-coeff',
+    match: 'Samuel vs Tirante',
+    sport_name: 'Теннис',
+    country: '',
+    league: 'ATP',
+    starts_at: '2026-06-23T20:00:00.000Z',
+    main_thought: 'Победа Самуэля по геймам с форой (-2.5) с кэфом: 2',
+    summary: 'Победа Самуэля по геймам с форой (-2.5) с кэфом: 2',
+    source_coeff: 1.9,
+    confidence: 60,
+  };
+  const item = normalizeFeedItem(raw);
+  assert.ok(item);
+  assert.equal(item.primary_bet.forecast, 'Победа Самуэля по геймам с форой (-2.5)');
+  assert.equal(item.summary, 'Победа Самуэля по геймам с форой (-2.5)');
+  assert.equal(item.primary_bet.coeff, 1.9);
 });
 
 test('normalizeFeedItem: returns null when id is missing', () => {
@@ -288,4 +389,46 @@ test('buildFeedPayload: items include country even when empty', () => {
   for (const item of payload.items) {
     assert.ok('country' in item);
   }
+});
+
+// ─── available_sports ─────────────────────────────────────────────────────────
+
+test('buildFeedPayload: available_sports contains all sports in window', () => {
+  const rawItems = [ITEMS.today1, ITEMS.today2, ITEMS.tomorrow1];
+  const payload = buildFeedPayload(rawItems, { nowMs: NOW_MS });
+  assert.ok(Array.isArray(payload.available_sports));
+  assert.deepEqual([...payload.available_sports].sort(), ['Теннис', 'Футбол']);
+});
+
+test('buildFeedPayload: available_sports includes sports from all pages, not just page 1', () => {
+  const rawItems = [ITEMS.today1, ITEMS.today2, ITEMS.tomorrow1];
+  const page1 = buildFeedPayload(rawItems, { nowMs: NOW_MS, limit: 2, offset: 0 });
+  // page 1 items are only football, but available_sports should still include Tennis
+  assert.ok(page1.available_sports.includes('Теннис'), 'Теннис must appear even though it is on page 2');
+  assert.ok(page1.available_sports.includes('Футбол'));
+});
+
+test('buildFeedPayload: available_sports is not filtered by active sport param', () => {
+  const rawItems = [ITEMS.today1, ITEMS.today2, ITEMS.tomorrow1];
+  const payload = buildFeedPayload(rawItems, { nowMs: NOW_MS, sport: 'Футбол' });
+  // items are football-only, but available_sports should still show Tennis
+  assert.ok(payload.available_sports.includes('Теннис'), 'Теннис must appear even when sport=Футбол filter is active');
+  assert.equal(payload.items.every((i) => i.sport === 'Футбол'), true);
+});
+
+test('buildFeedPayload: available_sports excludes past matches outside window', () => {
+  const rawItems = [ITEMS.past, ITEMS.tooFar, ITEMS.today1];
+  const payload = buildFeedPayload(rawItems, { nowMs: NOW_MS });
+  // past and tooFar are outside the window, only today1 (Футбол) is included
+  assert.deepEqual(payload.available_sports, ['Футбол']);
+});
+
+test('buildFeedPayloadFromNormalized: available_sports present in response', () => {
+  const normalized = [ITEMS.today1, ITEMS.today2, ITEMS.tomorrow1]
+    .map(normalizeFeedItem)
+    .filter(Boolean);
+  const payload = buildFeedPayloadFromNormalized(normalized, { nowMs: NOW_MS });
+  assert.ok(Array.isArray(payload.available_sports));
+  assert.ok(payload.available_sports.includes('Футбол'));
+  assert.ok(payload.available_sports.includes('Теннис'));
 });

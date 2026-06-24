@@ -17,13 +17,24 @@ function buildTimeWindowBounds(window, nowMs) {
   return { start: todayStart, end: dayAfterStart };
 }
 
+function stripCoeffPhrase(text) {
+  return String(text || '')
+    .replace(/\s*с\s+(?:кэфом?|коэффициентом?)\s*:?\s*\d{1,2}(?:[.,]\d+)?/gi, '')
+    .trim();
+}
+
 function normalizePrimaryBet(raw) {
+  const sourceCoeff = Number(raw.source_coeff);
+  const resolvedSourceCoeff = Number.isFinite(sourceCoeff)
+    ? Number(Math.min(1.9, Math.max(1.5, sourceCoeff)).toFixed(2))
+    : null;
+
   if (Array.isArray(raw.bets) && raw.bets.length > 0) {
     const primary = raw.bets.find((b) => b.type === 'primary') || raw.bets[0];
     if (primary && primary.forecast) {
       return {
-        forecast: String(primary.forecast).trim(),
-        coeff: Number(primary.coeff) || null,
+        forecast: stripCoeffPhrase(primary.forecast),
+        coeff: resolvedSourceCoeff !== null ? resolvedSourceCoeff : (Number(primary.coeff) || null),
         description: String(primary.description || '').trim(),
       };
     }
@@ -31,11 +42,17 @@ function normalizePrimaryBet(raw) {
 
   if (raw.main_thought) {
     const conf = Math.min(90, Math.max(35, Number(raw.confidence) || 50));
-    const coeff = Number((1.5 + (conf % 40) / 100).toFixed(2));
+    const coeff = resolvedSourceCoeff !== null
+      ? resolvedSourceCoeff
+      : Number((1.5 + (conf % 40) / 100).toFixed(2));
+    const mainThought = stripCoeffPhrase(raw.main_thought);
+    const summary = String(raw.summary || '').trim();
+    const editorialRationale = String(raw.editorial_rationale || '').trim();
+    const description = editorialRationale || (summary !== mainThought ? summary : '');
     return {
-      forecast: String(raw.main_thought).trim(),
+      forecast: mainThought,
       coeff,
-      description: '',
+      description,
     };
   }
 
@@ -59,7 +76,7 @@ function normalizeFeedItem(raw) {
     country: String(raw.country || '').trim(),
     league: String(raw.league || '').trim(),
     starts_at: startsAt.toISOString(),
-    summary: String(raw.summary || raw.main_thought || '').trim(),
+    summary: stripCoeffPhrase(raw.summary || raw.main_thought || ''),
     primary_bet,
   };
 }
@@ -103,6 +120,7 @@ function buildFeedPayload(rawItems, { window = 'all', sport, country, league, li
   normalized.sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
 
   const windowed = filterByWindow(normalized, window, now);
+  const available_sports = [...new Set(windowed.map((i) => i.sport).filter(Boolean))].sort();
   const filtered = filterByParams(windowed, { sport, country, league });
 
   const pageItems = filtered.slice(off, off + lim);
@@ -116,6 +134,7 @@ function buildFeedPayload(rawItems, { window = 'all', sport, country, league, li
       country: country || null,
       league: league || null,
     },
+    available_sports,
     items: pageItems,
     next_offset: nextOffset,
     has_more: nextOffset < filtered.length,
@@ -129,6 +148,7 @@ function buildFeedPayloadFromNormalized(normalizedItems, { window = 'all', sport
 
   const sorted = [...normalizedItems].sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
   const windowed = filterByWindow(sorted, window, now);
+  const available_sports = [...new Set(windowed.map((i) => i.sport).filter(Boolean))].sort();
   const filtered = filterByParams(windowed, { sport, country, league });
 
   const pageItems = filtered.slice(off, off + lim);
@@ -142,6 +162,7 @@ function buildFeedPayloadFromNormalized(normalizedItems, { window = 'all', sport
       country: country || null,
       league: league || null,
     },
+    available_sports,
     items: pageItems,
     next_offset: nextOffset,
     has_more: nextOffset < filtered.length,

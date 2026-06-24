@@ -1,29 +1,12 @@
 const { buildFeedPayload, buildFeedPayloadFromNormalized } = require('../../services/feedService');
-const { FALLBACK_TOP_MATCHES, loadLiveRecommendations } = require('../../services/recommendationService');
+const { FALLBACK_TOP_MATCHES, loadWideFeedRecommendations } = require('../../services/recommendationService');
 const { getOrBuildSnapshot } = require('../../services/feedSnapshotService');
 
-const DEFAULT_FEED_SPORTS = [
-  { sport_id: 1, sport_name: 'Футбол' },
-  { sport_id: 2, sport_name: 'Хоккей' },
-  { sport_id: 3, sport_name: 'Теннис' },
-  { sport_id: 4, sport_name: 'Баскетбол' },
-  { sport_id: 5, sport_name: 'Волейбол' },
-  { sport_id: 6, sport_name: 'Бейсбол' },
-  { sport_id: 7, sport_name: 'Гандбол' },
-  { sport_id: 8, sport_name: 'Футзал' },
-  { sport_id: 9, sport_name: 'Снукер' },
-  { sport_id: 10, sport_name: 'КС:ГО' },
-  { sport_id: 11, sport_name: 'Дота2' },
-  { sport_id: 12, sport_name: 'Американский футбол' },
-  { sport_id: 13, sport_name: 'MMA' },
-  { sport_id: 14, sport_name: 'Бокс' },
-];
+const FEED_SNAPSHOT_HORIZON_MS = 2 * 60 * 60 * 1000;
 
 async function defaultFeedLoader() {
-  const liveItems = await loadLiveRecommendations({
-    favoriteSports: DEFAULT_FEED_SPORTS,
-    limit: 50,
-    upcomingOnly: true,
+  const liveItems = await loadWideFeedRecommendations({
+    horizonMs: FEED_SNAPSHOT_HORIZON_MS,
   }).catch(() => []);
 
   if (Array.isArray(liveItems) && liveItems.length > 0) {

@@ -63,7 +63,7 @@ function RecommendationCard({ item, onOpenBet }) {
         <div className="recommendation-head">
           <div>
             <h3>{item.match || 'Матч'}</h3>
-            <p className="recommendation-subtitle">{item.league || 'Лига не указана'}</p>
+            <p className="recommendation-subtitle">{[item.sport_name, item.league].filter(Boolean).join(' · ') || 'Лига не указана'}</p>
           </div>
           {item.is_new ? <span className="recommendation-badge">Новый</span> : null}
         </div>

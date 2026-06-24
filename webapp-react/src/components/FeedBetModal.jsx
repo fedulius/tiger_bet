@@ -4,9 +4,12 @@ import { formatMoscowDateTime } from '../lib/format.js';
 export function FeedBetModal({ item, onClose }) {
   const { primary_bet } = item;
   const meta = [item.sport, item.country, item.league].filter(Boolean).join(' · ');
-  const compactDescription = primary_bet?.description
-    || (item.summary && item.summary !== primary_bet?.forecast ? item.summary : '')
-    || 'Короткое описание ставки появится после обновления данных.';
+  const forecastText = String(primary_bet?.forecast || '').trim();
+  const rawDesc = String(primary_bet?.description || item.summary || '').trim();
+  const descriptionText = rawDesc !== forecastText ? rawDesc : '';
+  const compactDescription = descriptionText
+    || [item.sport, item.league].filter(Boolean).join(' · ')
+    || 'Описание появится после обновления данных.';
 
   return (
     <div className="modal" aria-hidden="false" onClick={onClose}>

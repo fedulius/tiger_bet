@@ -126,6 +126,9 @@ test('GET /feed response has required fields', async () => {
     assert.ok(Array.isArray(payload.items), 'items is not an array');
     assert.equal(typeof payload.next_offset, 'number', 'missing next_offset');
     assert.equal(typeof payload.has_more, 'boolean', 'missing has_more');
+    assert.ok(Array.isArray(payload.available_sports), 'available_sports must be an array');
+    assert.ok(payload.available_sports.includes('Футбол'), 'available_sports must include football');
+    assert.ok(payload.available_sports.includes('Теннис'), 'available_sports must include tennis from later items too');
     assert.ok(!('feed_version' in payload), 'feed_version absent when Redis not available (live-fallback path)');
   } finally {
     await app.close();

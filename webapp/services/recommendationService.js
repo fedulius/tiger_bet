@@ -1,7 +1,7 @@
 // Task 3/13 service: recommendations feed for webApp.
 // По умолчанию пытаемся взять живые матчи со stavka.tv, при ошибке используем fallback.
 
-const { getLeaguesByCategory } = require('../../lib/stavkaMatches');
+const { getLeaguesByCategory, getTopMatches } = require('../../lib/stavkaMatches');
 const request = require('request');
 const { createClient } = require('redis');
 const { extractEditorialForecast } = require('../../lib/forecastAnalyzer');
@@ -231,11 +231,41 @@ function toAbsoluteStavkaUrl(link) {
   return `https://stavka.tv${clean.startsWith('/') ? '' : '/'}${clean}`;
 }
 
+const SPORT_META_BY_SLUG = {
+  soccer: { sport_id: 1, sport_name: 'Футбол' },
+  'ice-hockey': { sport_id: 2, sport_name: 'Хоккей' },
+  tennis: { sport_id: 3, sport_name: 'Теннис' },
+  basketball: { sport_id: 4, sport_name: 'Баскетбол' },
+  volleyball: { sport_id: 5, sport_name: 'Волейбол' },
+  baseball: { sport_id: 6, sport_name: 'Бейсбол' },
+  handball: { sport_id: 7, sport_name: 'Гандбол' },
+  futsal: { sport_id: 8, sport_name: 'Футзал' },
+  snooker: { sport_id: 9, sport_name: 'Снукер' },
+  csgo: { sport_id: 10, sport_name: 'КС:ГО' },
+  dota2: { sport_id: 11, sport_name: 'Дота2' },
+  'american-football': { sport_id: 12, sport_name: 'Американский футбол' },
+  mma: { sport_id: 13, sport_name: 'MMA' },
+  boxing: { sport_id: 14, sport_name: 'Бокс' },
+};
+
 function normalizeMatchTitle(team = '') {
   return String(team || '')
     .replace(/\s+-\s+/g, ' vs ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function inferSportMetaFromLink(link = '', fallback = {}) {
+  const match = String(link || '').match(/\/matches\/([^/?#]+)/i);
+  const slug = match ? String(match[1] || '').trim().toLowerCase() : '';
+  const inferred = SPORT_META_BY_SLUG[slug] || null;
+
+  return {
+    sport_id: Number.isFinite(Number(fallback?.sport_id))
+      ? Number(fallback.sport_id)
+      : (inferred?.sport_id ?? null),
+    sport_name: String(fallback?.sport_name || inferred?.sport_name || '').trim(),
+  };
 }
 
 function recommendationIdFromLink(link = '', index = 0) {
@@ -277,8 +307,11 @@ function toCoeff(value, fallback) {
 function buildBetLineup(item = {}) {
   const confidence = clamp(Number(item.confidence) || 0, 35, 90);
   const thought = String(item.main_thought || 'Ставка по текущей форме и контексту матча').trim();
+  const sourceCoeff = Number(item.source_coeff);
 
-  const bet1Coeff = toCoeff(1.5 + (confidence % 40) / 100, 1.65);
+  const bet1Coeff = Number.isFinite(sourceCoeff)
+    ? toCoeff(clamp(sourceCoeff, 1.5, 1.9), 1.65)
+    : toCoeff(1.5 + (confidence % 40) / 100, 1.65);
   const bet2Coeff = toCoeff(1.7 + ((confidence + 7) % 50) / 100, 1.95);
   const exactHome = confidence >= 66 ? 2 : 1;
   const exactAway = confidence >= 66 ? 1 : 0;
@@ -330,10 +363,12 @@ function flattenLiveLeagues(leagues = [], baseNow = new Date(), sportMeta = {}) 
         continue;
       }
 
+      const resolvedSportMeta = inferSportMetaFromLink(match.link, sportMeta);
+
       flat.push({
         id: recommendationIdFromLink(match.link, flat.length),
-        sport_id: sportMeta.sport_id,
-        sport_name: sportMeta.sport_name,
+        sport_id: resolvedSportMeta.sport_id,
+        sport_name: resolvedSportMeta.sport_name,
         match: normalizeMatchTitle(match.team),
         league: leagueName,
         starts_at: parseStartsAt({
@@ -432,9 +467,11 @@ async function enrichFromMatchPages(items, { matchPageLoader, correctStartsAtIds
         ...item,
         starts_at: shouldCorrectStartsAt && correctedStartsAt ? correctedStartsAt : item.starts_at,
         main_thought: editorial?.mainThought || item.main_thought,
+        source_coeff: Number.isFinite(editorial?.coeff) ? editorial.coeff : item.source_coeff,
         confidence: Number.isFinite(editorial?.probabilityPercent)
           ? editorial.probabilityPercent
           : item.confidence,
+        editorial_rationale: editorial?.rationale != null ? editorial.rationale : (item.editorial_rationale ?? ''),
       };
     } catch {
       return item;
@@ -509,6 +546,35 @@ async function loadLiveRecommendations({ liveLoader, matchPageLoader, favoriteSp
     : pickTopByTime(enrichedAggregated, limit);
 
   return await enrichFromMatchPages(itemsForEnrichment, {
+    matchPageLoader,
+    correctStartsAtIds: new Set(),
+  });
+}
+
+async function loadWideFeedRecommendations({ liveLoader, matchPageLoader, now = Date.now(), horizonMs = 2 * 60 * 60 * 1000 } = {}) {
+  const loader = liveLoader || getTopMatches;
+  const leagues = await loader();
+  if (!Array.isArray(leagues) || leagues.length === 0) {
+    return [];
+  }
+
+  const baseNow = new Date(now);
+  const aggregated = dedupeById(flattenLiveLeagues(leagues, baseNow, {}));
+  if (aggregated.length === 0) {
+    return [];
+  }
+
+  const upcoming = selectUpcomingItems(aggregated, { now, limit: null })
+    .filter((item) => {
+      const startTs = new Date(item?.starts_at).getTime();
+      return Number.isFinite(startTs) && startTs <= (now + horizonMs);
+    });
+
+  if (upcoming.length === 0) {
+    return [];
+  }
+
+  return await enrichFromMatchPages(upcoming, {
     matchPageLoader,
     correctStartsAtIds: new Set(),
   });
@@ -653,4 +719,5 @@ module.exports = {
   getRecommendations,
   invalidateRecommendationsCache,
   loadLiveRecommendations,
+  loadWideFeedRecommendations,
 };

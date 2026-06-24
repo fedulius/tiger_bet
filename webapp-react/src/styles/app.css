@@ -197,6 +197,12 @@ section h2,
   gap: 8px;
 }
 
+#sports-chips {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
 .chip {
   display: inline-flex;
   align-items: center;

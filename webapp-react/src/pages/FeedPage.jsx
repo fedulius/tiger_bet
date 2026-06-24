@@ -1,13 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { auth, getFeed } from '../lib/api.js';
 import { formatMoscowDateTime } from '../lib/format.js';
+import { collectAvailableSports } from '../lib/feed.js';
 import { FeedBetModal } from '../components/FeedBetModal.jsx';
-
-const WINDOW_OPTIONS = [
-  { value: 'all', label: 'Все' },
-  { value: 'today', label: 'Сегодня' },
-  { value: 'tomorrow', label: 'Завтра' },
-];
 
 function FeedCard({ item, onOpen }) {
   const { primary_bet } = item;
@@ -47,7 +42,6 @@ export function FeedPage() {
   const [hasMore, setHasMore] = useState(false);
   const [offset, setOffset] = useState(0);
   const [error, setError] = useState('');
-  const [windowFilter, setWindowFilter] = useState('all');
   const [sportFilter, setSportFilter] = useState('');
   const [availableSports, setAvailableSports] = useState([]);
   const [modal, setModal] = useState(null);
@@ -67,11 +61,10 @@ export function FeedPage() {
 
       if (isFirstPage) {
         setItems(newItems);
-        const sports = [...new Set(newItems.map((i) => i.sport).filter(Boolean))];
-        setAvailableSports((prev) => {
-          const merged = [...new Set([...prev, ...sports])];
-          return merged;
-        });
+        setAvailableSports((prev) => collectAvailableSports(data, {
+          fallbackSports: prev,
+          preserveFallback: Boolean(sport),
+        }));
       } else {
         setItems((prev) => [...prev, ...newItems]);
       }
@@ -110,7 +103,7 @@ export function FeedPage() {
     setIsLoadingMore(true);
 
     try {
-      const data = await getFeed({ window: windowFilter, sport: sportFilter, limit: 10, offset });
+      const data = await getFeed({ window: 'all', sport: sportFilter, limit: 10, offset });
       setItems((prev) => [...prev, ...(data.items || [])]);
       setHasMore(!!data.has_more);
       setOffset(data.next_offset ?? offset + 10);
@@ -120,7 +113,7 @@ export function FeedPage() {
       setIsLoadingMore(false);
       loadingMoreRef.current = false;
     }
-  }, [hasMore, offset, windowFilter, sportFilter]);
+  }, [hasMore, offset, sportFilter]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -135,18 +128,11 @@ export function FeedPage() {
     return () => observer.disconnect();
   }, [loadMore]);
 
-  function applyWindowFilter(win) {
-    if (win === windowFilter) return;
-    setWindowFilter(win);
-    setOffset(0);
-    fetchPage(win, sportFilter, 0, true);
-  }
-
   function applySportFilter(sport) {
     const next = sport === sportFilter ? '' : sport;
     setSportFilter(next);
     setOffset(0);
-    fetchPage(windowFilter, next, 0, true);
+    fetchPage('all', next, 0, true);
   }
 
   if (authGate === 'pending') {
@@ -174,18 +160,6 @@ export function FeedPage() {
   return (
     <>
       <div className="feed-filters">
-        <div className="feed-filter-chips">
-          {WINDOW_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              className={`feed-filter-chip${windowFilter === opt.value ? ' active' : ''}`}
-              onClick={() => applyWindowFilter(opt.value)}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
         {availableSports.length > 0 ? (
           <div className="feed-filter-chips">
             {availableSports.map((sport) => (
@@ -206,7 +180,7 @@ export function FeedPage() {
         {error ? (
           <div className="block-error feed-error">
             <span>{error} </span>
-            <button className="secondary-button" type="button" onClick={() => fetchPage(windowFilter, sportFilter, 0, true)}>
+            <button className="secondary-button" type="button" onClick={() => fetchPage('all', sportFilter, 0, true)}>
               Повторить
             </button>
           </div>
