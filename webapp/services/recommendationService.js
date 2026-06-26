@@ -4,7 +4,12 @@
 const { getLeaguesByCategory, getTopMatches } = require('../../lib/stavkaMatches');
 const request = require('request');
 const { createClient } = require('redis');
-const { extractEditorialForecast } = require('../../lib/forecastAnalyzer');
+const {
+  extractEditorialForecast,
+  extractRecommendationZones,
+  collectCandidatesAcrossZones,
+  isCandidateAcceptable,
+} = require('../../lib/forecastAnalyzer');
 
 const FALLBACK_TOP_MATCHES = [
   {
@@ -344,10 +349,68 @@ function buildBetLineup(item = {}) {
   ];
 }
 
+function buildStructuredBetsFromCandidates(item = {}, candidates = []) {
+  if (!Array.isArray(candidates) || candidates.length === 0) {
+    return null;
+  }
+
+  const confidence = clamp(Number(item.confidence) || 0, 35, 90);
+  const primary = candidates[0];
+  const secondaryCandidates = candidates
+    .slice(1)
+    .sort((a, b) => {
+      const coeffA = Number.isFinite(Number(a?.coeff)) ? Number(a.coeff) : Number.POSITIVE_INFINITY;
+      const coeffB = Number.isFinite(Number(b?.coeff)) ? Number(b.coeff) : Number.POSITIVE_INFINITY;
+      if (coeffA !== coeffB) {
+        return coeffA - coeffB;
+      }
+
+      const forecastA = String(a?.canonicalForecast || a?.rawForecast || '').trim();
+      const forecastB = String(b?.canonicalForecast || b?.rawForecast || '').trim();
+      return forecastA.localeCompare(forecastB, 'ru');
+    });
+  const primaryCoeff = Number(primary?.coeff);
+  const resolvedPrimaryCoeff = Number.isFinite(primaryCoeff)
+    ? toCoeff(clamp(primaryCoeff, 1.5, 1.9), 1.65)
+    : toCoeff(1.5 + (confidence % 40) / 100, 1.65);
+
+  const primaryBet = {
+    type: 'primary',
+    risk_order: 1,
+    risk_label: 'low',
+    forecast: String(primary?.canonicalForecast || primary?.rawForecast || item.main_thought || 'Основной прогноз').trim(),
+    coeff: resolvedPrimaryCoeff,
+    probability: clamp(Math.round((1 / resolvedPrimaryCoeff) * 100), 45, 70),
+    confidence: confidence >= 66 ? 'высокая' : 'средняя',
+    description: String(primary?.description || 'Основной сценарий из редакционного прогноза.').trim(),
+  };
+
+  const lineup = [primaryBet];
+  for (const candidate of secondaryCandidates.slice(0, 2)) {
+    const coeff = Number(candidate?.coeff);
+    const resolvedCoeff = Number.isFinite(coeff)
+      ? toCoeff(clamp(coeff, 1.6, 2.3), 1.95)
+      : toCoeff(1.7 + ((confidence + lineup.length * 7) % 50) / 100, 1.95);
+
+    lineup.push({
+      type: lineup.length === 1 ? 'value' : 'additional',
+      risk_order: lineup.length + 1,
+      risk_label: lineup.length === 1 ? 'medium' : 'high',
+      forecast: String(candidate?.canonicalForecast || candidate?.rawForecast || 'Альтернативный сценарий').trim(),
+      coeff: resolvedCoeff,
+      probability: clamp(Math.round((1 / resolvedCoeff) * 100), 40, 65),
+      confidence: confidence >= 60 ? 'средняя' : 'ниже средней',
+      description: String(candidate?.description || 'Альтернативный сценарий из редакционного прогноза.').trim(),
+    });
+  }
+
+  return lineup.slice(0, 3);
+}
+
 function withBetLineup(item = {}) {
   return {
     ...item,
-    bets: buildBetLineup(item),
+    bets: Array.isArray(item.bets) && item.bets.length > 0 ? item.bets : buildBetLineup(item),
   };
 }
 
@@ -449,36 +512,56 @@ function extractMatchPageStartsAt(html, item = {}) {
   }
 }
 
-async function enrichFromMatchPages(items, { matchPageLoader, correctStartsAtIds = null } = {}) {
+async function enrichFromMatchPages(items, { matchPageLoader, correctStartsAtIds = null, enforceFailClosed = false } = {}) {
   const loader = matchPageLoader || requestMatchPage;
 
   const enriched = await Promise.all(items.map(async (item) => {
     try {
       const html = await loader(item.source_url);
       const editorial = extractEditorialForecast(html, { matchName: item.match });
+      const { mainForecastZone, editorChoiceZone, articleZone } = extractRecommendationZones(html, { matchName: item.match });
+      const candidates = collectCandidatesAcrossZones({ mainForecastZone, editorChoiceZone, articleZone });
+      const primaryCandidate = candidates[0] || null;
+      const acceptableCandidates = candidates.filter(isCandidateAcceptable);
+      const structuredBets = buildStructuredBetsFromCandidates(item, acceptableCandidates);
+      const hasCandidateDrivenEditorial = candidates.length > 0;
+      const shouldFailClosed = enforceFailClosed && hasCandidateDrivenEditorial && acceptableCandidates.length < 3;
       const correctedStartsAt = extractMatchPageStartsAt(html, item);
       const shouldCorrectStartsAt = !correctStartsAtIds || correctStartsAtIds.has(item.id);
 
-      if (!editorial?.mainThought && !(shouldCorrectStartsAt && correctedStartsAt)) {
+      if (!editorial?.mainThought && !primaryCandidate && !(shouldCorrectStartsAt && correctedStartsAt)) {
         return item;
       }
 
-      return {
+      if (shouldFailClosed) {
+        return null;
+      }
+
+      const enrichedItem = {
         ...item,
         starts_at: shouldCorrectStartsAt && correctedStartsAt ? correctedStartsAt : item.starts_at,
-        main_thought: editorial?.mainThought || item.main_thought,
-        source_coeff: Number.isFinite(editorial?.coeff) ? editorial.coeff : item.source_coeff,
+        main_thought: editorial?.mainThought
+          || primaryCandidate?.canonicalForecast
+          || primaryCandidate?.rawForecast
+          || item.main_thought,
+        source_coeff: Number.isFinite(primaryCandidate?.coeff)
+          ? primaryCandidate.coeff
+          : (Number.isFinite(editorial?.coeff) ? editorial.coeff : item.source_coeff),
         confidence: Number.isFinite(editorial?.probabilityPercent)
           ? editorial.probabilityPercent
           : item.confidence,
         editorial_rationale: editorial?.rationale != null ? editorial.rationale : (item.editorial_rationale ?? ''),
+      };
+      return {
+        ...enrichedItem,
+        bets: structuredBets || enrichedItem.bets || buildBetLineup(enrichedItem),
       };
     } catch {
       return item;
     }
   }));
 
-  return enriched;
+  return enriched.filter(Boolean);
 }
 
 async function loadLiveRecommendations({ liveLoader, matchPageLoader, favoriteSports = [], limit = 6, upcomingOnly = true, now = Date.now() } = {}) {
@@ -532,6 +615,7 @@ async function loadLiveRecommendations({ liveLoader, matchPageLoader, favoriteSp
     const correctedItems = await enrichFromMatchPages(metadataCandidates, {
       matchPageLoader,
       correctStartsAtIds: recentPastCandidateIds,
+      enforceFailClosed: false,
     });
     const correctedById = new Map(correctedItems.map((item) => [item.id, item]));
     enrichedAggregated = aggregated.map((item) => correctedById.get(item.id) || item);
@@ -548,6 +632,7 @@ async function loadLiveRecommendations({ liveLoader, matchPageLoader, favoriteSp
   return await enrichFromMatchPages(itemsForEnrichment, {
     matchPageLoader,
     correctStartsAtIds: new Set(),
+    enforceFailClosed: true,
   });
 }
 
