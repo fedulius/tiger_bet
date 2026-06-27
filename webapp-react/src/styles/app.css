@@ -1,16 +1,24 @@
 :root {
-  color-scheme: light dark;
-  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-  --surface: #ffffff;
-  --surface-muted: #f5f7fb;
-  --surface-strong: #eef3ff;
-  --text: #1f2937;
-  --text-soft: #5b6474;
-  --line: #d7dce7;
-  --line-strong: #c7d2fe;
-  --link: #2563eb;
-  --link-strong: #1d4ed8;
-  --shadow: 0 16px 48px rgba(15, 23, 42, 0.08);
+  color-scheme: dark;
+  font-family: 'Manrope', Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  --bg: #0e1320;
+  --surface: #161c2e;
+  --surface-2: #1f263d;
+  --accent: #2b59d6;
+  --accent-hover: #3d6be8;
+  --text: #f1f4f9;
+  --text-muted: #8b95b0;
+  --border: #2a334d;
+  --success: #22c55e;
+  --warning: #eab308;
+  --surface-muted: #161c2e;
+  --surface-strong: #1f263d;
+  --text-soft: #8b95b0;
+  --line: #2a334d;
+  --line-strong: #3d6be8;
+  --link: #2b59d6;
+  --link-strong: #3d6be8;
+  --shadow: 0 16px 48px rgba(0, 0, 0, 0.3);
 }
 
 * {
@@ -30,6 +38,7 @@ body {
     radial-gradient(circle at top, rgba(37, 99, 235, 0.08), transparent 34%),
     var(--surface-muted);
   color: var(--text);
+  overscroll-behavior: none;
 }
 
 a {
@@ -191,6 +200,22 @@ section h2,
   align-items: flex-start;
 }
 
+.section-head-stack h2,
+.section-head h2 {
+  font-size: 1.22rem;
+}
+
+.favorites-sports-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.favorites-sports-count {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
 .chips-row {
   display: flex;
   flex-wrap: wrap;
@@ -198,8 +223,8 @@ section h2,
 }
 
 #sports-chips {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 12px;
 }
 
@@ -235,14 +260,20 @@ section h2,
 }
 
 .recommendation-card {
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  padding: 14px;
-  background: linear-gradient(180deg, color-mix(in oklab, var(--surface) 82%, var(--surface-strong)), var(--surface));
+  border: 1px solid #29324a;
+  border-radius: 20px;
+  padding: 16px;
+  background: linear-gradient(180deg, #1a2032 0%, #151b2b 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+  transition: border-color 0.2s ease, transform 0.2s ease;
 }
 
 .recommendation-card-detailed {
   padding: 18px;
+}
+
+.recommendation-card:hover {
+  border-color: #3b4b72;
 }
 
 .recommendation-head {
@@ -255,13 +286,14 @@ section h2,
 
 .recommendation-head h3 {
   margin: 0;
-  font-size: 1.02rem;
+  font-size: 1.08rem;
+  font-weight: 800;
 }
 
 .recommendation-subtitle {
   margin: 4px 0 0;
-  color: var(--text-soft);
-  font-size: 0.9rem;
+  color: #8d97b2;
+  font-size: 0.86rem;
 }
 
 .recommendation-badge {
@@ -271,9 +303,9 @@ section h2,
   border-radius: 999px;
   font-size: 0.75rem;
   font-weight: 700;
-  border: 1px solid var(--line-strong);
-  color: var(--link-strong);
-  background: color-mix(in oklab, var(--link) 16%, var(--surface));
+  border: 1px solid #4468df;
+  color: #9cb4ff;
+  background: rgba(63, 99, 223, 0.14);
 }
 
 .recommendation-badge-muted {
@@ -360,6 +392,7 @@ section h2,
 .button-link,
 .primary-button,
 .secondary-button,
+.danger-button,
 .modal-switch,
 #favorites-close-btn,
 .modal-close-btn {
@@ -386,6 +419,22 @@ section h2,
   background: color-mix(in oklab, var(--surface) 75%, var(--surface-muted));
 }
 
+.danger-button {
+  border-color: transparent;
+  background: linear-gradient(180deg, #c0392b, #96281b);
+  color: white;
+}
+
+.confirm-remove-card {
+  width: min(360px, 100%);
+}
+
+.confirm-remove-text {
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+  color: var(--text-soft);
+}
+
 .recommendations-empty {
   font-size: 0.92rem;
   color: var(--text-soft);
@@ -394,8 +443,8 @@ section h2,
 /* Compact card time */
 .card-time {
   margin: 0 0 10px;
-  font-size: 0.85rem;
-  color: var(--text-soft);
+  font-size: 0.82rem;
+  color: #8d97b2;
 }
 
 /* Risk buttons */
@@ -414,7 +463,7 @@ section h2,
   border-radius: 12px;
   border: 1.5px solid;
   font-size: 0.88rem;
-  font-weight: 600;
+  font-weight: 800;
   flex: 1;
   justify-content: center;
 }
@@ -426,21 +475,21 @@ section h2,
 }
 
 .risk-btn-low {
-  border-color: #bbf7d0;
-  background: #f0fdf4;
-  color: #15803d;
+  border-color: #166534;
+  background: rgba(22, 101, 52, 0.18);
+  color: #4ade80;
 }
 
 .risk-btn-mid {
-  border-color: #fde68a;
-  background: #fffbeb;
-  color: #b45309;
+  border-color: #92400e;
+  background: rgba(146, 64, 14, 0.18);
+  color: #f59e0b;
 }
 
 .risk-btn-high {
-  border-color: #fecaca;
-  background: #fef2f2;
-  color: #b91c1c;
+  border-color: #991b1b;
+  background: rgba(153, 27, 27, 0.18);
+  color: #f87171;
 }
 
 /* Risk badge */
@@ -455,21 +504,21 @@ section h2,
 }
 
 .risk-badge-low {
-  border-color: #bbf7d0;
-  background: #f0fdf4;
-  color: #15803d;
+  border-color: #166534;
+  background: rgba(22, 101, 52, 0.18);
+  color: #4ade80;
 }
 
 .risk-badge-mid {
-  border-color: #fde68a;
-  background: #fffbeb;
-  color: #b45309;
+  border-color: #92400e;
+  background: rgba(146, 64, 14, 0.18);
+  color: #f59e0b;
 }
 
 .risk-badge-high {
-  border-color: #fecaca;
-  background: #fef2f2;
-  color: #b91c1c;
+  border-color: #991b1b;
+  background: rgba(153, 27, 27, 0.18);
+  color: #f87171;
 }
 
 /* Bet card risk border */
@@ -491,21 +540,21 @@ section h2,
 }
 
 .modal-risk-switch-low.active {
-  border-color: #bbf7d0;
-  background: #f0fdf4;
-  color: #15803d;
+  border-color: #166534;
+  background: color-mix(in oklab, var(--surface) 88%, var(--surface-muted));
+  color: #4ade80;
 }
 
 .modal-risk-switch-mid.active {
-  border-color: #fde68a;
-  background: #fffbeb;
-  color: #b45309;
+  border-color: #92400e;
+  background: color-mix(in oklab, var(--surface) 88%, var(--surface-muted));
+  color: #f59e0b;
 }
 
 .modal-risk-switch-high.active {
-  border-color: #fecaca;
-  background: #fef2f2;
-  color: #b91c1c;
+  border-color: #991b1b;
+  background: color-mix(in oklab, var(--surface) 88%, var(--surface-muted));
+  color: #f87171;
 }
 
 /* Bet detail block in modal */
@@ -539,6 +588,47 @@ section h2,
   border-top: 1px solid var(--line);
 }
 
+/* AI brief block inside BetModal */
+.ai-brief {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  margin-bottom: 10px;
+  display: grid;
+  gap: 8px;
+  background: color-mix(in oklab, var(--surface) 88%, var(--surface-muted));
+}
+
+.ai-brief-headline {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ai-brief-body {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--text-soft);
+  line-height: 1.5;
+}
+
+.ai-brief-risk {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-soft);
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.ai-brief-stale {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted, var(--text-soft));
+  opacity: 0.7;
+  font-style: italic;
+}
+
 .bet-compact-desc {
   padding-top: 8px;
   border-top: 1px solid var(--line);
@@ -565,14 +655,15 @@ section h2,
 
 .basis-box {
   margin-top: 12px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: color-mix(in oklab, var(--surface) 84%, var(--surface-muted));
+  padding: 14px;
+  border: 1px solid #29324a;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #1a2032 0%, #151b2b 100%);
 }
 
 .basis-box p {
   margin: 0;
+  color: #dbe3f4;
 }
 
 .modal {
@@ -584,15 +675,45 @@ section h2,
   align-items: center;
   justify-content: center;
   padding: 16px;
+  animation: modal-overlay-in 210ms ease both;
 }
 
 .modal-card {
   width: min(640px, 100%);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  padding: 14px;
+  background: #161c2e;
+  border: 1px solid #2a334d;
+  border-radius: 24px;
+  padding: 16px;
   box-shadow: var(--shadow);
+  animation: modal-card-in 210ms ease both;
+}
+
+@keyframes modal-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modal-overlay-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes modal-card-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes modal-card-out {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.97); }
+}
+
+.modal--closing {
+  animation: modal-overlay-out 190ms ease both;
+}
+
+.modal--closing .modal-card {
+  animation: modal-card-out 190ms ease both;
 }
 
 .modal-head {
@@ -604,6 +725,7 @@ section h2,
 
 .modal-head h3 {
   margin: 0;
+  font-size: 1.08rem;
 }
 
 .modal-switches {
@@ -614,8 +736,8 @@ section h2,
 
 .modal-switch.active {
   border-color: transparent;
-  background: color-mix(in oklab, var(--link) 18%, var(--surface));
-  color: var(--link-strong);
+  background: rgba(63, 99, 223, 0.18);
+  color: #9cb4ff;
 }
 
 #favorites-search {
@@ -631,11 +753,13 @@ section h2,
 .favorites-options {
   max-height: 260px;
   overflow: auto;
-  border: 1px solid var(--line);
+  overscroll-behavior: none;
+  border: 1px solid #2a334d;
   border-radius: 14px;
   padding: 8px;
   display: grid;
   gap: 8px;
+  background: #121826;
 }
 
 .favorite-option {
@@ -648,7 +772,7 @@ section h2,
 }
 
 .favorite-option:hover {
-  background: color-mix(in oklab, var(--surface-muted) 80%, var(--surface));
+  background: #1c2436;
 }
 
 .modal-actions {
@@ -753,18 +877,18 @@ section h2,
   min-height: 36px;
   padding: 6px 14px;
   border-radius: 999px;
-  border: 1.5px solid var(--line);
-  background: var(--surface);
-  color: var(--text-soft);
+  border: 1.5px solid #2a334d;
+  background: #171d2e;
+  color: #8d97b2;
   font-size: 0.88rem;
-  font-weight: 500;
+  font-weight: 700;
   cursor: pointer;
 }
 
 .feed-filter-chip.active {
-  border-color: var(--link);
-  background: color-mix(in oklab, var(--link) 14%, var(--surface));
-  color: var(--link-strong);
+  border-color: #4468df;
+  background: rgba(63, 99, 223, 0.14);
+  color: #9cb4ff;
   font-weight: 700;
 }
 
@@ -780,6 +904,20 @@ section h2,
   font-size: 0.9rem;
 }
 
+.feed-status strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.feed-status div {
+  max-width: 420px;
+  margin: 0 auto;
+  line-height: 1.45;
+}
+
 .feed-error {
   display: flex;
   align-items: center;
@@ -792,18 +930,19 @@ section h2,
 
 /* Feed card */
 .feed-card {
-  border: 1px solid var(--line);
-  border-radius: 18px;
+  border: 1px solid #29324a;
+  border-radius: 20px;
   padding: 14px;
-  background: linear-gradient(180deg, color-mix(in oklab, var(--surface) 82%, var(--surface-strong)), var(--surface));
+  background: linear-gradient(180deg, #1a2032 0%, #151b2b 100%);
   cursor: pointer;
   display: block;
   width: 100%;
   text-align: left;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
 }
 
 .feed-card:hover {
-  border-color: var(--line-strong);
+  border-color: #3b4b72;
 }
 
 .feed-card-header {
@@ -816,23 +955,23 @@ section h2,
 
 .feed-card-meta {
   font-size: 0.78rem;
-  color: var(--text-soft);
+  color: #8d97b2;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  font-weight: 600;
+  font-weight: 800;
 }
 
 .feed-card-time {
   font-size: 0.82rem;
-  color: var(--text-soft);
+  color: #8d97b2;
   white-space: nowrap;
   flex-shrink: 0;
 }
 
 .feed-card-match {
   margin: 0 0 10px;
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: 1.06rem;
+  font-weight: 800;
 }
 
 .feed-card-bet {
@@ -843,21 +982,21 @@ section h2,
 }
 
 .feed-card-forecast {
-  font-weight: 700;
+  font-weight: 800;
   font-size: 0.95rem;
-  color: var(--link-strong);
+  color: #9cb4ff;
 }
 
 .feed-card-coeff {
   font-size: 0.88rem;
-  color: var(--text-soft);
-  font-weight: 600;
+  color: #8d97b2;
+  font-weight: 700;
 }
 
 .feed-card-summary {
   margin: 0;
   font-size: 0.85rem;
-  color: var(--text-soft);
+  color: #8d97b2;
   line-height: 1.4;
 }
 
@@ -884,6 +1023,12 @@ section h2,
     align-items: flex-start;
     padding: 24px 12px 12px;
     overflow-y: auto;
+    overscroll-behavior: none;
+  }
+
+  .modal.modal-centered {
+    align-items: center;
+    padding: 16px 12px;
   }
 
   .brand-row,
@@ -891,6 +1036,10 @@ section h2,
   .bet-card-head {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .favorites-sports-actions {
+    justify-content: space-between;
   }
 
   .stats-grid {
@@ -954,4 +1103,313 @@ section h2,
     background: rgba(153, 27, 27, 0.18);
     color: #f87171;
   }
+}
+
+/* Targeted header styles to match reference image */
+.header-blue {
+  background: #1e40af;
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 16px 20px;
+}
+
+.header-blue .header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.header-blue .eyebrow {
+  color: rgba(255,255,255,0.85);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+}
+
+.header-blue .status {
+  font-size: 0.72rem;
+  color: rgba(255,255,255,0.9);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.header-blue .status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  background: #22c55e;
+  border-radius: 50%;
+}
+
+.header-blue .brand-row {
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.header-blue .brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-blue .logo-t {
+  width: 36px;
+  height: 36px;
+  background: #fff;
+  color: #0066ff;
+  font-weight: 800;
+  font-size: 1.35rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+}
+
+.header-blue h1 {
+  font-size: 1.35rem;
+  margin: 0;
+  font-weight: 700;
+}
+
+.header-blue .header-subtitle {
+  margin: 2px 0 0;
+  color: rgba(255,255,255,0.85);
+  font-size: 0.9rem;
+}
+
+.header-blue .refresh-btn {
+  background: #fff;
+  color: #0066ff;
+  border: none;
+  border-radius: 999px;
+  padding: 10px 22px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.header-blue .stats-grid {
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-top: 0;
+}
+
+.header-blue .stat-card {
+  background: rgba(255,255,255,0.15);
+  border: none;
+  border-radius: 16px;
+  padding: 14px 16px;
+  color: #fff;
+  text-align: center;
+}
+
+.header-blue .stat-card strong {
+  font-size: 1.6rem;
+  display: block;
+  line-height: 1;
+}
+
+.header-blue .stat-card span {
+  font-size: 0.8rem;
+  opacity: 0.9;
+  display: block;
+  margin-top: 4px;
+}
+
+/* Sport cards - production clean design matching reference */
+.sport-card {
+  background: #1b2133;
+  border: 1px solid #2a3146;
+  border-radius: 18px;
+  padding: 16px;
+  transition: all 0.2s ease;
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+.sport-card:hover {
+  border-color: #3d4660;
+}
+
+.sport-card-head {
+  margin-bottom: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.sport-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.sport-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
+.sport-icon-football {
+  background: linear-gradient(180deg, #26472b 0%, #1b2f22 100%);
+}
+
+.sport-icon-hockey {
+  background: linear-gradient(180deg, #273248 0%, #1b2436 100%);
+}
+
+.sport-icon-default {
+  background: linear-gradient(180deg, #323b52 0%, #232b3d 100%);
+}
+
+.sport-name {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 4px;
+  color: #f5f7fb;
+}
+
+.sport-leagues {
+  font-size: 14px;
+  color: #7f8aa3;
+  font-weight: 500;
+  margin: 0;
+}
+
+.sport-tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 12px;
+  margin-bottom: 14px;
+  border-top: 1px solid #262d42;
+}
+
+.league-tag {
+  background: #30374a;
+  color: #dde3f0;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.sport-configure-btn {
+  width: 100%;
+  min-height: 38px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #3f63df 0%, #3657cf 100%);
+  border: none;
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+}
+
+.sport-configure-btn:hover {
+  background: linear-gradient(180deg, #4a6de7 0%, #3d60da 100%);
+}
+
+.sport-remove-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 12px;
+  background: #262d40;
+  color: #808aa2;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.favorites-add-card {
+  width: 100%;
+  margin-top: 12px;
+  min-height: 58px;
+  border-radius: 18px;
+  border: 1px dashed #30384d;
+  background: transparent;
+  color: #cbd3e6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.favorites-add-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #3f63df 0%, #3657cf 100%);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* Optical glyph centering — shared box layout, per-glyph Y offsets decoupled */
+.sport-icon-glyph,
+.sport-remove-glyph,
+.favorites-add-plus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1em;
+  height: 1em;
+  line-height: 1;
+  text-align: center;
+}
+
+/* Sport emoji icons sit naturally; no global nudge */
+.sport-icon-glyph {
+  transform: translateY(0);
+}
+
+/* ⭐ default star renders slightly low in most emoji fonts — nudge it up */
+.sport-icon-glyph-star {
+  transform: translateY(-2px);
+}
+
+/* × and + are math glyphs that tend to sit at centre baseline — no downward push */
+.sport-remove-glyph {
+  font-size: 18px;
+  transform: translateY(-1px);
+}
+
+.favorites-add-plus {
+  font-size: 18px;
+  transform: translateY(-1px);
+}
+
+.sport-icon-img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.sport-option-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  flex-shrink: 0;
 }

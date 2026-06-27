@@ -1,7 +1,28 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { formatMoscowDateTime } from '../lib/format.js';
 
 export function FeedBetModal({ item, onClose }) {
+  const [closing, setClosing] = useState(false);
+
+  function handleClose() {
+    setClosing(true);
+    setTimeout(onClose, 200);
+  }
+
+  useEffect(() => {
+    const scrollY = window.scrollY;
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = '100%';
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
+      window.scrollTo({ top: scrollY, left: 0, behavior: 'instant' });
+    };
+  }, []);
   const { primary_bet } = item;
   const meta = [item.sport, item.country, item.league].filter(Boolean).join(' · ');
   const forecastText = String(primary_bet?.forecast || '').trim();
@@ -12,7 +33,7 @@ export function FeedBetModal({ item, onClose }) {
     || 'Описание появится после обновления данных.';
 
   return (
-    <div className="modal" aria-hidden="false" onClick={onClose}>
+    <div className={`modal${closing ? ' modal--closing' : ''}`} aria-hidden="false" onClick={handleClose}>
       <div
         className="modal-card"
         role="dialog"
@@ -27,7 +48,7 @@ export function FeedBetModal({ item, onClose }) {
               {meta || '—'} · {formatMoscowDateTime(item.starts_at || '') || '—'}
             </p>
           </div>
-          <button className="modal-close-btn" type="button" aria-label="Закрыть" onClick={onClose}>×</button>
+          <button className="modal-close-btn" type="button" aria-label="Закрыть" onClick={handleClose}>×</button>
         </div>
 
         {primary_bet ? (
@@ -48,7 +69,7 @@ export function FeedBetModal({ item, onClose }) {
         ) : null}
 
         <div className="modal-actions">
-          <button className="secondary-button" type="button" onClick={onClose}>Закрыть</button>
+          <button className="secondary-button" type="button" onClick={handleClose}>Закрыть</button>
         </div>
       </div>
     </div>

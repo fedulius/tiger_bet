@@ -9,6 +9,18 @@ const {
   buildFeedPayload,
   buildFeedPayloadFromNormalized,
 } = require('../../webapp/services/feedService');
+const {
+  buildSnapshot,
+  getOrBuildSnapshot,
+  readCurrentSnapshot,
+  readSnapshotByVersion,
+  publishSnapshot,
+  CURRENT_VERSION_KEY,
+  LOCK_KEY,
+  FRESH_TTL_MS,
+  getSnapshotItemsKey,
+  getSnapshotMetaKey,
+} = require('../../webapp/services/feedSnapshotService');
 
 // nowMs = 2026-06-23T15:00:00Z → Moscow 18:00
 // Moscow today:    [2026-06-22T21:00:00Z, 2026-06-23T21:00:00Z)
@@ -431,4 +443,136 @@ test('buildFeedPayloadFromNormalized: available_sports present in response', () 
   assert.ok(Array.isArray(payload.available_sports));
   assert.ok(payload.available_sports.includes('Футбол'));
   assert.ok(payload.available_sports.includes('Теннис'));
+});
+
+function makeFakeRedis({ store = {} } = {}) {
+  return {
+    store,
+    async get(key) {
+      return Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null;
+    },
+    async set(key, value, opts = {}) {
+      if (opts && opts.NX && Object.prototype.hasOwnProperty.call(store, key)) {
+        return null;
+      }
+      store[key] = value;
+      return 'OK';
+    },
+    async del(...keys) {
+      for (const key of keys.flat()) delete store[key];
+    },
+  };
+}
+
+// ─── snapshot service ──────────────────────────────────────────────────────────
+
+test('publishSnapshot: stores immutable versioned items/meta and switches current version', async () => {
+  const redis = makeFakeRedis();
+  const snapshot = {
+    feed_version: 'v-unit-1',
+    generated_at: new Date(NOW_MS).toISOString(),
+    generated_at_ms: NOW_MS,
+    items: [normalizeFeedItem(ITEMS.today1)].filter(Boolean),
+  };
+
+  await publishSnapshot(redis, snapshot);
+
+  assert.equal(redis.store[CURRENT_VERSION_KEY], 'v-unit-1');
+  assert.ok(redis.store[getSnapshotItemsKey('v-unit-1')]);
+  assert.ok(redis.store[getSnapshotMetaKey('v-unit-1')]);
+
+  const current = await readCurrentSnapshot(redis);
+  assert.equal(current.feed_version, 'v-unit-1');
+  assert.equal(current.items.length, 1);
+  assert.equal(current.items[0].id, 'today-1');
+});
+
+test('readSnapshotByVersion: returns same immutable data for repeated reads of one version', async () => {
+  const redis = makeFakeRedis();
+  const snapshot = {
+    feed_version: 'v-unit-2',
+    generated_at: new Date(NOW_MS).toISOString(),
+    generated_at_ms: NOW_MS,
+    items: [normalizeFeedItem(ITEMS.today1), normalizeFeedItem(ITEMS.tomorrow1)].filter(Boolean),
+  };
+
+  await publishSnapshot(redis, snapshot);
+
+  const first = await readSnapshotByVersion(redis, 'v-unit-2');
+  const second = await readSnapshotByVersion(redis, 'v-unit-2');
+  assert.deepEqual(first, second);
+});
+
+test('getOrBuildSnapshot: returns stale snapshot when rebuild lock is already held', async () => {
+  const staleMs = NOW_MS - FRESH_TTL_MS - 1000;
+  const staleSnapshot = {
+    feed_version: 'v-stale-unit',
+    generated_at: new Date(staleMs).toISOString(),
+    generated_at_ms: staleMs,
+    items: [normalizeFeedItem(ITEMS.today1)].filter(Boolean),
+  };
+  const redis = makeFakeRedis({
+    store: {
+      [CURRENT_VERSION_KEY]: staleSnapshot.feed_version,
+      [getSnapshotMetaKey(staleSnapshot.feed_version)]: JSON.stringify({
+        feed_version: staleSnapshot.feed_version,
+        generated_at: staleSnapshot.generated_at,
+        generated_at_ms: staleSnapshot.generated_at_ms,
+      }),
+      [getSnapshotItemsKey(staleSnapshot.feed_version)]: JSON.stringify(staleSnapshot.items),
+      [LOCK_KEY]: '1',
+    },
+  });
+
+  const result = await getOrBuildSnapshot(redis, async () => {
+    throw new Error('loader must not run when lock is held');
+  });
+
+  assert.equal(result.feed_version, 'v-stale-unit');
+  assert.equal(result.items.length, 1);
+});
+
+test('getOrBuildSnapshot: rebuild publishes new immutable version and preserves old snapshot briefly', async () => {
+  const staleMs = NOW_MS - FRESH_TTL_MS - 1000;
+  const oldSnapshot = {
+    feed_version: 'v-old-unit',
+    generated_at: new Date(staleMs).toISOString(),
+    generated_at_ms: staleMs,
+    items: [normalizeFeedItem(ITEMS.today1)].filter(Boolean),
+  };
+  const redis = makeFakeRedis({
+    store: {
+      [CURRENT_VERSION_KEY]: oldSnapshot.feed_version,
+      [getSnapshotMetaKey(oldSnapshot.feed_version)]: JSON.stringify({
+        feed_version: oldSnapshot.feed_version,
+        generated_at: oldSnapshot.generated_at,
+        generated_at_ms: oldSnapshot.generated_at_ms,
+      }),
+      [getSnapshotItemsKey(oldSnapshot.feed_version)]: JSON.stringify(oldSnapshot.items),
+    },
+  });
+
+  const originalDateNow = Date.now;
+  Date.now = () => NOW_MS + 123456;
+  try {
+    const rebuilt = await getOrBuildSnapshot(redis, async () => [ITEMS.today2, ITEMS.tomorrow1]);
+    assert.notEqual(rebuilt.feed_version, 'v-old-unit');
+    assert.equal(redis.store[CURRENT_VERSION_KEY], rebuilt.feed_version, 'current_version must switch only to newly published version');
+
+    const oldRead = await readSnapshotByVersion(redis, 'v-old-unit');
+    const newRead = await readCurrentSnapshot(redis);
+    assert.equal(oldRead.feed_version, 'v-old-unit', 'old snapshot must remain readable for a short overlap period');
+    assert.equal(oldRead.items.length, 1);
+    assert.equal(newRead.feed_version, rebuilt.feed_version);
+    assert.equal(newRead.items.length, 2);
+  } finally {
+    Date.now = originalDateNow;
+  }
+});
+
+test('buildSnapshot: normalizes raw recommendation items into feed snapshot items', async () => {
+  const snapshot = await buildSnapshot(async () => [ITEMS.today1, ITEMS.past, { bad: true }]);
+  assert.ok(snapshot.feed_version.startsWith('v'));
+  assert.equal(snapshot.items.length, 2, 'snapshot build normalizes valid items and leaves time filtering to payload assembly');
+  assert.ok(snapshot.items.every((item) => item.primary_bet && item.primary_bet.forecast));
 });

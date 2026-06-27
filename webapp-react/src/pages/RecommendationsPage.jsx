@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { getFavorites, getRecommendations, setFavorites, auth } from '../lib/api.js';
 import { formatMoscowDateTime } from '../lib/format.js';
 import { formatRelativeUpdatedAt, getTopRecommendations } from '../lib/recommendations.js';
@@ -6,8 +6,14 @@ import { BetModal, RISK_LEVELS } from '../components/BetModal.jsx';
 
 const DEFAULT_CATALOG = {
   sports: [],
+  sportUrlMap: {},
   leaguesBySport: {},
 };
+
+const SPORT_ICON_SVG_BY_SLUG = Object.fromEntries(
+  Object.entries(import.meta.glob('../assets/sport-icons/*.svg', { eager: true, query: '?raw', import: 'default' }))
+    .map(([path, svg]) => [path.split('/').pop().replace('.svg', ''), svg]),
+);
 
 function uniqTrimmed(arr) {
   return [...new Set((Array.isArray(arr) ? arr : []).map((v) => String(v || '').trim()).filter(Boolean))];
@@ -25,9 +31,11 @@ function normalizeSportSetting(item) {
 
   const leagues = uniqTrimmed(item.leagues);
   const availableLeagues = uniqTrimmed(item.available_leagues);
+  const sportUrl = String(item.sport_url || '').trim();
 
   return {
     name,
+    sportUrl,
     leagues,
     allLeagues: item.all_leagues !== false ? leagues.length === 0 : false,
     availableLeagues,
@@ -40,9 +48,22 @@ function normalizeFavoritesPayload(payload) {
     .map(normalizeSportSetting)
     .filter(Boolean);
 
+  const availableSportsRaw = Array.isArray(payload?.available_sports) ? payload.available_sports : [];
+  const sportUrlMap = {};
+  const availableSportsNames = [];
+  for (const item of availableSportsRaw) {
+    const name = typeof item === 'string' ? item.trim() : String(item?.sport_name || '').trim();
+    const url = typeof item === 'object' ? String(item?.sport_url || '').trim() : '';
+    if (name) {
+      availableSportsNames.push(name);
+      if (url) sportUrlMap[name] = url;
+    }
+  }
+
   return {
     sports,
-    availableSports: uniqTrimmed(payload?.available_sports),
+    availableSports: [...new Set(availableSportsNames)],
+    sportUrlMap,
     leaguesBySport: payload?.leagues_catalog && typeof payload.leagues_catalog === 'object'
       ? Object.fromEntries(Object.entries(payload.leagues_catalog).map(([key, value]) => [String(key || '').trim(), uniqTrimmed(value)]))
       : {},
@@ -90,19 +111,69 @@ function RecommendationCard({ item, onOpenBet }) {
   );
 }
 
+function getSportIconDataUrl(sportUrl) {
+  const slug = String(sportUrl || '').trim();
+  const svg = slug ? SPORT_ICON_SVG_BY_SLUG[slug] : '';
+
+  if (!svg) {
+    return '';
+  }
+
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+function SportIcon({ sportUrl, alt, className }) {
+  const src = getSportIconDataUrl(sportUrl);
+
+  if (!src) {
+    return null;
+  }
+
+  return <img className={className} src={src} alt={alt} />;
+}
+
 function SportSettingCard({ item, onConfigure, onRemove }) {
+  const leagueCount = item.leagues && item.leagues.length > 0 ? item.leagues.length : 0;
+  const leagueLabel = leagueCount > 0 ? `${leagueCount} выбранные лиги` : 'Все лиги включены';
+  const showTags = item.leagues && item.leagues.length > 0;
+
   return (
-    <article className="recommendation-card" data-id={`favorite-sport-${item.name}`}>
-      <div className="recommendation-head">
-        <div>
-          <h3>{item.name}</h3>
-          <p className="recommendation-subtitle">{item.summary || 'Все лиги'}</p>
+    <article className="sport-card" data-id={`favorite-sport-${item.name}`}>
+      <div className="sport-card-head">
+        <div className="sport-card-meta">
+          <div className="sport-icon sport-icon-default">
+            <SportIcon className="sport-icon-img" sportUrl={item.sportUrl} alt={item.name} />
+          </div>
+          <div>
+            <h3 className="sport-name">{item.name}</h3>
+            <p className="sport-leagues">{leagueLabel}</p>
+          </div>
         </div>
+        <button
+          type="button"
+          onClick={() => onRemove(item.name)}
+          aria-label="Удалить"
+          className="sport-remove-btn"
+        >
+          <span className="sport-remove-glyph">×</span>
+        </button>
       </div>
-      <div className="recommendation-actions">
-        <button className="secondary-button" type="button" onClick={() => onConfigure(item.name)}>Настроить лиги</button>
-        <button className="secondary-button" type="button" onClick={() => onRemove(item.name)}>Удалить</button>
-      </div>
+
+      {showTags && (
+        <div className="sport-tags-row">
+          {item.leagues.map((league) => (
+            <span key={league} className="league-tag">{league}</span>
+          ))}
+        </div>
+      )}
+
+      <button
+        className="primary-button sport-configure-btn"
+        type="button"
+        onClick={() => onConfigure(item.name)}
+      >
+        Настроить лиги
+      </button>
     </article>
   );
 }
@@ -113,11 +184,15 @@ export function RecommendationsPage() {
   const [isRecommendationsLoading, setIsRecommendationsLoading] = useState(true);
   const [refreshStatus, setRefreshStatus] = useState('');
   const [authGate, setAuthGate] = useState('pending');
+  const recommendationsVersionRef = useRef('');
 
   const [favorites, setFavoritesState] = useState({ sports: [] });
   const [catalog, setCatalog] = useState(DEFAULT_CATALOG);
 
   const [betModal, setBetModal] = useState({ isOpen: false, item: null, betIndex: 0 });
+  const [confirmRemove, setConfirmRemove] = useState({ isOpen: false, sportName: '' });
+  const [confirmRemoveClosing, setConfirmRemoveClosing] = useState(false);
+  const [favoritesModalClosing, setFavoritesModalClosing] = useState(false);
 
   const [modal, setModal] = useState({
     isOpen: false,
@@ -157,15 +232,28 @@ export function RecommendationsPage() {
     sports: favorites.sports.length,
   }), [favorites.sports.length, recommendations.length]);
 
-  async function refreshRecommendations() {
+  async function refreshRecommendations(options = {}) {
     setRefreshStatus('Обновляем...');
     setRecommendationsError('');
 
+    const requestedVersionSource = options.recommendationsVersion ?? recommendationsVersionRef.current;
+    const requestedVersion = options.resetVersion
+      ? ''
+      : String(requestedVersionSource || '').trim();
+
     try {
-      const payload = await getRecommendations();
+      const payload = await getRecommendations(
+        requestedVersion ? { recommendations_version: requestedVersion } : {},
+      );
+      recommendationsVersionRef.current = String(payload?.recommendations_version || '').trim();
       setRecommendations(getTopRecommendations(payload?.items || []));
       setRefreshStatus(formatRelativeUpdatedAt(payload?.updated_at || new Date().toISOString()));
-    } catch {
+    } catch (error) {
+      if (error?.status === 409 && error?.payload?.error === 'STALE_RECOMMENDATIONS_VERSION') {
+        recommendationsVersionRef.current = '';
+        setRecommendationsError(String(error?.payload?.message || 'Рекомендации обновились'));
+        return await refreshRecommendations({ resetVersion: true });
+      }
       setRecommendationsError('Не удалось обновить рекомендации.');
       setRefreshStatus('Ошибка обновления');
       if (!recommendations.length) {
@@ -209,6 +297,7 @@ export function RecommendationsPage() {
       setFavoritesState({ sports: normalized.sports });
       setCatalog({
         sports: normalized.availableSports,
+        sportUrlMap: normalized.sportUrlMap,
         leaguesBySport: normalized.leaguesBySport,
       });
     } catch {
@@ -228,7 +317,8 @@ export function RecommendationsPage() {
 
     const normalized = normalizeFavoritesPayload(payload);
     setFavoritesState({ sports: normalized.sports });
-    await refreshRecommendations();
+    recommendationsVersionRef.current = '';
+    await refreshRecommendations({ resetVersion: true });
   }
 
   useEffect(() => {
@@ -263,6 +353,40 @@ export function RecommendationsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!modal.isOpen && !confirmRemove.isOpen) return;
+    const scrollY = window.scrollY;
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = '100%';
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
+      window.scrollTo({ top: scrollY, left: 0, behavior: 'instant' });
+    };
+  }, [modal.isOpen, confirmRemove.isOpen]);
+
+  function handleRemoveClick(sportName) {
+    setConfirmRemove({ isOpen: true, sportName });
+  }
+
+  function cancelConfirmRemove() {
+    setConfirmRemoveClosing(true);
+    setTimeout(() => {
+      setConfirmRemoveClosing(false);
+      setConfirmRemove({ isOpen: false, sportName: '' });
+    }, 200);
+  }
+
+  async function confirmRemoveSport() {
+    const { sportName } = confirmRemove;
+    cancelConfirmRemove();
+    await removeFavoriteSport(sportName);
+  }
+
   function openBetModal(item, betIndex) {
     setBetModal({ isOpen: true, item, betIndex });
   }
@@ -296,7 +420,11 @@ export function RecommendationsPage() {
   }
 
   function closeFavoritesModal() {
-    setModal((prev) => ({ ...prev, isOpen: false }));
+    setFavoritesModalClosing(true);
+    setTimeout(() => {
+      setFavoritesModalClosing(false);
+      setModal((prev) => ({ ...prev, isOpen: false }));
+    }, 200);
   }
 
   function togglePendingSport(value, checked) {
@@ -331,6 +459,7 @@ export function RecommendationsPage() {
           .filter((name) => !existingByName.has(name))
           .map((name) => ({
             name,
+            sportUrl: catalog.sportUrlMap?.[name] || '',
             leagues: [],
             allLeagues: true,
             availableLeagues: catalog.leaguesBySport?.[name] || [],
@@ -406,27 +535,27 @@ export function RecommendationsPage() {
 
   return (
     <>
-      <header className="header" id="top-header">
+      <header className="header header-blue" id="top-header">
+        <div className="header-top">
+          <span className="eyebrow">TELEGRAM WEBAPP</span>
+          <span className="status"><span className="status-dot"></span>{refreshStatus || '—'}</span>
+        </div>
         <div className="brand-row">
-          <div>
-            <p className="eyebrow">Telegram WebApp</p>
-            <h1>Tiger Bet</h1>
-            <p className="header-subtitle">Живые рекомендации и избранные фильтры в одном экране.</p>
+          <div className="brand">
+            <div className="logo-t">T</div>
+            <div>
+              <h1>Tiger Bet</h1>
+              <p className="header-subtitle">Живые рекомендации и избранные фильтры...</p>
+            </div>
           </div>
-          <button className="primary-button" id="refresh-btn" type="button" onClick={refreshRecommendationsWithAuth}>Обновить сейчас</button>
         </div>
 
-        <nav className="anchors" aria-label="Навигация по блокам">
-          <a href="#recommendations">Рекомендации</a>
-          <a href="#favorites-sports">Спорт</a>
-        </nav>
-
-        <div className="stats-grid" aria-label="Краткая сводка">
-          <div className="stat-card"><span>Карточек</span><strong>{stats.recommendations}</strong></div>
-          <div className="stat-card"><span>Спорт</span><strong>{stats.sports}</strong></div>
+        <div className="stats-grid" aria-label="Краткая сводка" style={{ marginBottom: '16px' }}>
+          <div className="stat-card"><strong>{stats.recommendations}</strong><span>карточек</span></div>
+          <div className="stat-card"><strong>{stats.sports}</strong><span>вида спорта</span></div>
         </div>
 
-        <div className="refresh-status" aria-live="polite">{refreshStatus}</div>
+        <button className="refresh-btn" type="button" onClick={refreshRecommendationsWithAuth} style={{ display: 'block', margin: '0 auto', padding: '8px 40px', fontSize: '1.05rem' }}>Обновить сейчас</button>
       </header>
 
       <main className="layout">
@@ -448,7 +577,7 @@ export function RecommendationsPage() {
 
           <div id="recommendations-list">
             {isRecommendationsLoading ? <div>Загрузка...</div> : null}
-            {!isRecommendationsLoading && recommendations.length === 0 ? <div className="recommendations-empty">Нет рекомендаций</div> : null}
+            {!isRecommendationsLoading && recommendations.length === 0 ? <div className="recommendations-empty">Нет подходящих событий для рекомендаций</div> : null}
             {!isRecommendationsLoading && recommendations.map((item) => (
               <RecommendationCard item={item} key={item.id || item.match} onOpenBet={openBetModal} />
             ))}
@@ -461,15 +590,21 @@ export function RecommendationsPage() {
               <h2>Избранные виды спорта</h2>
               <p className="section-description">Для каждого выбранного спорта можно отдельно оставить все лиги или сузить выбор до нужных турниров.</p>
             </div>
-            <button className="secondary-button" id="add-sports-btn" type="button" onClick={openSportsModal}>+ Добавить</button>
+            <div className="favorites-sports-actions">
+              <span className="favorites-sports-count">{favorites.sports.length} из 8</span>
+            </div>
           </div>
           <div id="sports-chips" className="chips-row">
             {favorites.sports.length === 0 ? (
               <span className="recommendations-empty">Пока пусто</span>
             ) : favorites.sports.map((item) => (
-              <SportSettingCard item={item} key={item.name} onConfigure={openLeagueModal} onRemove={removeFavoriteSport} />
+              <SportSettingCard item={item} key={item.name} onConfigure={openLeagueModal} onRemove={handleRemoveClick} />
             ))}
           </div>
+          <button className="favorites-add-card" id="add-sports-btn" type="button" onClick={openSportsModal}>
+            <span className="favorites-add-icon"><span className="favorites-add-plus">+</span></span>
+            <span>Добавить вид спорта</span>
+          </button>
         </section>
       </main>
 
@@ -477,8 +612,30 @@ export function RecommendationsPage() {
         <BetModal item={betModal.item} betIndex={betModal.betIndex} onClose={closeBetModal} />
       ) : null}
 
-      {modal.isOpen ? (
-        <div id="favorites-modal" className="modal" aria-hidden="false">
+      {(confirmRemove.isOpen || confirmRemoveClosing) ? (
+        <div className={`modal modal-centered${confirmRemoveClosing ? ' modal--closing' : ''}`} aria-hidden="false" onClick={cancelConfirmRemove}>
+          <div
+            className="modal-card confirm-remove-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="confirm-remove-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-head">
+              <h3 id="confirm-remove-title">Удалить спорт из избранного</h3>
+              <button type="button" className="modal-close-btn" aria-label="Закрыть" onClick={cancelConfirmRemove}>×</button>
+            </div>
+            <p className="confirm-remove-text">Спорт «{confirmRemove.sportName}» будет удалён из списка избранных.</p>
+            <div className="modal-actions">
+              <button className="secondary-button" type="button" onClick={cancelConfirmRemove}>Отмена</button>
+              <button className="danger-button" type="button" onClick={confirmRemoveSport}>Удалить</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {(modal.isOpen || favoritesModalClosing) ? (
+        <div id="favorites-modal" className={`modal${favoritesModalClosing ? ' modal--closing' : ''}`} aria-hidden="false">
           <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="favorites-modal-title">
             <div className="modal-head">
               <h3 id="favorites-modal-title">
@@ -501,6 +658,7 @@ export function RecommendationsPage() {
                   <div className="recommendations-empty">Ничего не найдено</div>
                 ) : availableSportsToAdd.map((value) => {
                   const isChecked = (modal.pendingSports || []).includes(value);
+                  const optionSportUrl = catalog.sportUrlMap?.[value];
 
                   return (
                     <label className="favorite-option" key={`sport-${value}`}>
@@ -509,6 +667,7 @@ export function RecommendationsPage() {
                         checked={isChecked}
                         onChange={(event) => togglePendingSport(value, event.target.checked)}
                       />
+                      <SportIcon className="sport-option-icon" sportUrl={optionSportUrl} alt="" />
                       {value}
                     </label>
                   );

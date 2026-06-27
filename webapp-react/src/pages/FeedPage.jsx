@@ -42,21 +42,53 @@ export function FeedPage() {
   const [hasMore, setHasMore] = useState(false);
   const [offset, setOffset] = useState(0);
   const [error, setError] = useState('');
+  const [staleNotice, setStaleNotice] = useState('');
   const [sportFilter, setSportFilter] = useState('');
   const [availableSports, setAvailableSports] = useState([]);
   const [modal, setModal] = useState(null);
+  const [feedVersion, setFeedVersion] = useState('');
 
   const sentinelRef = useRef(null);
   const loadingMoreRef = useRef(false);
+  const feedVersionRef = useRef('');
 
-  async function fetchPage(win, sport, off, isFirstPage) {
+  const syncFeedVersion = useCallback((nextVersion) => {
+    const normalized = String(nextVersion || '').trim();
+    feedVersionRef.current = normalized;
+    setFeedVersion(normalized);
+  }, []);
+
+  const resetFeedVersion = useCallback(() => {
+    syncFeedVersion('');
+  }, [syncFeedVersion]);
+
+  const reloadFromStart = useCallback(async (sport, message) => {
+    if (message) {
+      setStaleNotice(message);
+    }
+    setOffset(0);
+    resetFeedVersion();
+    await fetchPage('all', sport, 0, true, { ignoreStaleOnce: true });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetFeedVersion]);
+
+  async function fetchPage(win, sport, off, isFirstPage, options = {}) {
     if (isFirstPage) {
       setIsLoading(true);
       setError('');
     }
 
+    const requestedVersionSource = options.feedVersion ?? (!isFirstPage ? feedVersionRef.current : '');
+    const requestedVersion = String(requestedVersionSource || '').trim();
+
     try {
-      const data = await getFeed({ window: win, sport, limit: 10, offset: off });
+      const data = await getFeed({
+        window: win,
+        sport,
+        feed_version: requestedVersion || undefined,
+        limit: 10,
+        offset: off,
+      });
       const newItems = data.items || [];
 
       if (isFirstPage) {
@@ -65,13 +97,22 @@ export function FeedPage() {
           fallbackSports: prev,
           preserveFallback: Boolean(sport),
         }));
+        setStaleNotice('');
       } else {
         setItems((prev) => [...prev, ...newItems]);
       }
 
+      syncFeedVersion(data.feed_version || '');
       setHasMore(!!data.has_more);
       setOffset(data.next_offset ?? off + 10);
-    } catch {
+    } catch (err) {
+      if (err?.status === 409 && err?.payload?.error === 'STALE_FEED_VERSION') {
+        if (!options.ignoreStaleOnce) {
+          await reloadFromStart(sport, err?.payload?.message || 'Лента обновилась');
+          return;
+        }
+      }
+
       if (isFirstPage) {
         setError('Не удалось загрузить ленту.');
       }
@@ -103,17 +144,27 @@ export function FeedPage() {
     setIsLoadingMore(true);
 
     try {
-      const data = await getFeed({ window: 'all', sport: sportFilter, limit: 10, offset });
+      const data = await getFeed({
+        window: 'all',
+        sport: sportFilter,
+        feed_version: feedVersionRef.current || undefined,
+        limit: 10,
+        offset,
+      });
       setItems((prev) => [...prev, ...(data.items || [])]);
+      syncFeedVersion(data.feed_version || '');
       setHasMore(!!data.has_more);
       setOffset(data.next_offset ?? offset + 10);
-    } catch {
-      // silent — user can trigger retry by scrolling up and back
+    } catch (err) {
+      if (err?.status === 409 && err?.payload?.error === 'STALE_FEED_VERSION') {
+        await reloadFromStart(sportFilter, err?.payload?.message || 'Лента обновилась');
+      }
+      // otherwise silent — user can trigger retry by scrolling up and back
     } finally {
       setIsLoadingMore(false);
       loadingMoreRef.current = false;
     }
-  }, [hasMore, offset, sportFilter]);
+  }, [feedVersion, hasMore, offset, reloadFromStart, sportFilter, syncFeedVersion]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -132,6 +183,7 @@ export function FeedPage() {
     const next = sport === sportFilter ? '' : sport;
     setSportFilter(next);
     setOffset(0);
+    resetFeedVersion();
     fetchPage('all', next, 0, true);
   }
 
@@ -177,6 +229,10 @@ export function FeedPage() {
       </div>
 
       <main className="layout feed-layout">
+        {staleNotice ? (
+          <div className="feed-status">{staleNotice}</div>
+        ) : null}
+
         {error ? (
           <div className="block-error feed-error">
             <span>{error} </span>
@@ -191,7 +247,10 @@ export function FeedPage() {
         ) : null}
 
         {!isLoading && items.length === 0 && !error ? (
-          <div className="feed-status recommendations-empty">Нет матчей в выбранном диапазоне</div>
+          <div className="feed-status recommendations-empty">
+            <strong>Нет ближайших событий</strong>
+            <div>Когда появятся события со стартом в ближайшие 2 часа, они отобразятся здесь.</div>
+          </div>
         ) : null}
 
         {!isLoading ? items.map((item) => (

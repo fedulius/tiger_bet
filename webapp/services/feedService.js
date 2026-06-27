@@ -25,8 +25,9 @@ function stripCoeffPhrase(text) {
 
 function normalizePrimaryBet(raw) {
   const sourceCoeff = Number(raw.source_coeff);
-  const resolvedSourceCoeff = Number.isFinite(sourceCoeff)
-    ? Number(Math.min(1.9, Math.max(1.5, sourceCoeff)).toFixed(2))
+  // Use real odds from API when available, no clamping
+  const resolvedSourceCoeff = Number.isFinite(sourceCoeff) && sourceCoeff > 0
+    ? Number(sourceCoeff.toFixed(2))
     : null;
 
   if (Array.isArray(raw.bets) && raw.bets.length > 0) {

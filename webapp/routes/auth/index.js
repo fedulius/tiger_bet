@@ -48,8 +48,22 @@ function isFreshAuthDate(authDate, maxAgeSeconds = 3600) {
   return Math.abs(nowSec - authDate) <= maxAgeSeconds;
 }
 
+const LOOPBACK_IPS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+
 async function authRoutes(fastify) {
   const dal = new (require('./DAL'))(fastify.pg);
+
+  fastify.get('/preview', async (req, res) => {
+    if (!LOOPBACK_IPS.has(req.ip)) {
+      return res.status(403).send({ error: 'Preview auth is only available on localhost' });
+    }
+    const token = fastify.jwt.sign({
+      userId: 1,
+      profile: 'preview',
+      preview: true,
+    });
+    return res.send({ token });
+  });
 
   fastify.get('/', async (req, res) => {
     const initData = String(req.headers['x-telegram-init-data'] || '');

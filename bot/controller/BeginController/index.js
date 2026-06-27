@@ -12,7 +12,7 @@ class BeginController extends Controller {
   }
   
   async greetAction(msg) {
-    let result = await this.userCheck(msg);
+    await this.userCheck(msg);
 
     let categoryList = await this.dal.getCategories();
     let content = this.inline.main(categoryList);

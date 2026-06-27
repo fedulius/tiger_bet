@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tiger-bet.local/schemas/ai-brief-output.schema.json",
+  "title": "AiBriefOutput",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["headline", "brief", "risk_note"],
+  "properties": {
+    "headline": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 200
+    },
+    "brief": {
+      "type": "string",
+      "minLength": 40,
+      "maxLength": 2000
+    },
+    "risk_note": {
+      "type": ["string", "null"],
+      "maxLength": 500
+    }
+  }
+}

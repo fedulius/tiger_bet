@@ -1,19 +1,13 @@
 // Task 3/13 service: recommendations feed for webApp.
 // По умолчанию пытаемся взять живые матчи со stavka.tv, при ошибке используем fallback.
 
-const { getLeaguesByCategory, getTopMatches } = require('../../lib/stavkaMatches');
-const request = require('request');
 const { createClient } = require('redis');
-const {
-  extractEditorialForecast,
-  extractRecommendationZones,
-  collectCandidatesAcrossZones,
-  isCandidateAcceptable,
-} = require('../../lib/forecastAnalyzer');
 
 const FALLBACK_TOP_MATCHES = [
   {
     id: 'fallback-3',
+    match_id: null,
+    match_slug: null,
     sport_id: 10,
     sport_name: 'КС:ГО',
     match: 'Fnatic vs G2',
@@ -25,6 +19,8 @@ const FALLBACK_TOP_MATCHES = [
   },
   {
     id: 'fallback-1',
+    match_id: null,
+    match_slug: null,
     sport_id: 1,
     sport_name: 'Футбол',
     match: 'Arsenal vs Chelsea',
@@ -36,6 +32,8 @@ const FALLBACK_TOP_MATCHES = [
   },
   {
     id: 'fallback-4',
+    match_id: null,
+    match_slug: null,
     sport_id: 11,
     sport_name: 'Дота2',
     match: 'NAVI vs Spirit',
@@ -47,6 +45,8 @@ const FALLBACK_TOP_MATCHES = [
   },
   {
     id: 'fallback-2',
+    match_id: null,
+    match_slug: null,
     sport_id: 1,
     sport_name: 'Футбол',
     match: 'Real Madrid vs Sevilla',
@@ -116,6 +116,73 @@ function buildCacheKey(favoriteSports) {
     })
     .join('|');
   return `recommendations:${fingerprint}`;
+}
+
+function getRecommendationsCurrentVersionKey(cacheKey) {
+  return `${cacheKey}:current_version`;
+}
+
+function getRecommendationsMetaKey(cacheKey, version) {
+  return `${cacheKey}:meta:${version}`;
+}
+
+function getRecommendationsPayloadKey(cacheKey, version) {
+  return `${cacheKey}:payload:${version}`;
+}
+
+async function readRecommendationsSnapshotByVersion(redis, cacheKey, version) {
+  const normalizedVersion = String(version || '').trim();
+  if (!redis || !cacheKey || !normalizedVersion) return null;
+
+  try {
+    const [metaRaw, payloadRaw] = await Promise.all([
+      redis.get(getRecommendationsMetaKey(cacheKey, normalizedVersion)),
+      redis.get(getRecommendationsPayloadKey(cacheKey, normalizedVersion)),
+    ]);
+
+    if (!metaRaw || !payloadRaw) {
+      return null;
+    }
+
+    const meta = JSON.parse(metaRaw);
+    const payload = JSON.parse(payloadRaw);
+    if (!payload || !Array.isArray(payload.items)) {
+      return null;
+    }
+
+    return {
+      ...payload,
+      recommendations_version: String(meta.recommendations_version || normalizedVersion),
+      updated_at: String(meta.updated_at || payload.updated_at || new Date().toISOString()),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function publishRecommendationsSnapshot(redis, cacheKey, payload) {
+  if (!redis || !cacheKey || !payload || !Array.isArray(payload.items)) {
+    return payload;
+  }
+
+  const updatedAt = String(payload.updated_at || new Date().toISOString());
+  const version = `r${Date.parse(updatedAt) || Date.now()}`;
+  const result = {
+    ...payload,
+    recommendations_version: version,
+  };
+
+  await Promise.all([
+    redis.set(getRecommendationsMetaKey(cacheKey, version), JSON.stringify({
+      recommendations_version: version,
+      updated_at: updatedAt,
+    }), { EX: REDIS_TTL_SECONDS }),
+    redis.set(getRecommendationsPayloadKey(cacheKey, version), JSON.stringify(result), { EX: REDIS_TTL_SECONDS }),
+    redis.set(getRecommendationsCurrentVersionKey(cacheKey), version, { EX: REDIS_TTL_SECONDS }),
+    redis.set(cacheKey, JSON.stringify(result), { EX: REDIS_TTL_SECONDS }),
+  ]);
+
+  return result;
 }
 
 function toIsoDate(value) {
@@ -301,6 +368,30 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
+// Confidence label from social-proof signals + risk position.
+// Special rule: coeff < 1.4 → высокая regardless of social proof or risk_label (implied short odds).
+// low-risk bets are always at least средняя; strong signals (count>=30 or percent>=15) give высокая.
+// medium: needs count>=20 or percent>=10 to reach средняя.
+// high: always ниже средней.
+function betConfidenceFromSocialProof(count, percent, risk_label, coeff) {
+  const c = Number(count) || 0;
+  const p = Number(percent) || 0;
+  const coef = Number(coeff);
+
+  if (Number.isFinite(coef) && coef < 1.4) return 'высокая';
+
+  if (risk_label === 'low') {
+    if (c >= 30 || p >= 15) return 'высокая';
+    return 'средняя';
+  }
+  if (risk_label === 'medium') {
+    if (c >= 50 || p >= 25) return 'высокая';
+    if (c >= 20 || p >= 10) return 'средняя';
+    return 'ниже средней';
+  }
+  return 'ниже средней';
+}
+
 function toCoeff(value, fallback) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) {
@@ -349,26 +440,108 @@ function buildBetLineup(item = {}) {
   ];
 }
 
+function rankCandidatesForLineup(candidates = []) {
+  const zoneRank = (sourceZone) => {
+    if (sourceZone === 'mainForecastZone') return 0;
+    if (sourceZone === 'editorChoiceZone') return 1;
+    if (sourceZone === 'articleZone') return 2;
+    return 3;
+  };
+
+  return [...candidates]
+    .map((candidate, index) => ({ candidate, index }))
+    .sort((a, b) => {
+      const priorityA = Number(a?.candidate?.sourcePriority) || Number.POSITIVE_INFINITY;
+      const priorityB = Number(b?.candidate?.sourcePriority) || Number.POSITIVE_INFINITY;
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+
+      const zoneA = zoneRank(a?.candidate?.sourceZone);
+      const zoneB = zoneRank(b?.candidate?.sourceZone);
+      if (zoneA !== zoneB) {
+        return zoneA - zoneB;
+      }
+
+      const coeffA = Number.isFinite(Number(a?.candidate?.coeff)) ? Number(a.candidate.coeff) : Number.POSITIVE_INFINITY;
+      const coeffB = Number.isFinite(Number(b?.candidate?.coeff)) ? Number(b.candidate.coeff) : Number.POSITIVE_INFINITY;
+      if (coeffA !== coeffB) {
+        return coeffA - coeffB;
+      }
+
+      const forecastA = String(a?.candidate?.canonicalForecast || a?.candidate?.rawForecast || '').trim();
+      const forecastB = String(b?.candidate?.canonicalForecast || b?.candidate?.rawForecast || '').trim();
+      const forecastCompare = forecastA.localeCompare(forecastB, 'ru');
+      if (forecastCompare !== 0) {
+        return forecastCompare;
+      }
+
+      return a.index - b.index;
+    })
+    .map((entry) => entry.candidate);
+}
+
 function buildStructuredBetsFromCandidates(item = {}, candidates = []) {
   if (!Array.isArray(candidates) || candidates.length === 0) {
     return null;
   }
 
+  const orderedCandidates = rankCandidatesForLineup(candidates);
   const confidence = clamp(Number(item.confidence) || 0, 35, 90);
-  const primary = candidates[0];
-  const secondaryCandidates = candidates
-    .slice(1)
-    .sort((a, b) => {
-      const coeffA = Number.isFinite(Number(a?.coeff)) ? Number(a.coeff) : Number.POSITIVE_INFINITY;
-      const coeffB = Number.isFinite(Number(b?.coeff)) ? Number(b.coeff) : Number.POSITIVE_INFINITY;
-      if (coeffA !== coeffB) {
-        return coeffA - coeffB;
-      }
+  const primary = orderedCandidates[0];
+  const primaryMarketType = String(primary?.marketType || '').trim();
+  const secondaryPool = orderedCandidates.slice(1);
+  const seenMarketTypes = new Set(primaryMarketType ? [primaryMarketType] : []);
+  const selectedSecondaryCandidates = [];
 
-      const forecastA = String(a?.canonicalForecast || a?.rawForecast || '').trim();
-      const forecastB = String(b?.canonicalForecast || b?.rawForecast || '').trim();
-      return forecastA.localeCompare(forecastB, 'ru');
-    });
+  for (const candidate of secondaryPool) {
+    const marketType = String(candidate?.marketType || '').trim();
+    if (marketType && !seenMarketTypes.has(marketType)) {
+      selectedSecondaryCandidates.push(candidate);
+      seenMarketTypes.add(marketType);
+    }
+    if (selectedSecondaryCandidates.length >= 2) {
+      break;
+    }
+  }
+
+  if (selectedSecondaryCandidates.length < 2) {
+    for (const candidate of secondaryPool) {
+      if (selectedSecondaryCandidates.includes(candidate)) {
+        continue;
+      }
+      selectedSecondaryCandidates.push(candidate);
+      if (selectedSecondaryCandidates.length >= 2) {
+        break;
+      }
+    }
+  }
+
+  selectedSecondaryCandidates.sort((a, b) => {
+    const zoneRank = (sourceZone) => {
+      if (sourceZone === 'editorChoiceZone') return 0;
+      if (sourceZone === 'mainForecastZone') return 1;
+      if (sourceZone === 'articleZone') return 2;
+      return 3;
+    };
+
+    const zoneA = zoneRank(a?.sourceZone);
+    const zoneB = zoneRank(b?.sourceZone);
+    if (zoneA !== zoneB) {
+      return zoneA - zoneB;
+    }
+
+    const coeffA = Number.isFinite(Number(a?.coeff)) ? Number(a.coeff) : Number.POSITIVE_INFINITY;
+    const coeffB = Number.isFinite(Number(b?.coeff)) ? Number(b.coeff) : Number.POSITIVE_INFINITY;
+    if (coeffA !== coeffB) {
+      return coeffA - coeffB;
+    }
+
+    const forecastA = String(a?.canonicalForecast || a?.rawForecast || '').trim();
+    const forecastB = String(b?.canonicalForecast || b?.rawForecast || '').trim();
+    return forecastA.localeCompare(forecastB, 'ru');
+  });
+
   const primaryCoeff = Number(primary?.coeff);
   const resolvedPrimaryCoeff = Number.isFinite(primaryCoeff)
     ? toCoeff(clamp(primaryCoeff, 1.5, 1.9), 1.65)
@@ -386,7 +559,7 @@ function buildStructuredBetsFromCandidates(item = {}, candidates = []) {
   };
 
   const lineup = [primaryBet];
-  for (const candidate of secondaryCandidates.slice(0, 2)) {
+  for (const candidate of selectedSecondaryCandidates.slice(0, 2)) {
     const coeff = Number(candidate?.coeff);
     const resolvedCoeff = Number.isFinite(coeff)
       ? toCoeff(clamp(coeff, 1.6, 2.3), 1.95)
@@ -414,254 +587,148 @@ function withBetLineup(item = {}) {
   };
 }
 
-function flattenLiveLeagues(leagues = [], baseNow = new Date(), sportMeta = {}) {
-  const flat = [];
+async function loadRecommendationsFromApi({ apiLoader, popularBetsLoader, riskBetsSelector, favoriteSports, limit, now }) {
+  const allMatches = await apiLoader();
+  if (!Array.isArray(allMatches) || allMatches.length === 0) return [];
 
-  for (const leagueRow of leagues) {
-    const leagueName = String(leagueRow?.league || '').trim() || 'Ставка ТВ';
-    const matches = Array.isArray(leagueRow?.matches) ? leagueRow.matches : [];
-
-    for (const match of matches) {
-      if (!match?.team || !match?.link) {
-        continue;
-      }
-
-      const resolvedSportMeta = inferSportMetaFromLink(match.link, sportMeta);
-
-      flat.push({
-        id: recommendationIdFromLink(match.link, flat.length),
-        sport_id: resolvedSportMeta.sport_id,
-        sport_name: resolvedSportMeta.sport_name,
-        match: normalizeMatchTitle(match.team),
-        league: leagueName,
-        starts_at: parseStartsAt({
-          dateText: match.date,
-          timeText: match.time,
-          index: flat.length,
-          baseNow,
-        }),
-        main_thought: 'Основной прогноз доступен на странице матча',
-        confidence: 0,
-        source_url: toAbsoluteStavkaUrl(match.link),
-      });
-    }
-  }
-
-  return flat;
-}
-
-function requestMatchPage(url) {
-  return new Promise((resolve, reject) => {
-    if (!url) {
-      reject(new Error('match url is required'));
-      return;
-    }
-
-    request.get({
-      headers: { 'content-type': 'text/html;charset=utf-8' },
-      url,
-    }, (error, response, body) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolve(String(body || ''));
-    });
-  });
-}
-
-function extractMatchPageStartsAt(html, item = {}) {
-  const source = String(html || '');
-  if (!source) {
-    return null;
-  }
-
-  const faqTime = source.match(/пройд[её]т\s+(\d{1,2}\s+[а-яё]{3,}\s+\d{4}\s+года)\s+в\s+(\d{1,2}:\d{2})\s+по\s+московскому\s+времени/i);
-  if (faqTime) {
-    try {
-      return parseStartsAt({
-        dateText: faqTime[1],
-        timeText: faqTime[2],
-        baseNow: new Date(item.starts_at || Date.now()),
-        displayTimeZone: 'msk',
-      });
-    } catch {
-      // Fall through to header parsing.
-    }
-  }
-
-  const matchHeader = source.match(/<div class="text-h1 info-top"[^>]*>\s*([^<]+?)\s*<\/div>\s*<div class="info-bottom"[^>]*>\s*([^<]+?)\s*<\/div>/i);
-  if (!matchHeader) {
-    return null;
-  }
-
-  const timeText = String(matchHeader[1] || '').trim();
-  const dateText = String(matchHeader[2] || '').trim();
-  if (!timeText || !dateText) {
-    return null;
-  }
-
-  try {
-    return parseStartsAt({
-      dateText,
-      timeText,
-      baseNow: new Date(item.starts_at || Date.now()),
-    });
-  } catch {
-    return null;
-  }
-}
-
-async function enrichFromMatchPages(items, { matchPageLoader, correctStartsAtIds = null, enforceFailClosed = false } = {}) {
-  const loader = matchPageLoader || requestMatchPage;
-
-  const enriched = await Promise.all(items.map(async (item) => {
-    try {
-      const html = await loader(item.source_url);
-      const editorial = extractEditorialForecast(html, { matchName: item.match });
-      const { mainForecastZone, editorChoiceZone, articleZone } = extractRecommendationZones(html, { matchName: item.match });
-      const candidates = collectCandidatesAcrossZones({ mainForecastZone, editorChoiceZone, articleZone });
-      const primaryCandidate = candidates[0] || null;
-      const acceptableCandidates = candidates.filter(isCandidateAcceptable);
-      const structuredBets = buildStructuredBetsFromCandidates(item, acceptableCandidates);
-      const hasCandidateDrivenEditorial = candidates.length > 0;
-      const shouldFailClosed = enforceFailClosed && hasCandidateDrivenEditorial && acceptableCandidates.length < 3;
-      const correctedStartsAt = extractMatchPageStartsAt(html, item);
-      const shouldCorrectStartsAt = !correctStartsAtIds || correctStartsAtIds.has(item.id);
-
-      if (!editorial?.mainThought && !primaryCandidate && !(shouldCorrectStartsAt && correctedStartsAt)) {
-        return item;
-      }
-
-      if (shouldFailClosed) {
-        return null;
-      }
-
-      const enrichedItem = {
-        ...item,
-        starts_at: shouldCorrectStartsAt && correctedStartsAt ? correctedStartsAt : item.starts_at,
-        main_thought: editorial?.mainThought
-          || primaryCandidate?.canonicalForecast
-          || primaryCandidate?.rawForecast
-          || item.main_thought,
-        source_coeff: Number.isFinite(primaryCandidate?.coeff)
-          ? primaryCandidate.coeff
-          : (Number.isFinite(editorial?.coeff) ? editorial.coeff : item.source_coeff),
-        confidence: Number.isFinite(editorial?.probabilityPercent)
-          ? editorial.probabilityPercent
-          : item.confidence,
-        editorial_rationale: editorial?.rationale != null ? editorial.rationale : (item.editorial_rationale ?? ''),
-      };
-      return {
-        ...enrichedItem,
-        bets: structuredBets || enrichedItem.bets || buildBetLineup(enrichedItem),
-      };
-    } catch {
-      return item;
-    }
-  }));
-
-  return enriched.filter(Boolean);
-}
-
-async function loadLiveRecommendations({ liveLoader, matchPageLoader, favoriteSports = [], limit = 6, upcomingOnly = true, now = Date.now() } = {}) {
+  const baseNow = new Date(now).getTime();
   const sports = Array.isArray(favoriteSports) && favoriteSports.length > 0
     ? favoriteSports
     : [{ sport_id: 1, sport_name: 'Футбол' }];
+  const sportIds = new Set(sports.map((s) => Number(s?.sport_id)).filter(Number.isFinite));
 
-  const aggregated = [];
-  const baseNow = new Date(now);
-  for (const sport of sports) {
-    const categoryId = Number(sport?.sport_id);
-    if (!Number.isFinite(categoryId)) {
-      continue;
-    }
-
-    const loader = liveLoader || (async () => getLeaguesByCategory(categoryId));
-    const leagues = await loader(categoryId);
-    if (!Array.isArray(leagues) || leagues.length === 0) {
-      continue;
-    }
-
-    const filteredLeagues = filterItemsByFavoriteLeagues(
-      flattenLiveLeagues(leagues, baseNow, sport),
-      [sport],
-    );
-
-    aggregated.push(...filteredLeagues);
-  }
-
-  if (aggregated.length === 0) {
-    return [];
-  }
-
-  const upcomingSeed = upcomingOnly
-    ? selectUpcomingItems(aggregated, { now, limit })
-    : [];
-  const recentPastCandidates = upcomingOnly
-    ? pickTopByTime(
-      aggregated.filter((item) => {
-        const startTs = new Date(item?.starts_at).getTime();
-        return Number.isFinite(startTs) && startTs <= now && startTs >= (now - RECENT_PAST_RECHECK_WINDOW_MS);
-      }),
-      limit,
-    )
-    : [];
-  const metadataCandidates = dedupeById([...upcomingSeed, ...recentPastCandidates]);
-  const recentPastCandidateIds = new Set(recentPastCandidates.map((item) => item.id));
-
-  let enrichedAggregated = aggregated;
-  if (metadataCandidates.length > 0) {
-    const correctedItems = await enrichFromMatchPages(metadataCandidates, {
-      matchPageLoader,
-      correctStartsAtIds: recentPastCandidateIds,
-      enforceFailClosed: false,
-    });
-    const correctedById = new Map(correctedItems.map((item) => [item.id, item]));
-    enrichedAggregated = aggregated.map((item) => correctedById.get(item.id) || item);
-  }
-
-  const selected = upcomingOnly
-    ? selectUpcomingItems(enrichedAggregated, { now, limit })
-    : pickTopByTime(enrichedAggregated, limit);
-
-  const itemsForEnrichment = selected.length > 0
-    ? selected
-    : pickTopByTime(enrichedAggregated, limit);
-
-  return await enrichFromMatchPages(itemsForEnrichment, {
-    matchPageLoader,
-    correctStartsAtIds: new Set(),
-    enforceFailClosed: true,
+  const upcoming = allMatches.filter((m) => {
+    if (!m || !m.matchDate || !m.odds || !m.odds.one_x_two) return false;
+    const ts = new Date(m.matchDate).getTime();
+    if (!Number.isFinite(ts) || ts <= baseNow) return false;
+    const sportId = (require('../../lib/stavkaApi').resolveSport(m.sportSlug)).sport_id;
+    return sportIds.size === 0 || sportIds.has(sportId);
   });
+
+  upcoming.sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate));
+  const topMatches = upcoming.slice(0, limit);
+  if (topMatches.length === 0) return [];
+
+  const results = await Promise.allSettled(
+    topMatches.map(async (m) => {
+      const popularBets = await popularBetsLoader(m.slug);
+      const riskBets = riskBetsSelector(popularBets);
+      if (riskBets.length === 0) return null;
+
+      const homeName = (m.teams && m.teams.home && m.teams.home.name) || '';
+      const awayName = (m.teams && m.teams.away && m.teams.away.name) || '';
+      const leagueName = m.league ? (m.league.name || '') : '';
+      const countryName = (m.league && m.league.country) ? (m.league.country.name || '') : '';
+      const sportInfo = (require('../../lib/stavkaApi').resolveSport(m.sportSlug));
+
+      const bets = riskBets.map((rb) => ({
+        type: rb.risk_label === 'low' ? 'primary' : rb.risk_label === 'medium' ? 'value' : 'additional',
+        risk_order: rb.risk_order,
+        risk_label: rb.risk_label,
+        forecast: rb.label,
+        coeff: rb.rate,
+        probability: Math.round((1 / rb.rate) * 100),
+        confidence: betConfidenceFromSocialProof(rb.count, rb.percent, rb.risk_label, rb.rate),
+        description: rb.risk_name,
+        count: rb.count,
+        percent: rb.percent,
+        market_type: rb.type,
+      }));
+
+      return {
+        id: m.id || m.slug,
+        match_id: m.id,
+        match_slug: m.slug,
+        slug: m.slug,
+        sport_id: sportInfo.sport_id,
+        sport_name: sportInfo.sport_name,
+        sportSlug: m.sportSlug,
+        match: homeName + ' — ' + awayName,
+        league: countryName ? (countryName + ': ' + leagueName) : leagueName,
+        starts_at: new Date(m.matchDate).toISOString(),
+        main_thought: bets[0] ? bets[0].forecast : 'Прогноз',
+        source_coeff: bets[0] ? bets[0].coeff : null,
+        confidence: 0,
+        bets,
+        source_url: 'https://stavka.tv/matches/' + (m.sportSlug || 'soccer') + '/' + m.slug,
+      };
+    }),
+  );
+
+  return results
+    .filter((r) => r.status === 'fulfilled' && r.value !== null)
+    .map((r) => r.value);
 }
 
-async function loadWideFeedRecommendations({ liveLoader, matchPageLoader, now = Date.now(), horizonMs = 2 * 60 * 60 * 1000 } = {}) {
-  const loader = liveLoader || getTopMatches;
-  const leagues = await loader();
-  if (!Array.isArray(leagues) || leagues.length === 0) {
+async function loadLiveRecommendations({ apiLoader, popularBetsLoader, riskBetsSelector, favoriteSports = [], limit = 6, now = Date.now() } = {}) {
+  if (!apiLoader || !popularBetsLoader || !riskBetsSelector) {
     return [];
   }
-
-  const baseNow = new Date(now);
-  const aggregated = dedupeById(flattenLiveLeagues(leagues, baseNow, {}));
-  if (aggregated.length === 0) {
+  return loadRecommendationsFromApi({ apiLoader, popularBetsLoader, riskBetsSelector, favoriteSports, limit, now });
+}
+async function loadWideFeedRecommendations({ apiLoader, now = Date.now(), horizonMs = 2 * 60 * 60 * 1000 } = {}) {
+  if (!apiLoader) {
     return [];
   }
+  return loadFeedFromApi({ apiLoader, now, horizonMs });
+}
+async function loadFeedFromApi({ apiLoader, now, horizonMs }) {
+  const allMatches = await apiLoader();
+  if (!Array.isArray(allMatches) || allMatches.length === 0) return [];
 
-  const upcoming = selectUpcomingItems(aggregated, { now, limit: null })
-    .filter((item) => {
-      const startTs = new Date(item?.starts_at).getTime();
-      return Number.isFinite(startTs) && startTs <= (now + horizonMs);
-    });
+  const baseNow = new Date(now).getTime();
+  const horizon = baseNow + horizonMs;
 
-  if (upcoming.length === 0) {
-    return [];
-  }
+  // Filter: upcoming, within horizon, has one_x_two odds
+  const upcoming = allMatches.filter((m) => {
+    if (!m || !m.matchDate || !m.odds || !m.odds.one_x_two) return false;
+    const ts = new Date(m.matchDate).getTime();
+    return Number.isFinite(ts) && ts > baseNow && ts <= horizon;
+  });
 
-  return await enrichFromMatchPages(upcoming, {
-    matchPageLoader,
-    correctStartsAtIds: new Set(),
+  // Sort by matchDate ASC
+  upcoming.sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate));
+
+  // Transform to feed items
+  return upcoming.map((m) => {
+    const homeName = (m.teams && m.teams.home && m.teams.home.name) || '';
+    const awayName = (m.teams && m.teams.away && m.teams.away.name) || '';
+    const leagueName = m.league ? (m.league.name || '') : '';
+    const countryName = (m.league && m.league.country) ? (m.league.country.name || '') : '';
+
+    // Pick best one_x_two outcome (lowest odds = favorite)
+    const odds = m.odds.one_x_two;
+    let bestOutcome = 'w2';
+    let bestRate = Infinity;
+    for (const key of Object.keys(odds)) {
+      const val = odds[key];
+      if (val && typeof val === 'object' && typeof val.value === 'number' && val.value < bestRate) {
+        bestRate = val.value;
+        bestOutcome = key;
+      }
+    }
+
+    const outcomeLabels = { w1: 'Победа хозяев', w2: 'Победа гостей', x: 'Ничья' };
+
+    const sportLabel = (require('../../lib/stavkaApi').resolveSport(m.sportSlug)).sport_name || '';
+    const leagueLabel = countryName ? (countryName + ': ' + leagueName) : leagueName;
+    const summaryParts = [sportLabel, leagueLabel].filter(Boolean);
+
+    return {
+      id: m.id || m.slug,
+      slug: m.slug,
+      sport_id: (require('../../lib/stavkaApi').resolveSport(m.sportSlug)).sport_id,
+      sport_name: (require('../../lib/stavkaApi').resolveSport(m.sportSlug)).sport_name,
+      sportSlug: m.sportSlug,
+      match: homeName + ' — ' + awayName,
+      league: countryName ? (countryName + ': ' + leagueName) : leagueName,
+      starts_at: new Date(m.matchDate).toISOString(),
+      main_thought: outcomeLabels[bestOutcome] || 'Прогноз',
+      summary: summaryParts.join(' · '),
+      source_coeff: bestRate,
+      confidence: 0,
+      source_url: 'https://stavka.tv/matches/' + (m.sportSlug || 'soccer') + '/' + m.slug,
+    };
   });
 }
 
@@ -705,8 +772,9 @@ async function invalidateRecommendationsCache(options = {}) {
   }
 
   try {
-    await redis.del(...keys);
-    return { invalidated_keys: keys, redis: true };
+    const currentVersionKeys = keys.map(getRecommendationsCurrentVersionKey);
+    await redis.del(...keys, ...currentVersionKeys);
+    return { invalidated_keys: [...keys, ...currentVersionKeys], redis: true };
   } catch {
     return { invalidated_keys: keys, redis: false };
   }
@@ -720,22 +788,37 @@ async function getRecommendations(options = {}) {
   const enableLive = options.enableLive ?? process.env.NODE_ENV !== 'test';
   const disableCache = options.disableCache === true;
   const nowTs = Date.now();
+  const requestedVersion = String(options.recommendationsVersion || '').trim();
+  const cacheKey = buildCacheKey(favoriteSports);
 
   if (source) {
     const updatedAt = new Date(nowTs).toISOString();
-    if (sourceItems.length > 0) {
-      return buildPayload({ source, items: sourceItems, updatedAt });
-    }
-    return buildPayload({ source: 'fallback-top', items: FALLBACK_TOP_MATCHES, updatedAt });
+    return buildPayload({ source, items: sourceItems, updatedAt });
   }
 
-  const favoriteFallback = filterFallbackByFavoriteSports(favoriteSports);
-
-  // Redis cache check (covers both default and favoriteSports requests)
-  const redis = !disableCache && enableLive
+  const redis = !disableCache
     ? await resolveRedisClient(options.redisClient)
     : null;
-  const cacheKey = buildCacheKey(favoriteSports);
+
+  if (requestedVersion && redis) {
+    const exactSnapshot = await readRecommendationsSnapshotByVersion(redis, cacheKey, requestedVersion);
+    if (exactSnapshot) {
+      return exactSnapshot;
+    }
+
+    let currentVersion = '';
+    try {
+      currentVersion = String(await redis.get(getRecommendationsCurrentVersionKey(cacheKey)) || '').trim();
+    } catch {
+      currentVersion = '';
+    }
+
+    return {
+      stale_version: true,
+      recommendations_version: requestedVersion,
+      current_recommendations_version: currentVersion,
+    };
+  }
 
   if (redis) {
     try {
@@ -748,7 +831,6 @@ async function getRecommendations(options = {}) {
     }
   }
 
-  // In-memory cache (secondary layer for non-favorites when Redis is down)
   if (enableLive && !hasFavoriteSports && !disableCache && liveCache.items.length > 0 && (nowTs - liveCache.updatedAt) < LIVE_CACHE_TTL_MS) {
     return buildPayload({ source: 'stavka-live', items: liveCache.items, updatedAt: new Date(liveCache.updatedAt).toISOString() });
   }
@@ -758,6 +840,9 @@ async function getRecommendations(options = {}) {
       const liveItems = await loadLiveRecommendations({
         liveLoader: options.liveLoader,
         matchPageLoader: options.matchPageLoader,
+        apiLoader: options.apiLoader,
+        popularBetsLoader: options.popularBetsLoader,
+        riskBetsSelector: options.riskBetsSelector,
         favoriteSports,
       });
 
@@ -774,7 +859,7 @@ async function getRecommendations(options = {}) {
         });
         if (redis) {
           try {
-            await redis.set(cacheKey, JSON.stringify(result), { EX: REDIS_TTL_SECONDS });
+            return await publishRecommendationsSnapshot(redis, cacheKey, result);
           } catch {
             // Non-fatal — result is returned regardless of cache write failure
           }
@@ -788,19 +873,32 @@ async function getRecommendations(options = {}) {
 
   const updatedAt = new Date().toISOString();
 
-  if (favoriteFallback.length > 0) {
-    return buildPayload({ source: 'favorites', items: favoriteFallback, updatedAt });
-  }
-
   if (hasFavoriteSports) {
-    return buildPayload({ source: 'favorites', items: [], updatedAt });
+    const result = buildPayload({ source: 'favorites', items: [], updatedAt });
+    if (redis) {
+      try {
+        return await publishRecommendationsSnapshot(redis, cacheKey, result);
+      } catch {
+        return result;
+      }
+    }
+    return result;
   }
 
-  return buildPayload({ source: 'fallback-top', items: FALLBACK_TOP_MATCHES, updatedAt });
+  const result = buildPayload({ source: 'fallback-top', items: [], updatedAt });
+  if (redis) {
+    try {
+      return await publishRecommendationsSnapshot(redis, cacheKey, result);
+    } catch {
+      return result;
+    }
+  }
+  return result;
 }
 
 module.exports = {
   FALLBACK_TOP_MATCHES,
+  betConfidenceFromSocialProof,
   getRecommendations,
   invalidateRecommendationsCache,
   loadLiveRecommendations,

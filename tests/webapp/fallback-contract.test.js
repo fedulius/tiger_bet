@@ -4,15 +4,15 @@ const assert = require('node:assert/strict');
 const { getRecommendations } = require('../../webapp/services/recommendationService');
 const { getHistory } = require('../../webapp/services/historyService');
 
-test('recommendations fallback to top matches when favorites source is empty', async () => {
+test('getRecommendations returns empty payload when source items are empty', async () => {
   const payload = await getRecommendations({
     source: 'favorites',
     items: [],
   });
 
-  assert.equal(payload.source, 'fallback-top');
+  assert.equal(payload.source, 'favorites');
   assert.equal(Array.isArray(payload.items), true);
-  assert.equal(payload.items.length, 3);
+  assert.equal(payload.items.length, 0);
 });
 
 test('history service returns default empty-state message and CTA when sample is disabled', () => {

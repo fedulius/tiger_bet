@@ -5,11 +5,23 @@
   "telegram:337412226": {
     "sport_settings": [
       {
-        "name": "Дота2",
+        "name": "Футбол",
         "leagues": []
       },
       {
-        "name": "Футбол",
+        "name": "Хоккей",
+        "leagues": []
+      },
+      {
+        "name": "Теннис",
+        "leagues": []
+      },
+      {
+        "name": "КС:ГО",
+        "leagues": []
+      },
+      {
+        "name": "Дота2",
         "leagues": []
       }
     ]
@@ -25,5 +37,8 @@
         "leagues": []
       }
     ]
+  },
+  "preview": {
+    "sport_settings": []
   }
 }

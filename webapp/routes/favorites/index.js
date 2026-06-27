@@ -46,6 +46,7 @@ function buildResponseSportSetting(setting = {}) {
   const name = String(setting.name || '').trim();
   const leagues = Array.isArray(setting.leagues) ? setting.leagues : [];
   const availableLeagues = getAvailableLeaguesForSport(name);
+  const sportUrl = String(setting.sport_url || '').trim();
 
   return {
     name,
@@ -53,6 +54,7 @@ function buildResponseSportSetting(setting = {}) {
     all_leagues: leagues.length === 0,
     available_leagues: availableLeagues,
     leagues_summary: leagues.length === 0 ? 'Все лиги' : leagues.join(', '),
+    sport_url: sportUrl,
   };
 }
 
@@ -75,16 +77,20 @@ async function favoritesRoutes(fastify) {
 
     const stored = getFavoritesByProfile(profile);
     const sportSettingsMap = new Map((stored.sport_settings || []).map((item) => [item.name, item]));
-    const sports = rows.map(normalizeSportOutput).filter(Boolean);
-    const sportSettings = sports.map((name) => {
+    const sportRows = rows
+      .map((row) => ({ name: normalizeSportOutput(row), sport_url: String(row.sport_url || '').trim() }))
+      .filter((item) => item.name);
+    const sportSettings = sportRows.map(({ name, sport_url }) => {
       const existing = sportSettingsMap.get(name);
-      return buildResponseSportSetting(existing || { name, leagues: [] });
+      return buildResponseSportSetting({ ...(existing || { name, leagues: [] }), sport_url });
     });
 
     return {
       sports: sportSettings,
       profile,
-      available_sports: allSports.map(normalizeSportOutput).filter(Boolean),
+      available_sports: allSports
+        .map((row) => ({ sport_name: normalizeSportOutput(row), sport_url: String(row.sport_url || '').trim() }))
+        .filter((item) => item.sport_name),
       leagues_catalog: getCatalogBySportNames(allSports.map(normalizeSportOutput)),
     };
   });
@@ -136,6 +142,7 @@ async function favoritesRoutes(fastify) {
         return {
           sport_id: Number(row.sport_id),
           sport_name: resolvedName,
+          sport_url: String(row.sport_url || '').trim(),
           leagues,
         };
       });
@@ -151,7 +158,7 @@ async function favoritesRoutes(fastify) {
       });
 
       return {
-        sports: persistedSettings.map(buildResponseSportSetting),
+        sports: updatedFavorites.map(({ sport_name, sport_url, leagues }) => buildResponseSportSetting({ name: sport_name, sport_url, leagues })),
         profile,
       };
     } catch (error) {

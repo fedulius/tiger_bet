@@ -5,7 +5,13 @@ process.env.NODE_ENV = 'test';
 
 const { buildApp } = require('../../server/app');
 const { buildTestApp, createFakePg, makeAuthHeaders } = require('./testHelpers');
-const { SNAPSHOT_KEY, FRESH_TTL_MS } = require('../../webapp/services/feedSnapshotService');
+const {
+  CURRENT_VERSION_KEY,
+  LOCK_KEY,
+  FRESH_TTL_MS,
+  getSnapshotItemsKey,
+  getSnapshotMetaKey,
+} = require('../../webapp/services/feedSnapshotService');
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -471,9 +477,19 @@ function makeSnapshotItems() {
   ];
 }
 
+function seedSnapshot(store, snapshot) {
+  store[CURRENT_VERSION_KEY] = snapshot.feed_version;
+  store[getSnapshotMetaKey(snapshot.feed_version)] = JSON.stringify({
+    feed_version: snapshot.feed_version,
+    generated_at: snapshot.generated_at,
+    generated_at_ms: snapshot.generated_at_ms,
+  });
+  store[getSnapshotItemsKey(snapshot.feed_version)] = JSON.stringify(snapshot.items);
+}
+
 test('GET /feed returns feed_version when backed by Redis snapshot', async () => {
   const store = {};
-  store[SNAPSHOT_KEY] = JSON.stringify({
+  seedSnapshot(store, {
     feed_version: 'v99999',
     generated_at: new Date().toISOString(),
     generated_at_ms: Date.now() - 1000,
@@ -500,7 +516,7 @@ test('GET /feed returns feed_version when backed by Redis snapshot', async () =>
 
 test('GET /feed snapshot path: response preserves required contract fields', async () => {
   const store = {};
-  store[SNAPSHOT_KEY] = JSON.stringify({
+  seedSnapshot(store, {
     feed_version: 'v88888',
     generated_at: new Date().toISOString(),
     generated_at_ms: Date.now() - 1000,
@@ -531,7 +547,7 @@ test('GET /feed snapshot path: response preserves required contract fields', asy
 
 test('GET /feed snapshot path: pagination works from snapshot items', async () => {
   const store = {};
-  store[SNAPSHOT_KEY] = JSON.stringify({
+  seedSnapshot(store, {
     feed_version: 'v77777',
     generated_at: new Date().toISOString(),
     generated_at_ms: Date.now() - 1000,
@@ -566,7 +582,7 @@ test('GET /feed snapshot path: pagination works from snapshot items', async () =
 
 test('GET /feed snapshot path: filter by sport works', async () => {
   const store = {};
-  store[SNAPSHOT_KEY] = JSON.stringify({
+  seedSnapshot(store, {
     feed_version: 'v66666',
     generated_at: new Date().toISOString(),
     generated_at_ms: Date.now() - 1000,
@@ -612,7 +628,7 @@ test('GET /feed snapshot path: cache miss triggers build, stores snapshot, loade
     const payload = response.json();
     assert.ok('feed_version' in payload, 'feed_version must be set after cache miss build');
     assert.equal(loaderCallCount, 1, 'loader must be called exactly once on cache miss');
-    assert.ok(store[SNAPSHOT_KEY], 'snapshot must be stored in Redis after build');
+    assert.ok(store[CURRENT_VERSION_KEY], 'current version must be stored in Redis after build');
   } finally {
     await app.close();
   }
@@ -627,9 +643,9 @@ test('GET /feed snapshot path: stale snapshot returned when lock is held', async
     items: makeSnapshotItems(),
   };
   const store = {
-    [SNAPSHOT_KEY]: JSON.stringify(staleSnapshot),
-    'feed:snapshot:lock': '1',  // lock already held
+    [LOCK_KEY]: '1',
   };
+  seedSnapshot(store, staleSnapshot);
 
   const app = buildFeedApp({ feedRedis: makeFakeRedis({ store }) });
   await app.ready();
@@ -644,6 +660,68 @@ test('GET /feed snapshot path: stale snapshot returned when lock is held', async
     assert.equal(response.statusCode, 200);
     const payload = response.json();
     assert.equal(payload.feed_version, 'v-stale', 'stale snapshot must be returned when lock held');
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /feed snapshot path: chunk requests preserve same explicit feed_version', async () => {
+  const store = {};
+  seedSnapshot(store, {
+    feed_version: 'v-fixed',
+    generated_at: new Date().toISOString(),
+    generated_at_ms: Date.now() - 1000,
+    items: makeSnapshotItems(),
+  });
+  const app = buildFeedApp({ feedRedis: makeFakeRedis({ store }) });
+  await app.ready();
+
+  try {
+    const page1 = await app.inject({
+      method: 'GET',
+      url: '/feed?limit=2&offset=0',
+      headers: makeAuthHeaders(app),
+    });
+    const firstPayload = page1.json();
+    assert.equal(firstPayload.feed_version, 'v-fixed');
+
+    const page2 = await app.inject({
+      method: 'GET',
+      url: `/feed?limit=2&offset=2&feed_version=${encodeURIComponent(firstPayload.feed_version)}`,
+      headers: makeAuthHeaders(app),
+    });
+    const secondPayload = page2.json();
+    assert.equal(secondPayload.feed_version, 'v-fixed');
+    assert.equal(secondPayload.items.length, 1);
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /feed returns explicit stale-version response when requested feed_version is unavailable', async () => {
+  const store = {};
+  seedSnapshot(store, {
+    feed_version: 'v-current',
+    generated_at: new Date().toISOString(),
+    generated_at_ms: Date.now() - 1000,
+    items: makeSnapshotItems(),
+  });
+  const app = buildFeedApp({ feedRedis: makeFakeRedis({ store }) });
+  await app.ready();
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/feed?feed_version=v-missing&offset=10',
+      headers: makeAuthHeaders(app),
+    });
+
+    assert.equal(response.statusCode, 409);
+    const payload = response.json();
+    assert.equal(payload.error, 'STALE_FEED_VERSION');
+    assert.equal(payload.message, 'Лента обновилась');
+    assert.equal(payload.reload_from_start, true);
+    assert.equal(payload.current_feed_version, 'v-current');
   } finally {
     await app.close();
   }

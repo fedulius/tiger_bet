@@ -82,7 +82,7 @@ export function MatchPage() {
 
         {!state.loading && !state.error && item ? (
           <div id="match-details">
-            <article className="recommendation-card">
+            <article className="recommendation-card recommendation-card-detailed">
               <div className="recommendation-head">
                 <div>
                   <h3>{item.match || 'Матч'}</h3>

@@ -73,6 +73,7 @@ test('GET /favorites returns DB-backed favorites with per-sport league settings'
       sports: [
         {
           name: 'Футбол',
+          sport_url: 'soccer',
           leagues: ['Premier League'],
           all_leagues: false,
           available_leagues: ['Premier League', 'La Liga', 'Serie A', 'Bundesliga', 'Ligue 1', 'Champions League'],
@@ -80,6 +81,7 @@ test('GET /favorites returns DB-backed favorites with per-sport league settings'
         },
         {
           name: 'Теннис',
+          sport_url: 'tennis',
           leagues: [],
           all_leagues: true,
           available_leagues: ['ATP', 'WTA', 'Challenger'],
@@ -87,7 +89,11 @@ test('GET /favorites returns DB-backed favorites with per-sport league settings'
         },
       ],
       profile: 'telegram:777',
-      available_sports: ['Футбол', 'Хоккей', 'Теннис'],
+      available_sports: [
+        { sport_name: 'Футбол', sport_url: 'soccer' },
+        { sport_name: 'Хоккей', sport_url: 'ice-hockey' },
+        { sport_name: 'Теннис', sport_url: 'tennis' },
+      ],
       leagues_catalog: {
         'Футбол': ['Premier League', 'La Liga', 'Serie A', 'Bundesliga', 'Ligue 1', 'Champions League'],
         'Хоккей': ['KHL', 'NHL', 'World Championship'],
@@ -149,6 +155,7 @@ test('PUT /favorites replaces user favorites in DB and stores per-sport leagues'
       sports: [
         {
           name: 'Футбол',
+          sport_url: 'soccer',
           leagues: ['Premier League'],
           all_leagues: false,
           available_leagues: ['Premier League', 'La Liga', 'Serie A', 'Bundesliga', 'Ligue 1', 'Champions League'],
@@ -156,6 +163,7 @@ test('PUT /favorites replaces user favorites in DB and stores per-sport leagues'
         },
         {
           name: 'Теннис',
+          sport_url: 'tennis',
           leagues: [],
           all_leagues: true,
           available_leagues: ['ATP', 'WTA', 'Challenger'],
@@ -184,7 +192,9 @@ test('PUT /favorites replaces user favorites in DB and stores per-sport leagues'
     });
     assert.deepEqual(fakeRedis.deletedKeys.sort(), [
       'recommendations:1:La Liga',
+      'recommendations:1:La Liga:current_version',
       'recommendations:1:Premier League|3:',
+      'recommendations:1:Premier League|3::current_version',
     ]);
   } finally {
     await app.close();

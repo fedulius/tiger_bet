@@ -48,7 +48,8 @@ test('forecastAction sends short analysis when match is selected', async () => {
 
   await controller.forecastAction({ chat: { id: 1 } }, 'token');
 
-  assert.match(sent.text, /Краткий анализ:/);
+  assert.match(sent.text, /Анализ:/);
   assert.match(sent.text, /57%/);
   assert.equal(sent.backCallback, 'match_league_abc123');
 });
+
