@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { getRecommendations, loadLiveRecommendations, loadWideFeedRecommendations, betConfidenceFromSocialProof } = require('../../webapp/services/recommendationService');
+const { getRecommendations, loadLiveRecommendations, loadWideFeedRecommendations, betConfidenceFromSocialProof, FALLBACK_SPORT_PRIORITY } = require('../../webapp/services/recommendationService');
 const { selectRiskBets } = require('../../lib/stavkaApi');
 
 // --- Mock helpers ---
@@ -86,20 +86,119 @@ test('loadLiveRecommendations returns empty when no matches', async () => {
   assert.deepEqual(items, []);
 });
 
-test('loadLiveRecommendations filters by favoriteSports', async () => {
+test('loadLiveRecommendations prefers favorite sport items and fills remaining from fallback priority', async () => {
+  const now = Date.now();
   const matches = [
-    makeMatch({ id: 'm1', sportSlug: 'soccer' }),
-    makeMatch({ id: 'm2', sportSlug: 'tennis', homeName: 'Player A', awayName: 'Player B' }),
+    makeMatch({ id: 'm1', sportSlug: 'soccer', matchDate: new Date(now + 3600000).toISOString() }),
+    makeMatch({ id: 'm2', sportSlug: 'tennis', homeName: 'Player A', awayName: 'Player B', matchDate: new Date(now + 7200000).toISOString() }),
   ];
   const items = await loadLiveRecommendations({
     apiLoader: mockApiLoader(matches),
     popularBetsLoader: mockPopularBetsLoader(defaultPopularBets),
     riskBetsSelector: selectRiskBets,
     favoriteSports: [{ sport_id: 1, sport_name: 'Футбол' }],
-    limit: 10,
+    limit: 6,
   });
-  assert.equal(items.length, 1, 'should filter to soccer only');
-  assert.equal(items[0].sportSlug, 'soccer');
+  assert.ok(items.length >= 1, 'should have at least the favorite item');
+  assert.equal(items[0].sportSlug, 'soccer', 'favorite sport item should come first');
+  assert.equal(items.length, 2, 'tennis fills as fallback when only 1 favorite item');
+  assert.equal(items[1].sportSlug, 'tennis', 'tennis is priority-2 fallback');
+});
+
+test('loadLiveRecommendations does not use fallback when favorites reach the candidate limit', async () => {
+  const now = Date.now();
+  const matches = [
+    makeMatch({ id: 'm1', sportSlug: 'soccer', matchDate: new Date(now + 1 * 3600000).toISOString() }),
+    makeMatch({ id: 'm2', sportSlug: 'soccer', homeName: 'Real', awayName: 'Barca', matchDate: new Date(now + 2 * 3600000).toISOString() }),
+    makeMatch({ id: 'm3', sportSlug: 'soccer', homeName: 'City', awayName: 'United', matchDate: new Date(now + 3 * 3600000).toISOString() }),
+    makeMatch({ id: 'm4', sportSlug: 'tennis', homeName: 'P1', awayName: 'P2', matchDate: new Date(now + 0.5 * 3600000).toISOString() }),
+  ];
+  const items = await loadLiveRecommendations({
+    apiLoader: mockApiLoader(matches),
+    popularBetsLoader: mockPopularBetsLoader(defaultPopularBets),
+    riskBetsSelector: selectRiskBets,
+    favoriteSports: [{ sport_id: 1, sport_name: 'Футбол' }],
+    limit: 3,
+  });
+  assert.ok(items.every((i) => i.sportSlug === 'soccer'), 'all items should be from favorite sport when limit is reached');
+  assert.ok(!items.some((i) => i.sportSlug === 'tennis'), 'no fallback items when favorites fill the limit');
+});
+
+test('loadLiveRecommendations fills from fallback when favorites produce 0 items', async () => {
+  const now = Date.now();
+  const matches = [
+    makeMatch({ id: 'm-tennis', sportSlug: 'tennis', homeName: 'A', awayName: 'B', matchDate: new Date(now + 1 * 3600000).toISOString() }),
+    makeMatch({ id: 'm-dota', sportSlug: 'dota2', homeName: 'C', awayName: 'D', matchDate: new Date(now + 2 * 3600000).toISOString() }),
+  ];
+  const items = await loadLiveRecommendations({
+    apiLoader: mockApiLoader(matches),
+    popularBetsLoader: mockPopularBetsLoader(defaultPopularBets),
+    riskBetsSelector: selectRiskBets,
+    favoriteSports: [{ sport_id: 1, sport_name: 'Футбол' }],
+    limit: 6,
+  });
+  assert.ok(items.length >= 1, 'should have fallback items when favorites produce 0 items');
+  const slugs = items.map((i) => i.sportSlug);
+  assert.ok(slugs.includes('tennis') || slugs.includes('dota2'), 'fallback items should be from priority sports');
+});
+
+test('loadLiveRecommendations fallback fill respects sport priority order', async () => {
+  const now = Date.now();
+  const matches = [
+    makeMatch({ id: 'm-soccer', sportSlug: 'soccer', matchDate: new Date(now + 1 * 3600000).toISOString() }),
+    makeMatch({ id: 'm-csgo', sportSlug: 'csgo', homeName: 'NaVi', awayName: 'G2', matchDate: new Date(now + 2 * 3600000).toISOString() }),
+    makeMatch({ id: 'm-tennis', sportSlug: 'tennis', homeName: 'P1', awayName: 'P2', matchDate: new Date(now + 3 * 3600000).toISOString() }),
+  ];
+  const items = await loadLiveRecommendations({
+    apiLoader: mockApiLoader(matches),
+    popularBetsLoader: mockPopularBetsLoader(defaultPopularBets),
+    riskBetsSelector: selectRiskBets,
+    favoriteSports: [{ sport_id: 1, sport_name: 'Футбол' }],
+    limit: 6,
+  });
+  assert.equal(items.length, 3, 'should return all 3 items');
+  assert.equal(items[0].sportSlug, 'soccer', 'soccer comes first as favorite');
+  // tennis is priority 2, csgo is priority 4; tennis must appear before csgo in selection order
+  const fillSlugs = items.slice(1).map((i) => i.sportSlug);
+  assert.ok(fillSlugs.indexOf('tennis') < fillSlugs.indexOf('csgo'), 'tennis (priority 2) appears before csgo (priority 4)');
+});
+
+test('FALLBACK_SPORT_PRIORITY has required order: soccer, tennis, dota2, csgo, ice-hockey, american-football, snooker', () => {
+  const { resolveSport } = require('../../lib/stavkaApi');
+  const expectedSlugs = ['soccer', 'tennis', 'dota2', 'csgo', 'ice-hockey', 'american-football', 'snooker'];
+  const expectedIds = expectedSlugs.map((slug) => resolveSport(slug).sport_id);
+  assert.deepEqual(FALLBACK_SPORT_PRIORITY, expectedIds, 'fallback priority must match the specified order');
+});
+
+test('getRecommendations fills from fallback priority when favorites produce fewer than 3 live items', async () => {
+  const now = Date.now();
+  const matches = [
+    makeMatch({ id: 'fav-1', sportSlug: 'soccer', matchDate: new Date(now + 1 * 3600000).toISOString() }),
+    makeMatch({ id: 'fill-tennis', sportSlug: 'tennis', homeName: 'P1', awayName: 'P2', matchDate: new Date(now + 2 * 3600000).toISOString() }),
+    makeMatch({ id: 'fill-dota', sportSlug: 'dota2', homeName: 'T1', awayName: 'T2', matchDate: new Date(now + 3 * 3600000).toISOString() }),
+  ];
+
+  const result = await getRecommendations({
+    enableLive: true,
+    disableCache: true,
+    favoriteSports: [{ sport_id: 1, sport_name: 'Футбол' }],
+    apiLoader: mockApiLoader(matches),
+    popularBetsLoader: mockPopularBetsLoader(defaultPopularBets),
+    riskBetsSelector: selectRiskBets,
+  });
+
+  assert.ok(result.items, 'should have items');
+  assert.equal(result.items.length, 3, 'should return 3 items (1 favorite + 2 fallback)');
+  assert.equal(result.source, 'favorites', 'source should remain favorites when user has favorite sports');
+
+  const slugs = result.items.map((i) => i.sportSlug);
+  assert.ok(slugs.includes('soccer'), 'should include favorite soccer item');
+  assert.ok(slugs.includes('tennis'), 'should include fallback tennis item');
+  assert.ok(slugs.includes('dota2'), 'should include fallback dota2 item');
+
+  const starts = result.items.map((i) => i.starts_at);
+  const sortedStarts = [...starts].sort((a, b) => new Date(a) - new Date(b));
+  assert.deepEqual(starts, sortedStarts, 'items should be sorted by starts_at');
 });
 
 test('loadLiveRecommendations bets have risk labels', async () => {

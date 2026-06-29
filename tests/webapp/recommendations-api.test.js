@@ -718,6 +718,245 @@ test('GET /recommendations omits ai_brief for item with synthetic match_id when 
   }
 });
 
+test('GET /recommendations serves cached payload with favorite and fallback-fill sport items preserving shape', async () => {
+  const cleanup = withTempFavoritesFile();
+  const now = Date.now();
+  const cachedPayload = JSON.stringify({
+    items: [
+      {
+        id: 'fav-soccer-1',
+        match_id: 300,
+        match_slug: 'soccer-match-fill-test',
+        sport_id: 1,
+        sport_name: 'Футбол',
+        match: 'A — B',
+        league: 'Premier League',
+        starts_at: new Date(now + 1 * 3600000).toISOString(),
+        main_thought: 'Победа хозяев',
+        confidence: 65,
+        is_new: false,
+        bets: [
+          { type: 'primary', forecast: 'П1', coeff: 1.65, probability: 61, confidence: 'высокая', description: 'Base.' },
+          { type: 'value', forecast: 'Обе забьют', coeff: 1.85, probability: 54, confidence: 'средняя', description: 'Alt.' },
+          { type: 'exact-score', forecast: 'Точный счет 1:0', coeff: 6.8, probability: 14, confidence: 'высокий риск', description: 'Risky.' },
+        ],
+      },
+      {
+        id: 'fill-tennis-1',
+        match_id: 301,
+        match_slug: 'tennis-match-fill-test',
+        sport_id: 3,
+        sport_name: 'Теннис',
+        match: 'C — D',
+        league: 'ATP',
+        starts_at: new Date(now + 2 * 3600000).toISOString(),
+        main_thought: 'П2',
+        confidence: 60,
+        is_new: false,
+        bets: [
+          { type: 'primary', forecast: 'П2', coeff: 1.7, probability: 59, confidence: 'средняя', description: 'Base.' },
+          { type: 'value', forecast: 'Тотал больше', coeff: 1.9, probability: 53, confidence: 'средняя', description: 'Alt.' },
+          { type: 'exact-score', forecast: 'Точный счет 2:1', coeff: 6.8, probability: 14, confidence: 'высокий риск', description: 'Risky.' },
+        ],
+      },
+    ],
+    source: 'stavka-live',
+    updated_at: new Date().toISOString(),
+    recommendations_version: 'r9000',
+  });
+
+  const fakeRedis = makeFakeRedis({ store: { 'recommendations:default': cachedPayload } });
+  const fakePg = createFakePg({
+    handler(query) {
+      if (/FROM public\.favorite_sport fs/i.test(query)) return [];
+      if (/FROM public\.ai_recommendation_briefs/i.test(query)) return [];
+      return [];
+    },
+  });
+
+  const app = buildTestApp(buildApp, { pg: fakePg, recommendationsRedis: fakeRedis });
+  await app.ready();
+
+  try {
+    const response = await app.inject({
+      headers: makeAuthHeaders(app),
+      method: 'GET',
+      url: '/recommendations',
+    });
+
+    assert.equal(response.statusCode, 200);
+    const payload = response.json();
+    assert.equal(Array.isArray(payload.items), true);
+    assert.equal(payload.items.length, 2, 'should return both favorite and fallback-fill items');
+
+    const sportIds = payload.items.map((item) => item.sport_id);
+    assert.ok(sportIds.includes(1), 'should include soccer item');
+    assert.ok(sportIds.includes(3), 'should include tennis fallback item');
+
+    const starts = payload.items.map((item) => item.starts_at);
+    const sortedStarts = [...starts].sort((a, b) => new Date(a) - new Date(b));
+    assert.deepEqual(starts, sortedStarts, 'items should be sorted by starts_at');
+
+    for (const item of payload.items) {
+      assert.ok(item.id, 'each item should have id');
+      assert.ok(item.starts_at, 'each item should have starts_at');
+      assert.equal(Array.isArray(item.bets), true, 'each item should have bets array');
+    }
+  } finally {
+    await app.close();
+    cleanup();
+  }
+});
+
+test('GET /recommendations enriches mixed numeric and synthetic items in one response', async () => {
+  const cleanup = withTempFavoritesFile();
+  const now = Date.now();
+  const cachedPayload = JSON.stringify({
+    items: [
+      {
+        id: 'numeric-501',
+        match_id: 501,
+        match_slug: 'numeric-match-501',
+        sport_id: 1,
+        sport_name: 'Футбол',
+        match: 'Home 501 — Away 501',
+        league: 'EPL',
+        starts_at: new Date(now + 1 * 3600000).toISOString(),
+        main_thought: 'П1',
+        confidence: 70,
+        is_new: false,
+        bets: [],
+      },
+      {
+        id: 'ts_mixed_502',
+        match_id: 'ts_mixed_502',
+        match_slug: 'slug-match-502',
+        sport_id: 3,
+        sport_name: 'Теннис',
+        match: 'Player 1 — Player 2',
+        league: 'ATP',
+        starts_at: new Date(now + 2 * 3600000).toISOString(),
+        main_thought: 'П2',
+        confidence: 61,
+        is_new: false,
+        bets: [],
+      },
+    ],
+    source: 'stavka-live',
+    updated_at: new Date().toISOString(),
+    recommendations_version: 'r9100',
+  });
+
+  const fakeRedis = makeFakeRedis({ store: { 'recommendations:default': cachedPayload } });
+  const fakePg = createFakePg({
+    handler(query) {
+      if (/FROM public\.favorite_sport fs/i.test(query)) return [];
+      if (/WHERE match_id IN/i.test(query)) {
+        return [{
+          match_id: 501,
+          status: 'ready',
+          headline: 'Numeric brief',
+          brief: 'Loaded by numeric match_id',
+          risk_note: 'Numeric risk',
+        }];
+      }
+      if (/WHERE match_slug IN/i.test(query)) {
+        return [{
+          match_id: 777,
+          match_slug: 'slug-match-502',
+          status: 'stale',
+          headline: 'Slug stale brief',
+          brief: 'Loaded by match_slug fallback',
+          risk_note: null,
+        }];
+      }
+      return [];
+    },
+  });
+
+  const app = buildTestApp(buildApp, { pg: fakePg, recommendationsRedis: fakeRedis });
+  await app.ready();
+
+  try {
+    const response = await app.inject({
+      headers: makeAuthHeaders(app),
+      method: 'GET',
+      url: '/recommendations',
+    });
+
+    assert.equal(response.statusCode, 200);
+    const payload = response.json();
+    assert.equal(payload.items.length, 2);
+
+    const numericItem = payload.items.find((item) => item.match_id === 501);
+    const syntheticItem = payload.items.find((item) => item.match_slug === 'slug-match-502');
+
+    assert.ok(numericItem?.ai_brief, 'numeric item should be enriched via match_id');
+    assert.equal(numericItem.ai_brief.headline, 'Numeric brief');
+    assert.equal(numericItem.ai_brief.stale, false);
+
+    assert.ok(syntheticItem?.ai_brief, 'synthetic item should be enriched via match_slug');
+    assert.equal(syntheticItem.ai_brief.headline, 'Slug stale brief');
+    assert.equal(syntheticItem.ai_brief.stale, true);
+  } finally {
+    await app.close();
+    cleanup();
+  }
+});
+
+test('GET /recommendations leaves synthetic item unchanged when match_slug is missing', async () => {
+  const cleanup = withTempFavoritesFile();
+  const cachedPayload = JSON.stringify({
+    items: [{
+      id: 'ts_no_slug_1',
+      match_id: 'ts_no_slug_1',
+      match_slug: null,
+      sport_id: 11,
+      sport_name: 'Дота 2',
+      match: 'Team One — Team Two',
+      league: 'DPC',
+      starts_at: new Date(Date.now() + 3600000).toISOString(),
+      main_thought: 'ТБ карт',
+      confidence: 57,
+      is_new: false,
+      bets: [],
+    }],
+    source: 'stavka-live',
+    updated_at: new Date().toISOString(),
+    recommendations_version: 'r9101',
+  });
+
+  const fakeRedis = makeFakeRedis({ store: { 'recommendations:default': cachedPayload } });
+  const fakePg = createFakePg({
+    handler(query) {
+      if (/FROM public\.favorite_sport fs/i.test(query)) return [];
+      if (/FROM public\.ai_recommendation_briefs/i.test(query)) {
+        throw new Error('brief store should not be queried without numeric match_id or match_slug');
+      }
+      return [];
+    },
+  });
+
+  const app = buildTestApp(buildApp, { pg: fakePg, recommendationsRedis: fakeRedis });
+  await app.ready();
+
+  try {
+    const response = await app.inject({
+      headers: makeAuthHeaders(app),
+      method: 'GET',
+      url: '/recommendations',
+    });
+
+    assert.equal(response.statusCode, 200);
+    const payload = response.json();
+    assert.equal(payload.items.length, 1);
+    assert.equal('ai_brief' in payload.items[0], false, 'item without numeric match_id and match_slug should stay unchanged');
+  } finally {
+    await app.close();
+    cleanup();
+  }
+});
+
 test('GET /recommendations returns 401 without JWT', async () => {
   const app = buildTestApp(buildApp);
   await app.ready();

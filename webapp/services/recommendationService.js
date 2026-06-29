@@ -320,6 +320,9 @@ const SPORT_META_BY_SLUG = {
   boxing: { sport_id: 14, sport_name: 'Бокс' },
 };
 
+// Ordered sport_ids used to fill remaining slots when favorites produce < 3 items.
+const FALLBACK_SPORT_PRIORITY = [1, 3, 11, 10, 2, 12, 9]; // soccer, tennis, dota2, csgo, ice-hockey, american-football, snooker
+
 function normalizeMatchTitle(team = '') {
   return String(team || '')
     .replace(/\s+-\s+/g, ' vs ')
@@ -592,21 +595,81 @@ async function loadRecommendationsFromApi({ apiLoader, popularBetsLoader, riskBe
   if (!Array.isArray(allMatches) || allMatches.length === 0) return [];
 
   const baseNow = new Date(now).getTime();
-  const sports = Array.isArray(favoriteSports) && favoriteSports.length > 0
-    ? favoriteSports
-    : [{ sport_id: 1, sport_name: 'Футбол' }];
-  const sportIds = new Set(sports.map((s) => Number(s?.sport_id)).filter(Number.isFinite));
+  const hasFavorites = Array.isArray(favoriteSports) && favoriteSports.length > 0;
+  const { resolveSport } = require('../../lib/stavkaApi');
 
-  const upcoming = allMatches.filter((m) => {
+  const isEligibleMatch = (m) => {
     if (!m || !m.matchDate || !m.odds || !m.odds.one_x_two) return false;
     const ts = new Date(m.matchDate).getTime();
-    if (!Number.isFinite(ts) || ts <= baseNow) return false;
-    const sportId = (require('../../lib/stavkaApi').resolveSport(m.sportSlug)).sport_id;
-    return sportIds.size === 0 || sportIds.has(sportId);
-  });
+    return Number.isFinite(ts) && ts > baseNow;
+  };
 
-  upcoming.sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate));
-  const topMatches = upcoming.slice(0, limit);
+  let topMatches;
+
+  if (hasFavorites) {
+    const favSportIds = new Set(favoriteSports.map((s) => Number(s?.sport_id)).filter(Number.isFinite));
+    const allUpcoming = allMatches.filter(isEligibleMatch);
+
+    const favoriteMatches = [];
+    const nonFavoriteMatches = [];
+    for (const m of allUpcoming) {
+      if (favSportIds.has(resolveSport(m.sportSlug).sport_id)) favoriteMatches.push(m);
+      else nonFavoriteMatches.push(m);
+    }
+
+    favoriteMatches.sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate));
+    const favSelected = favoriteMatches.slice(0, limit);
+
+    if (favSelected.length < limit) {
+      const need = limit - favSelected.length;
+      const seen = new Set(favSelected.map((m) => m.id || m.slug).filter(Boolean));
+
+      const bySport = new Map();
+      for (const m of nonFavoriteMatches) {
+        const sid = resolveSport(m.sportSlug).sport_id;
+        if (!bySport.has(sid)) bySport.set(sid, []);
+        bySport.get(sid).push(m);
+      }
+      for (const g of bySport.values()) {
+        g.sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate));
+      }
+
+      const fill = [];
+      const ptrs = new Map(FALLBACK_SPORT_PRIORITY.map((sid) => [sid, 0]));
+      while (fill.length < need) {
+        let addedThisRound = false;
+        for (const sid of FALLBACK_SPORT_PRIORITY) {
+          if (fill.length >= need) break;
+          const group = bySport.get(sid) || [];
+          const ptr = ptrs.get(sid) ?? 0;
+          if (ptr < group.length) {
+            ptrs.set(sid, ptr + 1);
+            const m = group[ptr];
+            const key = m.id || m.slug;
+            if (!key || !seen.has(key)) {
+              fill.push(m);
+              if (key) seen.add(key);
+              addedThisRound = true;
+            }
+          }
+        }
+        if (!addedThisRound) break;
+      }
+
+      topMatches = [...favSelected, ...fill];
+    } else {
+      topMatches = favSelected;
+    }
+  } else {
+    const upcoming = allMatches.filter((m) => {
+      if (!isEligibleMatch(m)) return false;
+      const sportId = resolveSport(m.sportSlug).sport_id;
+      return sportId === 1;
+    });
+    upcoming.sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate));
+    topMatches = upcoming.slice(0, limit);
+  }
+
   if (topMatches.length === 0) return [];
 
   const results = await Promise.allSettled(
@@ -897,6 +960,7 @@ async function getRecommendations(options = {}) {
 }
 
 module.exports = {
+  FALLBACK_SPORT_PRIORITY,
   FALLBACK_TOP_MATCHES,
   betConfidenceFromSocialProof,
   getRecommendations,
