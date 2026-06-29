@@ -191,6 +191,9 @@ test('refreshMatchBrief handles source skip and preserves stale semantics', asyn
     matchId: 101,
     generationId: 900,
     skipReason: 'insufficient_data',
+    sourceMode: 'skip',
+    sourceHash: null,
+    sourcePayload: { source_mode: 'skip', skip_reason: 'insufficient_data', match_slug: 'team-a-team-b' },
   });
 });
 
@@ -223,6 +226,9 @@ test('refreshMatchBrief handles generation failure and preserves stale semantics
     matchId: 101,
     generationId: 901,
     errorMessage: 'provider_timeout',
+    sourceMode: 'light',
+    sourceHash: 'hash-2',
+    sourcePayload: { source_mode: 'light', source_hash: 'hash-2', match_slug: 'team-a-team-b' },
   });
 });
 
@@ -279,6 +285,113 @@ test('runAiBriefBatch collects counters across mixed outcomes', async () => {
   assert.equal(summary.unchanged, 1);
   assert.equal(summary.skipped, 1);
   assert.equal(summary.stale_transitions, 1);
+});
+
+test('selectCandidateMatches keeps slug-only future matches', () => {
+  const matches = [
+    makeMatch({ id: undefined, slug: 'alpha-vs-beta', starts_at: '2026-06-27T15:00:00.000Z' }),
+    makeMatch({ id: undefined, slug: 'gamma-vs-delta', starts_at: '2026-06-27T16:00:00.000Z' }),
+  ];
+
+  const result = selectCandidateMatches(matches, { now: NOW });
+  assert.equal(result.length, 2);
+});
+
+test('selectCandidateMatches dedupes slug-only matches by slug deterministically', () => {
+  const matches = [
+    makeMatch({ id: undefined, slug: 'alpha-vs-beta', starts_at: '2026-06-27T15:00:00.000Z' }),
+    makeMatch({ id: undefined, slug: 'alpha-vs-beta', starts_at: '2026-06-27T16:00:00.000Z' }),
+  ];
+
+  const result = selectCandidateMatches(matches, { now: NOW });
+  assert.equal(result.length, 1);
+  assert.equal(result[0].slug, 'alpha-vs-beta');
+});
+
+test('selectCandidateMatches drops slug-only past matches', () => {
+  const matches = [
+    makeMatch({ id: undefined, slug: 'alpha-vs-beta', starts_at: '2026-06-27T09:00:00.000Z' }),
+  ];
+
+  const result = selectCandidateMatches(matches, { now: NOW });
+  assert.equal(result.length, 0);
+});
+
+test('selectCandidateMatches drops matches with neither id nor slug', () => {
+  const matches = [
+    makeMatch({ id: undefined, slug: undefined, starts_at: '2026-06-27T15:00:00.000Z' }),
+  ];
+
+  const result = selectCandidateMatches(matches, { now: NOW });
+  assert.equal(result.length, 0);
+});
+
+test('refreshMatchBrief does not return invalid_match_id for slug-only live match', async () => {
+  const result = await refreshMatchBrief({
+    pg: {},
+    match: makeMatch({ id: undefined }),
+    now: NOW,
+    sourceBuilder: async () => ({ source_mode: 'full', source_hash: 'h-slug', match_slug: 'team-a-team-b' }),
+    generator: async () => ({
+      status: 'ready',
+      output: { headline: 'H', brief: 'B', risk_note: null },
+    }),
+    store: makeStore(),
+  });
+
+  assert.equal(result.outcome, 'ready');
+  assert.notEqual(result.error, 'invalid_match_id');
+});
+
+test('refreshMatchBrief derives deterministic positive match_id from slug', async () => {
+  const run = () =>
+    refreshMatchBrief({
+      pg: {},
+      match: makeMatch({ id: undefined }),
+      now: NOW,
+      sourceBuilder: async () => ({ source_mode: 'full', source_hash: 'h-slug', match_slug: 'team-a-team-b' }),
+      generator: async () => ({
+        status: 'ready',
+        output: { headline: 'H', brief: 'B', risk_note: null },
+      }),
+      store: makeStore(),
+    });
+
+  const [r1, r2] = await Promise.all([run(), run()]);
+
+  assert.equal(r1.match_id, r2.match_id);
+  assert.ok(Number.isFinite(r1.match_id));
+  assert.ok(r1.match_id > 0);
+});
+
+test('refreshMatchBrief still fails with invalid_match_id when match has no id and no slug', async () => {
+  const result = await refreshMatchBrief({
+    pg: {},
+    match: makeMatch({ id: undefined, slug: undefined }),
+    now: NOW,
+    sourceBuilder: async () => ({ source_mode: 'full', source_hash: 'h', match_slug: null }),
+    generator: async () => ({ status: 'ready', output: { headline: 'H', brief: 'B', risk_note: null } }),
+    store: makeStore(),
+  });
+
+  assert.equal(result.outcome, 'failed');
+  assert.equal(result.error, 'invalid_match_id');
+});
+
+test('refreshMatchBrief uses real numeric match_id unchanged when present', async () => {
+  const result = await refreshMatchBrief({
+    pg: {},
+    match: makeMatch({ id: 999 }),
+    now: NOW,
+    sourceBuilder: async () => ({ source_mode: 'full', source_hash: 'h-999', match_slug: 'team-a-team-b' }),
+    generator: async () => ({
+      status: 'ready',
+      output: { headline: 'H', brief: 'B', risk_note: null },
+    }),
+    store: makeStore(),
+  });
+
+  assert.equal(result.match_id, 999);
 });
 
 test('runAiBriefBatch continues when one match throws', async () => {

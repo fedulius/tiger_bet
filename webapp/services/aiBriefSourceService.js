@@ -7,6 +7,11 @@ const STAVKA_MATCH_URL_BASE = 'https://stavka.tv/matches';
 const MIN_USABLE_BETS = 2;
 const MIN_BET_COUNT = 5;
 
+function buildSkipHash({ skip_reason, match_slug = null }) {
+  const canonical = JSON.stringify({ source_mode: 'skip', skip_reason, match_slug: match_slug || null });
+  return crypto.createHash('sha256').update(canonical).digest('hex');
+}
+
 async function buildAiBriefSourcePayload({
   match,
   popularBetsLoader,
@@ -14,11 +19,11 @@ async function buildAiBriefSourcePayload({
   riskBetsSelector,
 }) {
   if (!match || !match.slug) {
-    return { source_mode: 'skip', skip_reason: 'no_match', source_hash: null };
+    return { source_mode: 'skip', skip_reason: 'no_match', source_hash: buildSkipHash({ skip_reason: 'no_match' }) };
   }
 
   if (typeof popularBetsLoader !== 'function') {
-    return { source_mode: 'skip', skip_reason: 'no_loader', source_hash: null };
+    return { source_mode: 'skip', skip_reason: 'no_loader', source_hash: buildSkipHash({ skip_reason: 'no_loader', match_slug: match.slug }) };
   }
 
   const [popularBetsData, matchDetailData] = await Promise.all([
@@ -30,7 +35,7 @@ async function buildAiBriefSourcePayload({
   const usableBets = groupedBets.filter(b => (b.count || 0) >= MIN_BET_COUNT);
 
   if (usableBets.length < MIN_USABLE_BETS) {
-    return { source_mode: 'skip', skip_reason: 'insufficient_data', source_hash: null };
+    return { source_mode: 'skip', skip_reason: 'insufficient_data', source_hash: buildSkipHash({ skip_reason: 'insufficient_data', match_slug: match.slug }) };
   }
 
   const riskBets = typeof riskBetsSelector === 'function'

@@ -308,7 +308,7 @@ test('insertGeneration: passes correct params in order', async () => {
   assert.equal(params[6], null);                         // risk_note
   assert.equal(params[7], 'light');                      // source_mode
   assert.equal(params[8], 'hash1');                      // source_hash
-  assert.equal(params[9], null);                         // source_payload
+  assert.equal(params[9], '{}');                         // source_payload (null falls back to '{}')
   assert.equal(params[10], 'claude-haiku-4-5-20251001'); // model_name
   assert.equal(params[11], 'v2');                        // prompt_version
   assert.equal(params[12], 100);                         // tokens_input
@@ -428,7 +428,7 @@ test('upsertNoopCurrentRow: inserts a noop row with correct params', async () =>
   });
 
   assert.equal(pg.calls.length, 1);
-  assert.deepEqual(pg.calls[0].params, [9, 'failed', 3, 'Timeout', null]);
+  assert.deepEqual(pg.calls[0].params, [9, 'failed', 3, 'Timeout', null, 'skip', null, '{}']);
 });
 
 test('upsertNoopCurrentRow: query has upsert logic guarded against overwriting real briefs', async () => {

@@ -1,5 +1,6 @@
 'use strict';
 
+const { aiBriefLlmProvider } = require('./aiBriefLlmProvider');
 const {
   getCurrentBriefRefreshStateByMatchId,
   insertGeneration,
@@ -10,6 +11,17 @@ const {
 const { buildAiBriefSourcePayload } = require('./aiBriefSourceService');
 const { generateAiBrief } = require('./aiBriefGenerator');
 
+// djb2-based hash mapped to a high range safe for JS Number precision and Postgres bigint.
+// Range: [4_000_000_000_000, 4_004_294_967_295] — no overlap with typical auto-increment IDs.
+function slugToMatchId(slug) {
+  let h = 5381;
+  for (let i = 0; i < slug.length; i++) {
+    h = ((h << 5) + h) ^ slug.charCodeAt(i);
+    h >>>= 0;
+  }
+  return 4_000_000_000_000 + h;
+}
+
 function selectCandidateMatches(matches, { limit = null, now = new Date() } = {}) {
   if (!Array.isArray(matches)) return [];
 
@@ -17,8 +29,12 @@ function selectCandidateMatches(matches, { limit = null, now = new Date() } = {}
   const unique = new Map();
 
   for (const match of matches) {
-    const matchId = Number(match?.id ?? match?.match_id);
-    if (!Number.isFinite(matchId)) continue;
+    let matchId = Number(match?.id ?? match?.match_id);
+    if (!Number.isFinite(matchId)) {
+      const slug = match?.slug || match?.match_slug;
+      if (!slug) continue;
+      matchId = slugToMatchId(slug);
+    }
     const startsAtRaw = match?.starts_at || match?.startsAt || null;
     const startsAtTs = startsAtRaw ? Date.parse(startsAtRaw) : null;
     if (startsAtTs != null && Number.isFinite(startsAtTs) && startsAtTs <= nowTs) continue;
@@ -120,9 +136,14 @@ async function refreshMatchBrief({
     markCurrentBriefStaleAfterSkip: store.markCurrentBriefStaleAfterSkip || markCurrentBriefStaleAfterSkip,
   };
 
-  const matchId = Number(match?.id ?? match?.match_id);
+  let matchId = Number(match?.id ?? match?.match_id);
   if (!Number.isFinite(matchId)) {
-    return { match_id: null, outcome: 'failed', error: 'invalid_match_id', counts: { failed: 1 } };
+    const slug = match?.slug || match?.match_slug;
+    if (!slug) {
+      return { match_id: null, outcome: 'failed', error: 'invalid_match_id', counts: { failed: 1 } };
+    }
+    matchId = slugToMatchId(slug);
+    match = { ...match, id: matchId };
   }
 
   const currentRow = await storeApi.getCurrentBriefByMatchId(pg, { matchId });
@@ -164,6 +185,9 @@ async function refreshMatchBrief({
       matchId,
       generationId: generationRow?.id || null,
       skipReason: sourcePayload?.skip_reason || 'source_skipped',
+      sourceMode: sourcePayload?.source_mode || null,
+      sourceHash: sourcePayload?.source_hash || null,
+      sourcePayload,
     });
 
     return {
@@ -239,6 +263,9 @@ async function refreshMatchBrief({
       matchId,
       generationId: generationRow?.id || null,
       errorMessage: generationResult.error || 'generation_failed',
+      sourceMode: sourcePayload?.source_mode || null,
+      sourceHash: sourcePayload?.source_hash || null,
+      sourcePayload,
     });
 
     return {
@@ -289,6 +316,7 @@ async function runAiBriefBatch({
   pg,
   matches,
   selectCandidates = selectCandidateMatches,
+  generatorProvider = aiBriefLlmProvider,
   ...deps
 }) {
   const candidates = selectCandidates(matches, deps.selectionOptions || {});
@@ -297,7 +325,7 @@ async function runAiBriefBatch({
 
   for (const match of candidates) {
     try {
-      const result = await refreshMatchBrief({ pg, match, ...deps });
+      const result = await refreshMatchBrief({ pg, match, generatorProvider, ...deps });
       summary.results.push(result);
       summary.processed += 1;
       mergeCounts(summary, result.counts);

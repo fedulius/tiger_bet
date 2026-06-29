@@ -121,4 +121,50 @@ describe('AiRecommendationBriefs runner', () => {
       batchServiceModule.runAiBriefBatch = origRunBatch;
     }
   });
+
+  it('passes aiBriefLlmProvider as default generatorProvider', async () => {
+    const { aiBriefLlmProvider } = require('../../webapp/services/aiBriefLlmProvider');
+
+    const origFetchAllMatches = stavkaApi.fetchAllMatches;
+    stavkaApi.fetchAllMatches = async () => [];
+
+    let capturedArgs;
+    const origRunBatch = batchServiceModule.runAiBriefBatch;
+    batchServiceModule.runAiBriefBatch = async (args) => {
+      capturedArgs = args;
+      return { candidates: 0, results: [] };
+    };
+
+    try {
+      const runner = new AiRecommendationBriefs({});
+      await runner.runOnce();
+      assert.strictEqual(capturedArgs.generatorProvider, aiBriefLlmProvider, 'should default to aiBriefLlmProvider');
+    } finally {
+      stavkaApi.fetchAllMatches = origFetchAllMatches;
+      batchServiceModule.runAiBriefBatch = origRunBatch;
+    }
+  });
+
+  it('allows generatorProvider to be overridden via options', async () => {
+    const customProvider = async () => {};
+
+    const origFetchAllMatches = stavkaApi.fetchAllMatches;
+    stavkaApi.fetchAllMatches = async () => [];
+
+    let capturedArgs;
+    const origRunBatch = batchServiceModule.runAiBriefBatch;
+    batchServiceModule.runAiBriefBatch = async (args) => {
+      capturedArgs = args;
+      return { candidates: 0, results: [] };
+    };
+
+    try {
+      const runner = new AiRecommendationBriefs({});
+      await runner.runOnce({ generatorProvider: customProvider });
+      assert.strictEqual(capturedArgs.generatorProvider, customProvider, 'should use provided override');
+    } finally {
+      stavkaApi.fetchAllMatches = origFetchAllMatches;
+      batchServiceModule.runAiBriefBatch = origRunBatch;
+    }
+  });
 });

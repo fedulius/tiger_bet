@@ -2,6 +2,7 @@
 
 const aiBriefBatchService = require('../webapp/services/aiBriefBatchService');
 const stavkaApi = require('../lib/stavkaApi');
+const { aiBriefLlmProvider } = require('../webapp/services/aiBriefLlmProvider');
 
 class AiRecommendationBriefs {
   constructor(pg) {
@@ -16,6 +17,7 @@ class AiRecommendationBriefs {
       popularBetsLoader: stavkaApi.fetchPopularBets,
       matchDetailLoader: stavkaApi.fetchMatchDetail,
       riskBetsSelector: stavkaApi.selectRiskBets,
+      generatorProvider: aiBriefLlmProvider,
       ...options,
     });
   }

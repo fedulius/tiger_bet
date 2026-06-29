@@ -621,6 +621,11 @@ section h2,
   border-top: 1px solid var(--line);
 }
 
+.recommendation-card-brief {
+  margin-top: 10px;
+  margin-bottom: 0;
+}
+
 .ai-brief-stale {
   margin: 0;
   font-size: 0.78rem;

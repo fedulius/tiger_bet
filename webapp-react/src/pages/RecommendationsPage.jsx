@@ -73,6 +73,7 @@ function normalizeFavoritesPayload(payload) {
 function RecommendationCard({ item, onOpenBet }) {
   const bets = Array.isArray(item.bets) ? item.bets.slice(0, 3) : [];
   const defaultBetIndex = bets.findIndex(Boolean);
+  const brief = item.ai_brief && typeof item.ai_brief === 'object' ? item.ai_brief : null;
 
   return (
     <article className="recommendation-card" data-id={item.id || ''}>
@@ -105,6 +106,13 @@ function RecommendationCard({ item, onOpenBet }) {
               </button>
             ) : null
           ))}
+        </div>
+      ) : null}
+      {brief ? (
+        <div className="ai-brief recommendation-card-brief">
+          {brief.headline ? <p className="ai-brief-headline">{brief.headline}</p> : null}
+          {brief.brief ? <p className="ai-brief-body">{brief.brief}</p> : null}
+          {brief.risk_note ? <p className="ai-brief-risk">{brief.risk_note}</p> : null}
         </div>
       ) : null}
     </article>

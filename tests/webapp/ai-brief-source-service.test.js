@@ -133,7 +133,7 @@ test('buildAiBriefSourcePayload: skip when only one usable bet (insufficient_dat
   });
 
   assert.equal(result.source_mode, 'skip');
-  assert.equal(result.source_hash, null);
+  assert.ok(typeof result.source_hash === 'string' && result.source_hash.length === 64, 'skip should have deterministic source_hash');
   assert.equal(result.skip_reason, 'insufficient_data');
 });
 
@@ -146,7 +146,7 @@ test('buildAiBriefSourcePayload: skip when popular bets data is null', async () 
   });
 
   assert.equal(result.source_mode, 'skip');
-  assert.equal(result.source_hash, null);
+  assert.ok(typeof result.source_hash === 'string' && result.source_hash.length === 64, 'skip should have deterministic source_hash');
 });
 
 test('buildAiBriefSourcePayload: skip when popular bets list is empty', async () => {
@@ -158,7 +158,7 @@ test('buildAiBriefSourcePayload: skip when popular bets list is empty', async ()
   });
 
   assert.equal(result.source_mode, 'skip');
-  assert.equal(result.source_hash, null);
+  assert.ok(typeof result.source_hash === 'string' && result.source_hash.length === 64, 'skip should have deterministic source_hash');
 });
 
 test('buildAiBriefSourcePayload: skip when match is null', async () => {
@@ -170,7 +170,7 @@ test('buildAiBriefSourcePayload: skip when match is null', async () => {
   });
 
   assert.equal(result.source_mode, 'skip');
-  assert.equal(result.source_hash, null);
+  assert.ok(typeof result.source_hash === 'string' && result.source_hash.length === 64, 'skip should have deterministic source_hash');
   assert.equal(result.skip_reason, 'no_match');
 });
 
@@ -196,7 +196,7 @@ test('buildAiBriefSourcePayload: skip when popularBetsLoader is not a function',
 
   assert.equal(result.source_mode, 'skip');
   assert.equal(result.skip_reason, 'no_loader');
-  assert.equal(result.source_hash, null);
+  assert.ok(typeof result.source_hash === 'string' && result.source_hash.length === 64, 'skip should have deterministic source_hash');
 });
 
 // --- Deterministic hash ---

@@ -128,6 +128,12 @@ async function insertGeneration(pg, {
   skipReason = null,
   startedAt = null,
 }) {
+  const resolvedSourceMode = sourceMode != null ? sourceMode : 'skip';
+  const resolvedSourceHash = sourceHash != null ? sourceHash : 'unknown';
+  const resolvedSourcePayload = sourcePayload != null ? sourcePayload : '{}';
+  const resolvedModelName = modelName != null ? modelName : 'unknown';
+  const resolvedPromptVersion = promptVersion != null ? promptVersion : 'unknown';
+
   const rows = await pg.connection(
     `INSERT INTO ${GENERATIONS_TABLE}
        (match_id, match_slug, run_type, status,
@@ -148,8 +154,8 @@ async function insertGeneration(pg, {
     [
       matchId, matchSlug, runType, status,
       headline, brief, riskNote,
-      sourceMode, sourceHash, sourcePayload,
-      modelName, promptVersion,
+      resolvedSourceMode, resolvedSourceHash, resolvedSourcePayload,
+      resolvedModelName, resolvedPromptVersion,
       tokensInput, tokensOutput, estimatedCost,
       failureReason, skipReason,
       startedAt,
@@ -182,6 +188,11 @@ async function upsertCurrentBriefFromReadyGeneration(pg, {
   refreshAfter = null,
   expiresAt = null,
 }) {
+  const resolvedMatchTitle = matchTitle != null ? matchTitle : '';
+  const resolvedSourceMode = sourceMode != null ? sourceMode : 'skip';
+  const resolvedSourceHash = sourceHash != null ? sourceHash : 'unknown';
+  const resolvedSourcePayload = sourcePayload != null ? sourcePayload : '{}';
+
   const rows = await pg.connection(
     `INSERT INTO ${CURRENT_TABLE}
        (match_id, match_slug, sport_slug, match_title, league_name, starts_at,
@@ -227,10 +238,10 @@ async function upsertCurrentBriefFromReadyGeneration(pg, {
        updated_at = NOW()
      RETURNING *`,
     [
-      matchId, matchSlug, sportSlug, matchTitle, leagueName, startsAt,
-      sourceMode, headline, brief, riskNote,
+      matchId, matchSlug, sportSlug, resolvedMatchTitle, leagueName, startsAt,
+      resolvedSourceMode, headline, brief, riskNote,
       primaryForecast, primaryCoeff, primaryConfidence,
-      sourceHash, sourcePayload, generationId,
+      resolvedSourceHash, resolvedSourcePayload, generationId,
       modelName, promptVersion, generatedAt, refreshAfter, expiresAt,
     ],
   );
@@ -246,15 +257,28 @@ async function upsertNoopCurrentRow(pg, {
   generationId,
   lastError = null,
   skipReason = null,
+  sourceMode = null,
+  sourceHash = null,
+  sourcePayload = null,
 }) {
+  const resolvedSourceMode = sourceMode != null ? sourceMode : 'skip';
+  const resolvedSourceHash = sourceHash != null ? sourceHash : null;
+  const resolvedSourcePayload = sourcePayload != null ? sourcePayload : '{}';
+
   const rows = await pg.connection(
     `INSERT INTO ${CURRENT_TABLE}
        (match_id, brief_status, last_generation_status, headline, brief, risk_note,
+        match_title, source_mode, source_hash, source_payload,
         current_generation_id, last_error, invalidated_reason, last_skip_reason)
-     VALUES ($1, 'missing', $2, NULL, NULL, NULL, $3, $4, $5, $5)
+     VALUES ($1, 'missing', $2, NULL, NULL, NULL,
+        '', $6, $7, $8,
+        $3, $4, $5, $5)
      ON CONFLICT (match_id) DO UPDATE SET
        brief_status = 'missing',
        last_generation_status = EXCLUDED.last_generation_status,
+       source_mode = EXCLUDED.source_mode,
+       source_hash = EXCLUDED.source_hash,
+       source_payload = EXCLUDED.source_payload,
        current_generation_id = EXCLUDED.current_generation_id,
        last_error = EXCLUDED.last_error,
        invalidated_reason = EXCLUDED.invalidated_reason,
@@ -262,7 +286,7 @@ async function upsertNoopCurrentRow(pg, {
        updated_at = NOW()
      WHERE ${CURRENT_TABLE}.brief_status NOT IN ('ready', 'stale')
      RETURNING *`,
-    [matchId, status, generationId, lastError, skipReason],
+    [matchId, status, generationId, lastError, skipReason, resolvedSourceMode, resolvedSourceHash, resolvedSourcePayload],
   );
   if (!Array.isArray(rows) || rows.length === 0) return null;
   return rows[0];
@@ -272,6 +296,9 @@ async function markCurrentBriefStaleAfterFailure(pg, {
   matchId,
   generationId,
   errorMessage = null,
+  sourceMode = null,
+  sourceHash = null,
+  sourcePayload = null,
 }) {
   const rows = await pg.connection(
     `UPDATE ${CURRENT_TABLE}
@@ -297,6 +324,9 @@ async function markCurrentBriefStaleAfterFailure(pg, {
       status: 'failed',
       lastError: errorMessage,
       skipReason: null,
+      sourceMode,
+      sourceHash,
+      sourcePayload,
     });
   }
 }
@@ -305,6 +335,9 @@ async function markCurrentBriefStaleAfterSkip(pg, {
   matchId,
   generationId,
   skipReason = null,
+  sourceMode = null,
+  sourceHash = null,
+  sourcePayload = null,
 }) {
   const rows = await pg.connection(
     `UPDATE ${CURRENT_TABLE}
@@ -330,6 +363,9 @@ async function markCurrentBriefStaleAfterSkip(pg, {
       status: 'skipped',
       lastError: null,
       skipReason,
+      sourceMode,
+      sourceHash,
+      sourcePayload,
     });
   }
 }
