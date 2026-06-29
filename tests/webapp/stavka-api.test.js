@@ -2,6 +2,7 @@ const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const api = require('../../lib/stavkaApi');
+const LIVE_OPTS = { redisClient: null };
 
 // --- humanReadable tests ---
 
@@ -184,14 +185,14 @@ describe('selectRiskBets', () => {
 describe('fetchAllMatches (live)', { skip: process.env.SKIP_LIVE_TESTS ? 'live test' : false }, () => {
   it('returns array of matches with > 200 items', async () => {
     api._resetRateLimiter();
-    const matches = await api.fetchAllMatches();
+    const matches = await api.fetchAllMatches(LIVE_OPTS);
     assert.ok(Array.isArray(matches), 'should return array');
     assert.ok(matches.length > 200, 'should have > 200 matches, got ' + matches.length);
   });
 
   it('matches have required fields', async () => {
     api._resetRateLimiter();
-    const matches = await api.fetchAllMatches();
+    const matches = await api.fetchAllMatches(LIVE_OPTS);
     const first = matches[0];
     assert.ok(first.id, 'should have id');
     assert.ok(first.slug, 'should have slug');
@@ -203,7 +204,7 @@ describe('fetchAllMatches (live)', { skip: process.env.SKIP_LIVE_TESTS ? 'live t
 
   it('matches with odds have one_x_two structure', async () => {
     api._resetRateLimiter();
-    const matches = await api.fetchAllMatches();
+    const matches = await api.fetchAllMatches(LIVE_OPTS);
     const withOdds = matches.filter(m => m.odds && m.odds.one_x_two);
     assert.ok(withOdds.length > 100, 'should have > 100 matches with odds');
 
@@ -216,7 +217,7 @@ describe('fetchAllMatches (live)', { skip: process.env.SKIP_LIVE_TESTS ? 'live t
 describe('fetchPopularBets (live)', { skip: process.env.SKIP_LIVE_TESTS ? 'live test' : false }, () => {
   it('returns popular bets for Uruguay vs Spain', async () => {
     api._resetRateLimiter();
-    const bets = await api.fetchPopularBets('27-06-2026-uruguay-spain');
+    const bets = await api.fetchPopularBets('27-06-2026-uruguay-spain', LIVE_OPTS);
     assert.ok(bets, 'should return data');
     assert.ok(bets.meta && bets.meta.total > 100, 'should have > 100 total bets');
     assert.ok(Array.isArray(bets.data), 'data should be array');
@@ -225,7 +226,7 @@ describe('fetchPopularBets (live)', { skip: process.env.SKIP_LIVE_TESTS ? 'live 
 
   it('popular bets have required fields', async () => {
     api._resetRateLimiter();
-    const bets = await api.fetchPopularBets('27-06-2026-uruguay-spain');
+    const bets = await api.fetchPopularBets('27-06-2026-uruguay-spain', LIVE_OPTS);
     const first = bets.data[0];
     assert.ok(first.type, 'should have type');
     assert.ok(first.outcome, 'should have outcome');
@@ -235,7 +236,7 @@ describe('fetchPopularBets (live)', { skip: process.env.SKIP_LIVE_TESTS ? 'live 
 
   it('groupBetsByType produces diverse types from live data', async () => {
     api._resetRateLimiter();
-    const bets = await api.fetchPopularBets('27-06-2026-uruguay-spain');
+    const bets = await api.fetchPopularBets('27-06-2026-uruguay-spain', LIVE_OPTS);
     const grouped = api.groupBetsByType(bets);
     assert.ok(grouped.length >= 5, 'should have >= 5 different market types');
 
@@ -249,7 +250,7 @@ describe('fetchPopularBets (live)', { skip: process.env.SKIP_LIVE_TESTS ? 'live 
 describe('fetchMatchDetail (live)', { skip: process.env.SKIP_LIVE_TESTS ? 'live test' : false }, () => {
   it('returns match detail with predictionSummary', async () => {
     api._resetRateLimiter();
-    const detail = await api.fetchMatchDetail('27-06-2026-uruguay-spain');
+    const detail = await api.fetchMatchDetail('27-06-2026-uruguay-spain', LIVE_OPTS);
     assert.ok(detail, 'should return data');
     assert.equal(detail.teams.home.name, 'Уругвай');
     assert.equal(detail.teams.away.name, 'Испания');
@@ -259,7 +260,7 @@ describe('fetchMatchDetail (live)', { skip: process.env.SKIP_LIVE_TESTS ? 'live 
 
   it('pastMatches are available', async () => {
     api._resetRateLimiter();
-    const detail = await api.fetchMatchDetail('27-06-2026-uruguay-spain');
+    const detail = await api.fetchMatchDetail('27-06-2026-uruguay-spain', LIVE_OPTS);
     assert.ok(Array.isArray(detail.teams.home.pastMatches), 'home pastMatches should be array');
     assert.ok(detail.teams.home.pastMatches.length >= 3, 'should have >= 3 past matches');
   });
