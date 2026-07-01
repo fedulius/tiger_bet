@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "ai:recommendation-briefs": "node scripts/run_ai_recommendation_briefs.js",
+    "ai:recommendation-briefs:scheduled": "node scripts/run_ai_recommendation_briefs.js --run-type scheduled"
   },
   "keywords": [],
   "author": "",
@@ -12,7 +14,9 @@
   "dependencies": {
     "@fastify/autoload": "^6.3.1",
     "@fastify/cors": "^10.1.0",
+    "@fastify/jwt": "^10.0.0",
     "cheerio": "^1.2.0",
+    "dotenv": "^17.4.2",
     "fastify": "^5.8.2",
     "fastify-autoload": "^3.13.0",
     "fastify-plugin": "^5.1.0",

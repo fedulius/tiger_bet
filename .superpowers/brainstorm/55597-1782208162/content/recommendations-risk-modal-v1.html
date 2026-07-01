@@ -1,0 +1,124 @@
+<h2>Tiger Bet — компактные рекомендации</h2>
+<p class="subtitle">Мокап списка рекомендаций с тремя risk-кнопками и модалкой выбранной ставки</p>
+
+<div class="section">
+  <div class="mockup">
+    <div class="mockup-header">Лента рекомендаций</div>
+    <div class="mockup-body" style="display:grid;gap:16px;">
+      <div style="border:1px solid #d7dce7;border-radius:20px;padding:16px;background:linear-gradient(180deg,#f8fbff,#ffffff);box-shadow:0 10px 28px rgba(15,23,42,.06);">
+        <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">
+          <div>
+            <div style="font-size:22px;font-weight:700;color:#1f2937;">Спартак — Динамо</div>
+            <div style="margin-top:6px;color:#5b6474;font-size:14px;">РПЛ</div>
+            <div style="margin-top:4px;color:#5b6474;font-size:14px;">2026-06-23 19:30</div>
+          </div>
+          <div style="padding:6px 10px;border-radius:999px;background:#e8f0ff;color:#1d4ed8;font-size:12px;font-weight:700;">Новый</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:16px;">
+          <div data-choice="low-risk" onclick="toggleSelect(this)" style="cursor:pointer;border-radius:16px;padding:14px 12px;background:#e8f7ee;border:1px solid #b8e3c6;display:flex;flex-direction:column;gap:6px;">
+            <span style="font-size:12px;font-weight:700;color:#1f7a43;text-transform:uppercase;letter-spacing:.04em;">Низкий риск</span>
+            <strong style="font-size:24px;color:#14532d;line-height:1;">1.72</strong>
+            <span style="font-size:13px;color:#2f5d3f;">Победа Спартака</span>
+          </div>
+          <div data-choice="mid-risk" onclick="toggleSelect(this)" style="cursor:pointer;border-radius:16px;padding:14px 12px;background:#fff6db;border:1px solid #f3d67a;display:flex;flex-direction:column;gap:6px;">
+            <span style="font-size:12px;font-weight:700;color:#a16207;text-transform:uppercase;letter-spacing:.04em;">Средний риск</span>
+            <strong style="font-size:24px;color:#92400e;line-height:1;">1.94</strong>
+            <span style="font-size:13px;color:#7c5d14;">Тотал больше 2.5</span>
+          </div>
+          <div data-choice="high-risk" onclick="toggleSelect(this)" style="cursor:pointer;border-radius:16px;padding:14px 12px;background:#fdecec;border:1px solid #f2b8b8;display:flex;flex-direction:column;gap:6px;">
+            <span style="font-size:12px;font-weight:700;color:#b42318;text-transform:uppercase;letter-spacing:.04em;">Высокий риск</span>
+            <strong style="font-size:24px;color:#991b1b;line-height:1;">3.80</strong>
+            <span style="font-size:13px;color:#7a2e2e;">Точный счёт 2:1</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="border:1px solid #d7dce7;border-radius:20px;padding:16px;background:linear-gradient(180deg,#f8fbff,#ffffff);opacity:.78;">
+        <div style="font-size:22px;font-weight:700;color:#1f2937;">Зенит — Локомотив</div>
+        <div style="margin-top:6px;color:#5b6474;font-size:14px;">Кубок России</div>
+        <div style="margin-top:4px;color:#5b6474;font-size:14px;">2026-06-23 21:00</div>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:16px;">
+          <div style="border-radius:16px;padding:12px;background:#e8f7ee;color:#14532d;text-align:center;font-weight:700;">1.65</div>
+          <div style="border-radius:16px;padding:12px;background:#fff6db;color:#92400e;text-align:center;font-weight:700;">1.88</div>
+          <div style="border-radius:16px;padding:12px;background:#fdecec;color:#991b1b;text-align:center;font-weight:700;">4.10</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="mockup">
+    <div class="mockup-header">Модалка выбранной ставки</div>
+    <div class="mockup-body" style="background:rgba(15,23,42,.04);padding:24px;border-radius:20px;">
+      <div style="max-width:540px;margin:0 auto;border-radius:24px;background:#fff;border:1px solid #d7dce7;box-shadow:0 24px 64px rgba(15,23,42,.16);overflow:hidden;">
+        <div style="padding:18px 20px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">
+          <div>
+            <div style="font-size:22px;font-weight:700;color:#1f2937;">Спартак — Динамо</div>
+            <div style="margin-top:6px;color:#5b6474;font-size:14px;">РПЛ · 2026-06-23 19:30</div>
+          </div>
+          <div style="font-size:24px;color:#94a3b8;line-height:1;">×</div>
+        </div>
+
+        <div style="padding:18px 20px;display:flex;gap:8px;flex-wrap:wrap;">
+          <div style="padding:8px 12px;border-radius:999px;background:#e8f7ee;color:#14532d;font-weight:700;border:1px solid #b8e3c6;">Низкий</div>
+          <div style="padding:8px 12px;border-radius:999px;background:#fff;color:#92400e;border:1px solid #e5e7eb;">Средний</div>
+          <div style="padding:8px 12px;border-radius:999px;background:#fff;color:#991b1b;border:1px solid #e5e7eb;">Высокий</div>
+        </div>
+
+        <div style="padding:0 20px 20px;display:grid;gap:14px;">
+          <div style="border-radius:18px;background:#f8fafc;padding:16px;border:1px solid #e5e7eb;">
+            <div style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#1f7a43;font-weight:700;">Низкий риск</div>
+            <div style="margin-top:10px;font-size:34px;font-weight:800;color:#14532d;">1.72</div>
+          </div>
+
+          <div>
+            <div style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;font-weight:700;">Прогноз</div>
+            <div style="margin-top:6px;font-size:18px;font-weight:700;color:#111827;">Победа Спартака</div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;">
+            <div style="border:1px solid #e5e7eb;border-radius:16px;padding:14px;">
+              <div style="font-size:12px;text-transform:uppercase;color:#64748b;font-weight:700;">Вероятность</div>
+              <div style="margin-top:6px;font-size:20px;font-weight:700;color:#111827;">68%</div>
+            </div>
+            <div style="border:1px solid #e5e7eb;border-radius:16px;padding:14px;">
+              <div style="font-size:12px;text-transform:uppercase;color:#64748b;font-weight:700;">Уверенность</div>
+              <div style="margin-top:6px;font-size:20px;font-weight:700;color:#111827;">Высокая</div>
+            </div>
+          </div>
+
+          <div>
+            <div style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;font-weight:700;">Краткое описание</div>
+            <div style="margin-top:6px;color:#334155;line-height:1.55;">Спартак выглядит стабильнее по текущей форме, лучше контролирует темп дома и чаще доводит такие матчи до победы без провалов по моментам.</div>
+          </div>
+
+          <div style="display:flex;gap:10px;flex-wrap:wrap;padding-top:4px;">
+            <div style="padding:12px 16px;border-radius:14px;background:#2563eb;color:#fff;font-weight:700;">Подробнее о матче</div>
+            <div style="padding:12px 16px;border-radius:14px;border:1px solid #d7dce7;color:#334155;font-weight:600;">Закрыть</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="options">
+    <div class="option" data-choice="ok" onclick="toggleSelect(this)">
+      <div class="letter">A</div>
+      <div class="content">
+        <h3>Оставить как есть</h3>
+        <p>Компактная карточка + модалка конкретной ставки</p>
+      </div>
+    </div>
+    <div class="option" data-choice="needs-tweaks" onclick="toggleSelect(this)">
+      <div class="letter">B</div>
+      <div class="content">
+        <h3>Нужны правки</h3>
+        <p>Подправить плотность, цвета, размеры кнопок или состав модалки</p>
+      </div>
+    </div>
+  </div>
+</div>

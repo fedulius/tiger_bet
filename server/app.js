@@ -1,3 +1,4 @@
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const path = require('path');
 const fs = require('fs');
 const Fastify = require('fastify');
@@ -51,14 +52,41 @@ function buildApp({
   bot,
   httpsOptions = null,
   reactDistDir = path.join(__dirname, '..', 'webapp-react', 'dist'),
+  recommendationsRedis = null,
+  feedLoader = null,
+  feedRedis = null,
 } = {}) {
   const fastify = new Fastify({
     logger: true,
     ...(httpsOptions ? { https: httpsOptions } : {}),
   });
 
+  const jwtSecret = String(process.env.JWT_SECRET || '').trim();
+  if (!jwtSecret) {
+    throw new Error('JWT_SECRET is required');
+  }
+
+  fastify.register(require('@fastify/jwt'), {
+    secret: jwtSecret,
+  });
+
   fastify.register(require('@fastify/cors'), {
     origin: true,
+  });
+
+  const publicPrefixes = ['/health', '/webapp', '/auth'];
+  fastify.addHook('onRequest', async (request, reply) => {
+    const urlPath = String(request.url || '').split('?')[0];
+    const isPublic = publicPrefixes.some((prefix) => urlPath === prefix || urlPath.startsWith(`${prefix}/`));
+    if (isPublic) {
+      return;
+    }
+
+    try {
+      await request.jwtVerify();
+    } catch {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
   });
 
   fastify.register(plugin((fn, opts, done) => {
@@ -73,10 +101,10 @@ function buildApp({
     done();
   }));
 
-  fastify.register(plugin((fn, opts, done) => {
-    fastify.decorate('pg', { pg });
-    done();
-  }));
+  fastify.decorate('pg', pg);
+  fastify.decorate('recommendationsRedis', recommendationsRedis);
+  fastify.decorate('feedLoader', feedLoader);
+  fastify.decorate('feedRedis', feedRedis);
 
   fastify.register(require('@fastify/autoload'), {
     dir: path.join(__dirname, '..', 'webapp', 'routes'),
@@ -127,6 +155,7 @@ function buildApp({
 
     return reply.status(404).send('Not Found');
   });
+
   return fastify;
 }
 

@@ -1,5 +1,3 @@
-const fs = require("fs");
-
 class Controller {
 
   constructor({bot, keyboard}) {

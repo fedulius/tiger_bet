@@ -1,6 +1,26 @@
 const Controller = require('../Controller');
 const {getLeaguesByCategory} = require('../../../lib/stavkaMatches');
-const {buildBriefForecastText} = require('../../../lib/forecastAnalyzer');
+
+function normalizeExplanationLines(analysis) {
+  const prepared = Array.isArray(analysis.explanationLines)
+    ? analysis.explanationLines.map(function (r) { return String(r || '').trim(); }).filter(Boolean)
+    : [];
+  var defaults = analysis.source === 'no-signal'
+    ? ['Недостаточно сигналов на странице матча.', 'Коэффициенты могут быть недоступны.', 'Перепроверьте матч ближе к старту.', 'Выберите другой матч.']
+    : ['Главная мысль: ' + (analysis.mainThought || analysis.bestOutcome || 'н/д') + '.', 'Вероятность: ' + (Number.isFinite(analysis.probabilityPercent) ? analysis.probabilityPercent : 0) + '%.', 'Уверенность: ' + (analysis.confidence || 'низкая') + '.', 'Источник: ' + (analysis.source || 'unknown') + '.'];
+  var lines = prepared.length > 0 ? prepared : defaults;
+  while (lines.length < 4) lines.push(defaults[lines.length] || defaults[defaults.length - 1]);
+  return lines.slice(0, 6);
+}
+
+function buildBriefForecastText(payload, analysis) {
+  var link = payload.url ? 'https://stavka.tv' + payload.url : '—';
+  var explanationLines = normalizeExplanationLines(analysis);
+  if (analysis.source === 'no-signal') {
+    return ['Матч: ' + payload.team, 'Лига: ' + payload.leagueName, '', 'Недостаточно сигналов.', 'Источник: ' + link].join('\n');
+  }
+  return ['Матч: ' + payload.team, 'Лига: ' + payload.leagueName, '', 'Анализ: ' + (analysis.mainThought || analysis.bestOutcome || 'н/д') + ' (' + (analysis.probabilityPercent || 0) + '%).', 'Уверенность: ' + (analysis.confidence || 'низкая') + '.', 'Источник: ' + link].join('\n');
+}
 
 class MatchController extends Controller {
 

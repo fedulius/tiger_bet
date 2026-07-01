@@ -6,7 +6,7 @@ import './styles/app.css';
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename="/webapp">
       <App />
     </BrowserRouter>
   </React.StrictMode>,

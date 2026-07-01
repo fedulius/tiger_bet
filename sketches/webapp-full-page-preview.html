@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tiger Bet WebApp Preview</title>
+  <style>
+    :root {
+      --bg: #0e1320;
+      --surface: #161c2e;
+      --surface-2: #1b2133;
+      --surface-3: #22293d;
+      --accent: #3f63df;
+      --accent-2: #3657cf;
+      --text: #f3f6fb;
+      --muted: #8d97b2;
+      --border: #2a334d;
+      --border-soft: #262d42;
+      --green-1: #26472b;
+      --green-2: #1b2f22;
+      --blue-1: #273248;
+      --blue-2: #1b2436;
+      --danger: #ef4444;
+      --shadow: 0 18px 40px rgba(0,0,0,.28);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Manrope, Inter, system-ui, sans-serif;
+      background:
+        radial-gradient(circle at top, rgba(63, 99, 223, .18), transparent 30%),
+        var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+      padding: 18px 14px 110px;
+    }
+    .app { max-width: 920px; margin: 0 auto; }
+    .stack { display: grid; gap: 16px; }
+
+    .hero {
+      background: linear-gradient(180deg, #1f4fd1 0%, #1b45b5 100%);
+      border-radius: 24px;
+      padding: 18px;
+      box-shadow: var(--shadow);
+    }
+    .hero-top, .hero-brand { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .hero-top { margin-bottom: 10px; }
+    .eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,.78); font-weight: 800; }
+    .status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: rgba(255,255,255,.9); }
+    .dot { width: 8px; height: 8px; border-radius: 999px; background: #22c55e; }
+    .brand { display: flex; gap: 12px; align-items: center; }
+    .logo {
+      width: 40px; height: 40px; border-radius: 12px; background: #fff; color: #1552db;
+      display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 900;
+      flex: 0 0 auto;
+    }
+    .hero h1 { font-size: 24px; margin-bottom: 2px; }
+    .subtitle { font-size: 14px; color: rgba(255,255,255,.86); }
+    .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 14px 0; }
+    .stat {
+      border-radius: 16px; background: rgba(255,255,255,.14); padding: 14px 16px; text-align: center;
+    }
+    .stat strong { display: block; font-size: 28px; line-height: 1; }
+    .stat span { display: block; margin-top: 4px; font-size: 12px; color: rgba(255,255,255,.86); }
+    .cta {
+      display: flex; justify-content: center; align-items: center; min-height: 42px;
+      border: none; border-radius: 999px; background: #fff; color: #1450d8; font-weight: 800; font-size: 15px;
+      width: 100%; box-shadow: 0 6px 18px rgba(0,0,0,.14);
+    }
+
+    .section {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 22px; padding: 16px; box-shadow: var(--shadow);
+    }
+    .section-head { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; margin-bottom: 14px; }
+    .section h2 { font-size: 20px; margin-bottom: 4px; }
+    .section p.desc { color: var(--muted); font-size: 14px; }
+    .section-meta { font-size: 13px; color: var(--muted); white-space: nowrap; }
+
+    .cards { display: grid; gap: 12px; }
+    .match-card {
+      background: linear-gradient(180deg, #1a2032 0%, #151b2b 100%);
+      border: 1px solid var(--border); border-radius: 18px; padding: 14px;
+    }
+    .match-head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
+    .match-title { font-size: 17px; font-weight: 800; margin-bottom: 4px; }
+    .match-sub { font-size: 13px; color: var(--muted); }
+    .badge { border: 1px solid #4468df; color: #8dacff; background: rgba(63,99,223,.14); padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 800; }
+    .time { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+    .risk-row { display: flex; flex-wrap: wrap; gap: 8px; }
+    .risk {
+      min-height: 40px; border-radius: 12px; padding: 8px 12px; border: 1px solid; font-size: 13px; font-weight: 800;
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .risk small { font-size: 12px; opacity: .9; }
+    .risk.low { border-color: #166534; color: #4ade80; background: rgba(22,101,52,.18); }
+    .risk.mid { border-color: #92400e; color: #f59e0b; background: rgba(146,64,14,.18); }
+    .risk.high { border-color: #991b1b; color: #f87171; background: rgba(153,27,27,.18); }
+
+    .sport-card {
+      background: var(--surface-2); border: 1px solid var(--border); border-radius: 18px; padding: 16px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.02);
+    }
+    .sport-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+    .sport-meta { display: flex; align-items: center; gap: 12px; }
+    .sport-icon {
+      width: 46px; height: 46px; border-radius: 14px; display:flex; align-items:center; justify-content:center; font-size: 28px; flex:0 0 auto;
+    }
+    .football { background: linear-gradient(180deg, var(--green-1), var(--green-2)); }
+    .hockey { background: linear-gradient(180deg, var(--blue-1), var(--blue-2)); }
+    .sport-name { font-size: 18px; font-weight: 800; margin-bottom: 4px; }
+    .sport-sub { font-size: 14px; color: var(--muted); }
+    .icon-btn {
+      width: 36px; height: 36px; border-radius: 12px; border: none; background: #262d40; color: #7e88a2;
+      display: flex; align-items:center; justify-content:center; font-size: 18px;
+    }
+    .tags { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px; padding-top:12px; border-top:1px solid var(--border-soft); }
+    .tag { background: #30374a; color: #dde3f0; padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 700; }
+    .config-btn {
+      width:100%; min-height: 40px; border-radius: 12px; border:none;
+      background: linear-gradient(180deg, var(--accent), var(--accent-2)); color:#fff; font-size:14px; font-weight:800;
+    }
+    .add-card {
+      width: 100%; min-height: 58px; border-radius: 18px; border: 1px dashed #30384d; background: transparent;
+      color: #cbd3e6; display:flex; align-items:center; justify-content:center; gap:12px; font-size:16px; font-weight:800;
+    }
+    .add-icon {
+      width:28px; height:28px; border-radius:999px; background: linear-gradient(180deg, var(--accent), var(--accent-2)); color:#fff;
+      display:flex; align-items:center; justify-content:center; font-size:18px;
+    }
+
+    .chips { display:flex; gap:8px; flex-wrap:wrap; margin-bottom: 12px; }
+    .chip {
+      min-height: 36px; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--border);
+      background: #171d2e; color: var(--muted); font-size: 13px; font-weight: 700;
+    }
+    .chip.active { border-color: #4468df; color: #95b0ff; background: rgba(63,99,223,.14); }
+
+    .feed-card {
+      background: linear-gradient(180deg, #1a2032 0%, #151b2b 100%);
+      border: 1px solid var(--border); border-radius: 18px; padding: 14px;
+    }
+    .feed-head { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px; }
+    .feed-meta, .feed-time, .feed-summary { color: var(--muted); }
+    .feed-meta { font-size: 12px; letter-spacing: .04em; text-transform: uppercase; font-weight: 800; }
+    .feed-time { font-size: 12px; }
+    .feed-title { font-size: 17px; font-weight: 800; margin-bottom: 10px; }
+    .feed-bet { display:flex; align-items:center; gap:10px; margin-bottom: 8px; }
+    .forecast { color: #9cb4ff; font-weight: 800; }
+    .coeff { color: var(--muted); font-weight: 700; }
+    .feed-summary { font-size: 14px; }
+
+    .tabs {
+      position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); width: calc(100% - 28px); max-width: 220px;
+      background: rgba(22,28,46,.92); border: 1px solid rgba(42,51,77,.9); border-radius: 999px; padding: 8px;
+      display:flex; gap:10px; backdrop-filter: blur(16px); box-shadow: 0 10px 28px rgba(0,0,0,.32);
+    }
+    .tab { flex:1; min-height:44px; border-radius:999px; display:flex; align-items:center; justify-content:center; color:var(--muted); position:relative; z-index:2; }
+    .tab.active { color:#95b0ff; }
+    .pill { position:absolute; left:8px; top:8px; bottom:8px; width:calc((100% - 26px)/2); border-radius:999px; background:rgba(63,99,223,.16); }
+
+    .variant-toggle { position: fixed; right: 14px; top: 14px; z-index: 5; display:flex; gap:8px; }
+    .variant-toggle button {
+      border:1px solid var(--border); background: rgba(22,28,46,.92); color:var(--text); min-height: 34px; padding: 0 12px; border-radius: 10px;
+    }
+    .hidden { display:none; }
+
+    @media (min-width: 760px) {
+      body { padding-inline: 20px; }
+      .hero { padding: 22px; }
+      .stack { grid-template-columns: 1.2fr .8fr; align-items: start; }
+      .left-col, .right-col { display:grid; gap:16px; }
+      .desktop-full { grid-column: 1 / -1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="variant-toggle">
+    <button type="button" onclick="showState('home')">Главная</button>
+    <button type="button" onclick="showState('feed')">Лента</button>
+  </div>
+
+  <div class="app" id="home-view">
+    <div class="stack">
+      <div class="left-col">
+        <section class="hero">
+          <div class="hero-top">
+            <span class="eyebrow">Telegram WebApp</span>
+            <span class="status"><span class="dot"></span>Обновлено 3 мин назад</span>
+          </div>
+          <div class="hero-brand">
+            <div class="brand">
+              <div class="logo">T</div>
+              <div>
+                <h1>Tiger Bet</h1>
+                <div class="subtitle">Живые рекомендации и избранные фильтры в одном экране</div>
+              </div>
+            </div>
+          </div>
+          <div class="stats">
+            <div class="stat"><strong>6</strong><span>карточек</span></div>
+            <div class="stat"><strong>2</strong><span>вида спорта</span></div>
+          </div>
+          <button class="cta">Обновить сейчас</button>
+        </section>
+
+        <section class="section">
+          <div class="section-head">
+            <div>
+              <h2>Рекомендованные матчи</h2>
+              <p class="desc">Топ-матчи с тремя ставками, коэффициентами и кратким обоснованием.</p>
+            </div>
+          </div>
+          <div class="cards">
+            <article class="match-card">
+              <div class="match-head">
+                <div>
+                  <div class="match-title">Манчестер Сити — Арсенал</div>
+                  <div class="match-sub">Футбол · Англия · Премьер-лига</div>
+                </div>
+                <span class="badge">Новый</span>
+              </div>
+              <div class="time">2026-06-25 20:00 МСК</div>
+              <div class="risk-row">
+                <div class="risk low">Осторожно <small>× 1.74</small></div>
+                <div class="risk mid">Баланс <small>× 2.08</small></div>
+                <div class="risk high">Риск <small>× 3.10</small></div>
+              </div>
+            </article>
+
+            <article class="match-card">
+              <div class="match-head">
+                <div>
+                  <div class="match-title">Трактор — Авангард</div>
+                  <div class="match-sub">Хоккей · КХЛ</div>
+                </div>
+              </div>
+              <div class="time">2026-06-25 19:30 МСК</div>
+              <div class="risk-row">
+                <div class="risk low">Осторожно <small>× 1.62</small></div>
+                <div class="risk mid">Баланс <small>× 1.95</small></div>
+              </div>
+            </article>
+          </div>
+        </section>
+      </div>
+
+      <div class="right-col">
+        <section class="section">
+          <div class="section-head">
+            <div>
+              <h2>Избранные виды спорта</h2>
+              <p class="desc">Для каждого выбранного спорта можно оставить все лиги или сузить выбор до нужных турниров.</p>
+            </div>
+            <div class="section-meta">2 из 8</div>
+          </div>
+          <div class="cards">
+            <article class="sport-card">
+              <div class="sport-top">
+                <div class="sport-meta">
+                  <div class="sport-icon football">⚽</div>
+                  <div>
+                    <div class="sport-name">Футбол</div>
+                    <div class="sport-sub">Все лиги включены</div>
+                  </div>
+                </div>
+                <button class="icon-btn">×</button>
+              </div>
+              <button class="config-btn">Настроить лиги</button>
+            </article>
+
+            <article class="sport-card">
+              <div class="sport-top">
+                <div class="sport-meta">
+                  <div class="sport-icon hockey">🏒</div>
+                  <div>
+                    <div class="sport-name">Хоккей</div>
+                    <div class="sport-sub">2 выбранные лиги</div>
+                  </div>
+                </div>
+                <button class="icon-btn">×</button>
+              </div>
+              <div class="tags">
+                <span class="tag">КХЛ</span>
+                <span class="tag">НХЛ</span>
+              </div>
+              <button class="config-btn">Настроить лиги</button>
+            </article>
+
+            <button class="add-card">
+              <span class="add-icon">+</span>
+              <span>Добавить вид спорта</span>
+            </button>
+          </div>
+        </section>
+      </div>
+
+      <section class="section desktop-full">
+        <div class="section-head">
+          <div>
+            <h2>Лента матчей</h2>
+            <p class="desc">Общий поток today + tomorrow без прошедших матчей.</p>
+          </div>
+        </div>
+        <div class="chips">
+          <button class="chip active">Футбол</button>
+          <button class="chip">Хоккей</button>
+          <button class="chip">Теннис</button>
+          <button class="chip">Баскетбол</button>
+        </div>
+        <div class="cards">
+          <article class="feed-card">
+            <div class="feed-head">
+              <div class="feed-meta">Футбол · Испания · Ла Лига</div>
+              <div class="feed-time">2026-06-25 22:00</div>
+            </div>
+            <div class="feed-title">Реал Мадрид — Севилья</div>
+            <div class="feed-bet"><span class="forecast">Обе забьют</span><span class="coeff">× 1.89</span></div>
+            <div class="feed-summary">У хозяев высокая интенсивность впереди, у гостей системные проблемы в обороне при выездах.</div>
+          </article>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="app hidden" id="feed-view">
+    <div class="stack" style="grid-template-columns:1fr;">
+      <section class="section">
+        <div class="section-head">
+          <div>
+            <h2>Лента матчей</h2>
+            <p class="desc">Как будет выглядеть отдельная вкладка ленты после унификации.</p>
+          </div>
+        </div>
+        <div class="chips">
+          <button class="chip active">Футбол</button>
+          <button class="chip">Хоккей</button>
+          <button class="chip">Теннис</button>
+        </div>
+        <div class="cards">
+          <article class="feed-card">
+            <div class="feed-head">
+              <div class="feed-meta">Футбол · Англия · Премьер-лига</div>
+              <div class="feed-time">20:00</div>
+            </div>
+            <div class="feed-title">Ливерпуль — Челси</div>
+            <div class="feed-bet"><span class="forecast">ТБ 2.5</span><span class="coeff">× 1.91</span></div>
+            <div class="feed-summary">Высокий темп, сильные фланги и хорошие показатели по созданным моментам с обеих сторон.</div>
+          </article>
+          <article class="feed-card">
+            <div class="feed-head">
+              <div class="feed-meta">Хоккей · НХЛ</div>
+              <div class="feed-time">21:30</div>
+            </div>
+            <div class="feed-title">Рейнджерс — Бостон</div>
+            <div class="feed-bet"><span class="forecast">Победа хозяев</span><span class="coeff">× 2.06</span></div>
+            <div class="feed-summary">Домашний лёд и более стабильная реализация большинства дают ощутимый плюс хозяевам.</div>
+          </article>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <nav class="tabs" aria-label="Навигация">
+    <span class="pill"></span>
+    <div class="tab active">★</div>
+    <div class="tab">☰</div>
+  </nav>
+
+  <script>
+    function showState(state) {
+      const home = document.getElementById('home-view');
+      const feed = document.getElementById('feed-view');
+      const pill = document.querySelector('.pill');
+      const tabs = document.querySelectorAll('.tab');
+      if (state === 'feed') {
+        home.classList.add('hidden');
+        feed.classList.remove('hidden');
+        pill.style.transform = 'translateX(calc(100% + 10px))';
+        tabs[0].classList.remove('active');
+        tabs[1].classList.add('active');
+      } else {
+        feed.classList.add('hidden');
+        home.classList.remove('hidden');
+        pill.style.transform = 'translateX(0)';
+        tabs[1].classList.remove('active');
+        tabs[0].classList.add('active');
+      }
+    }
+  </script>
+</body>
+</html>
