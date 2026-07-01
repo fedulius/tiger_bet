@@ -3,10 +3,14 @@ const GENERATIONS_TABLE = 'public.ai_recommendation_brief_generations';
 
 const CURRENT_SELECT_COLS = [
   'match_id',
+  'match_slug',
   'brief_status AS status',
   'headline',
   'brief',
   'risk_note',
+  'primary_forecast',
+  'primary_coeff',
+  'primary_confidence',
 ].join(', ');
 
 const CURRENT_REFRESH_COLS = [
@@ -24,10 +28,14 @@ function normalizeCurrentRow(row) {
   if (!row) return null;
   return {
     match_id: Number(row.match_id),
+    match_slug: row.match_slug != null ? String(row.match_slug) : null,
     status: String(row.status || ''),
     headline: String(row.headline || ''),
     brief: String(row.brief || ''),
     risk_note: row.risk_note != null ? String(row.risk_note) : null,
+    primary_forecast: row.primary_forecast != null ? String(row.primary_forecast) : null,
+    primary_coeff: row.primary_coeff != null ? Number(row.primary_coeff) : null,
+    primary_confidence: row.primary_confidence != null ? String(row.primary_confidence) : null,
   };
 }
 
@@ -38,6 +46,9 @@ function mapCurrentRowToApiBrief(row) {
     brief: String(row.brief || ''),
     risk_note: row.risk_note != null ? String(row.risk_note) : null,
     stale: row.status === 'stale',
+    primary_forecast: row.primary_forecast != null ? String(row.primary_forecast) : null,
+    primary_coeff: row.primary_coeff != null ? Number(row.primary_coeff) : null,
+    primary_confidence: row.primary_confidence != null ? String(row.primary_confidence) : null,
   };
 }
 

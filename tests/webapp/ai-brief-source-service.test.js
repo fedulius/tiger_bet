@@ -56,6 +56,24 @@ const MATCH_DETAIL_NO_SUMMARY = {
   teams: { home: { name: 'Испания' }, away: { name: 'Уругвай' } },
 };
 
+const MATCH_DETAIL_EMPTY_SUMMARY_WITH_PREDICTION = {
+  predictionSummary: '',
+  prediction: 'Испания выиграет благодаря преимуществу в середине поля и высокому проценту владения мячом.',
+  teams: { home: { name: 'Испания' }, away: { name: 'Уругвай' } },
+};
+
+const MATCH_DETAIL_WHITESPACE_SUMMARY_WITH_PREDICTION = {
+  predictionSummary: '   ',
+  prediction: 'Испания выиграет благодаря преимуществу в середине поля и высокому проценту владения мячом.',
+  teams: { home: { name: 'Испания' }, away: { name: 'Уругвай' } },
+};
+
+const MATCH_DETAIL_BOTH_MISSING = {
+  predictionSummary: null,
+  prediction: null,
+  teams: { home: { name: 'Испания' }, away: { name: 'Уругвай' } },
+};
+
 function makeLoader(data) {
   return async () => data;
 }
@@ -95,6 +113,56 @@ test('buildAiBriefSourcePayload: light mode when bets present but summary null',
   assert.ok(result.source_hash, 'should have source_hash');
   assert.equal(result.summary_snippet, null, 'should have no summary_snippet');
   assert.ok(Array.isArray(result.top_bets) && result.top_bets.length > 0, 'should have top_bets');
+});
+
+// --- predictionSummary fallback to prediction ---
+
+test('buildAiBriefSourcePayload: uses predictionSummary when present', async () => {
+  const result = await buildAiBriefSourcePayload({
+    match: MATCH,
+    popularBetsLoader: makeLoader(POPULAR_BETS_FULL),
+    matchDetailLoader: makeLoader(MATCH_DETAIL_WITH_SUMMARY),
+    riskBetsSelector: null,
+  });
+
+  assert.ok(result.summary_snippet && result.summary_snippet.length > 0, 'summary_snippet should be populated from predictionSummary');
+  assert.ok(result.summary_snippet.includes('Испания'), 'snippet should contain content from predictionSummary');
+});
+
+test('buildAiBriefSourcePayload: falls back to prediction when predictionSummary is empty string', async () => {
+  const result = await buildAiBriefSourcePayload({
+    match: MATCH,
+    popularBetsLoader: makeLoader(POPULAR_BETS_FULL),
+    matchDetailLoader: makeLoader(MATCH_DETAIL_EMPTY_SUMMARY_WITH_PREDICTION),
+    riskBetsSelector: null,
+  });
+
+  assert.ok(result.summary_snippet && result.summary_snippet.length > 0, 'summary_snippet should be populated from prediction fallback');
+  assert.ok(result.summary_snippet.includes('Испания'), 'snippet should contain content from prediction field');
+});
+
+test('buildAiBriefSourcePayload: falls back to prediction when predictionSummary is whitespace', async () => {
+  const result = await buildAiBriefSourcePayload({
+    match: MATCH,
+    popularBetsLoader: makeLoader(POPULAR_BETS_FULL),
+    matchDetailLoader: makeLoader(MATCH_DETAIL_WHITESPACE_SUMMARY_WITH_PREDICTION),
+    riskBetsSelector: null,
+  });
+
+  assert.ok(result.summary_snippet && result.summary_snippet.length > 0, 'summary_snippet should be populated from prediction fallback');
+  assert.ok(result.summary_snippet.includes('Испания'), 'snippet should contain content from prediction field');
+});
+
+test('buildAiBriefSourcePayload: summary_snippet is null when both predictionSummary and prediction are missing', async () => {
+  const result = await buildAiBriefSourcePayload({
+    match: MATCH,
+    popularBetsLoader: makeLoader(POPULAR_BETS_FULL),
+    matchDetailLoader: makeLoader(MATCH_DETAIL_BOTH_MISSING),
+    riskBetsSelector: null,
+  });
+
+  assert.equal(result.summary_snippet, null, 'summary_snippet should be null when both fields are absent');
+  assert.equal(result.source_mode, 'light');
 });
 
 test('buildAiBriefSourcePayload: light mode when matchDetailLoader is null', async () => {

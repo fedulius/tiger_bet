@@ -23,6 +23,9 @@ test('mapCurrentRowToApiBrief: returns lightweight api object', () => {
     headline: 'Test headline',
     brief: 'Test brief',
     risk_note: 'Low risk',
+    primary_forecast: 'Обе забьют — да',
+    primary_coeff: 1.68,
+    primary_confidence: 'высокая',
     current_generation_id: 99,
     last_error: null,
   };
@@ -34,6 +37,9 @@ test('mapCurrentRowToApiBrief: returns lightweight api object', () => {
     brief: 'Test brief',
     risk_note: 'Low risk',
     stale: false,
+    primary_forecast: 'Обе забьют — да',
+    primary_coeff: 1.68,
+    primary_confidence: 'высокая',
   });
 
   assert.equal('current_generation_id' in result, false);
@@ -78,10 +84,14 @@ test('getCurrentBriefByMatchId: returns normalized row when found', async () => 
 
   assert.deepEqual(result, {
     match_id: 123,
+    match_slug: null,
     status: 'ready',
     headline: 'Match headline',
     brief: 'Match brief text',
     risk_note: 'Medium risk',
+    primary_forecast: null,
+    primary_coeff: null,
+    primary_confidence: null,
   });
 });
 
@@ -138,10 +148,12 @@ test('getCurrentBriefsByMatchIds: returns map keyed by match_id', async () => {
   assert.equal(result instanceof Map, true);
   assert.equal(result.size, 2);
   assert.deepEqual(result.get(10), {
-    match_id: 10, status: 'ready', headline: 'H1', brief: 'B1', risk_note: null,
+    match_id: 10, match_slug: null, status: 'ready', headline: 'H1', brief: 'B1', risk_note: null,
+    primary_forecast: null, primary_coeff: null, primary_confidence: null,
   });
   assert.deepEqual(result.get(20), {
-    match_id: 20, status: 'stale', headline: 'H2', brief: 'B2', risk_note: 'Risk note',
+    match_id: 20, match_slug: null, status: 'stale', headline: 'H2', brief: 'B2', risk_note: 'Risk note',
+    primary_forecast: null, primary_coeff: null, primary_confidence: null,
   });
   assert.equal(result.has(30), false);
 });

@@ -407,6 +407,9 @@ test('GET /recommendations attaches ai_brief to item when ready brief exists', a
           headline: 'Прогноз на матч',
           brief: 'Детальный разбор',
           risk_note: 'Умеренный риск',
+          primary_forecast: 'Обе забьют — да',
+          primary_coeff: 1.68,
+          primary_confidence: 'высокая',
         }];
       }
       return [];
@@ -431,7 +434,13 @@ test('GET /recommendations attaches ai_brief to item when ready brief exists', a
     assert.equal(item.ai_brief.headline, 'Прогноз на матч');
     assert.equal(item.ai_brief.brief, 'Детальный разбор');
     assert.equal(item.ai_brief.risk_note, 'Умеренный риск');
+    assert.equal(item.ai_brief.primary_forecast, 'Обе забьют — да');
+    assert.equal(item.ai_brief.primary_coeff, 1.68);
+    assert.equal(item.ai_brief.primary_confidence, 'высокая');
     assert.equal(item.ai_brief.stale, false);
+    assert.equal(item.bets[0].forecast, 'Обе забьют — да');
+    assert.equal(item.bets[0].coeff, 1.68);
+    assert.equal(item.bets[0].risk_label, 'low');
   } finally {
     await app.close();
     cleanup();

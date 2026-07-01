@@ -8,6 +8,14 @@ export const RISK_LEVELS = [
   { key: 'high', label: 'Высокий' },
 ];
 
+export function getRiskMeta(bet, index) {
+  const label = String(bet?.risk_label || '').trim();
+  if (label === 'low') return RISK_LEVELS[0];
+  if (label === 'medium') return RISK_LEVELS[1];
+  if (label === 'high') return RISK_LEVELS[2];
+  return RISK_LEVELS[index] || RISK_LEVELS[0];
+}
+
 export function BetModal({ item, betIndex, onClose, hideMatchLink = false }) {
   const [activeIndex, setActiveIndex] = useState(betIndex);
   const [closing, setClosing] = useState(false);
@@ -49,25 +57,26 @@ export function BetModal({ item, betIndex, onClose, hideMatchLink = false }) {
         </div>
 
         <div className="modal-switches">
-          {RISK_LEVELS.map((risk, i) => (
-            bets[i] ? (
+          {bets.map((bet, i) => {
+            const risk = getRiskMeta(bet, i);
+            return (
               <button
-                key={risk.key}
+                key={`${risk.key}-${i}`}
                 type="button"
                 className={`modal-switch modal-risk-switch modal-risk-switch-${risk.key}${activeIndex === i ? ' active' : ''}`}
                 onClick={() => setActiveIndex(i)}
               >
-                {risk.label} × {bets[i].coeff ?? '—'}
+                {risk.label} × {bet.coeff ?? '—'}
               </button>
-            ) : null
-          ))}
+            );
+          })}
         </div>
 
         {activeBet ? (
           <div className="bet-detail">
             <div className="bet-detail-row">
               <span className="forecast-label">Риск</span>
-              <span className={`risk-badge risk-badge-${RISK_LEVELS[activeIndex].key}`}>{RISK_LEVELS[activeIndex].label}</span>
+              <span className={`risk-badge risk-badge-${getRiskMeta(activeBet, activeIndex).key}`}>{getRiskMeta(activeBet, activeIndex).label}</span>
             </div>
             <div className="bet-detail-row">
               <span className="forecast-label">Коэффициент</span>

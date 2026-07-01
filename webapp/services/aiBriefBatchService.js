@@ -167,36 +167,12 @@ async function refreshMatchBrief({
   const timings = computeTimings(match, now, timingOptions);
 
   if (mode === 'skip') {
-    const generationRow = await storeApi.insertGeneration(pg, {
-      matchId,
-      matchSlug: sourcePayload?.match_slug || match?.slug || null,
-      runType,
-      status: 'skipped',
-      sourceMode: 'skip',
-      sourceHash: null,
-      sourcePayload,
-      modelName,
-      promptVersion,
-      skipReason: sourcePayload?.skip_reason || 'source_skipped',
-      startedAt: generatedAt,
-    });
-
-    await storeApi.markCurrentBriefStaleAfterSkip(pg, {
-      matchId,
-      generationId: generationRow?.id || null,
-      skipReason: sourcePayload?.skip_reason || 'source_skipped',
-      sourceMode: sourcePayload?.source_mode || null,
-      sourceHash: sourcePayload?.source_hash || null,
-      sourcePayload,
-    });
-
     return {
       match_id: matchId,
       match_slug: sourcePayload?.match_slug || match?.slug || null,
       outcome: 'skipped',
       source_mode: 'skip',
-      generation_id: generationRow?.id || null,
-      counts: { ...modeCounts, skipped: 1, ...(currentRow && (currentRow.status === 'ready' || currentRow.status === 'stale') ? { stale_transitions: 1 } : {}) },
+      counts: { ...modeCounts, skipped: 1 },
     };
   }
 

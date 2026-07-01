@@ -42,8 +42,13 @@ async function buildAiBriefSourcePayload({
     ? riskBetsSelector(popularBetsData)
     : stavkaApi.selectRiskBets(popularBetsData);
 
-  const summarySnippet = matchDetailData
-    ? stavkaApi.extractSummarySnippet(matchDetailData.predictionSummary) || null
+  const summaryText = matchDetailData
+    ? ((matchDetailData.predictionSummary && String(matchDetailData.predictionSummary).trim())
+        ? matchDetailData.predictionSummary
+        : matchDetailData.prediction || null)
+    : null;
+  const summarySnippet = summaryText
+    ? stavkaApi.extractSummarySnippet(summaryText) || null
     : null;
 
   const sourceMode = (summarySnippet && summarySnippet.length > 20) ? 'full' : 'light';

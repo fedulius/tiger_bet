@@ -140,7 +140,7 @@ describe('groupBetsByType', () => {
 });
 
 describe('selectRiskBets', () => {
-  it('returns 3 bets with different types and gap >= 1.2', () => {
+  it('returns diversified bets with semantic low/medium/high risk labels', () => {
     const input = {
       data: [
         { type: 'one_x_two', outcome: 'w2', count: 99, rate: 1.73 },
@@ -155,13 +155,14 @@ describe('selectRiskBets', () => {
     assert.equal(result[0].risk_label, 'low');
     assert.equal(result[1].risk_label, 'medium');
     assert.equal(result[2].risk_label, 'high');
-    assert.ok(result[1].rate >= result[0].rate + 1.2, 'medium gap');
-    assert.ok(result[2].rate >= result[1].rate + 1.2, 'high gap');
     assert.notEqual(result[0].type, result[1].type);
     assert.notEqual(result[1].type, result[2].type);
+    const highRisk = result.find((bet) => bet.risk_label === 'high');
+    assert.ok(highRisk, 'should keep at least one high-risk option');
+    assert.ok(highRisk.rate >= 5, 'high-risk option should keep extreme coefficient');
   });
 
-  it('skips low-count bets', () => {
+  it('skips low-count bets when enough viable options exist', () => {
     const input = {
       data: [
         { type: 'handicap1', outcome: '1_5', count: 3, rate: 1.3 },
@@ -173,6 +174,57 @@ describe('selectRiskBets', () => {
     const result = api.selectRiskBets(input, { minCount: 10 });
     assert.equal(result[0].type, 'one_x_two');
     assert.equal(result[0].count, 50);
+    assert.equal(result[2].risk_label, 'high');
+  });
+
+  it('backfills medium risk from broader pool instead of returning a second low', () => {
+    const input = {
+      data: [
+        { type: 'one_x_two', outcome: 'w1', count: 69, rate: 1.59 },
+        { type: 'correct_score', outcome: '2:1', count: 15, rate: 8.4 },
+        { type: 'handicap1', outcome: '-1', count: 12, rate: 1.89 },
+        { type: 'total_over_half1', outcome: '1_5', count: 3, rate: 2.27 },
+      ],
+    };
+
+    const result = api.selectRiskBets(input, { minCount: 10 });
+    assert.equal(result.length, 3);
+    assert.deepEqual(result.map((bet) => bet.risk_label), ['low', 'medium', 'high']);
+    assert.equal(result[1].type, 'total_over_half1');
+  });
+
+  it('backfills broader-pool medium risk when strict filter leaves no low option', () => {
+    const input = {
+      data: [
+        { type: 'correct_score', outcome: '2:1', count: 10, rate: 8.1, percent: 17.24 },
+        { type: 'both_to_score', outcome: 'yes', count: 8, rate: 1.68, percent: 13.79 },
+        { type: 'one_x_two', outcome: 'w2', count: 6, rate: 6.18, percent: 10.34 },
+        { type: 'total_over_half1', outcome: '1_5', count: 3, rate: 2.27, percent: 5.17 },
+        { type: 'double_chance', outcome: 'x2', count: 2, rate: 2.45, percent: 3.45 },
+      ],
+    };
+
+    const result = api.selectRiskBets(input, { minCount: 10 });
+    assert.equal(result.length, 3);
+    assert.deepEqual(result.map((bet) => bet.risk_label), ['low', 'medium', 'high']);
+    assert.equal(result[0].type, 'both_to_score');
+    assert.equal(result[1].type, 'total_over_half1');
+    assert.equal(result[2].type, 'correct_score');
+  });
+
+  it('never marks correct_score with extreme coefficient as low risk', () => {
+    const input = {
+      data: [
+        { type: 'correct_score', outcome: '1:2', count: 40, rate: 8.4 },
+        { type: 'both_to_score', outcome: 'yes', count: 35, rate: 1.9 },
+        { type: 'total_over', outcome: '2_5', count: 25, rate: 2.4 },
+      ],
+    };
+
+    const result = api.selectRiskBets(input, { minCount: 10 });
+    const exact = result.find((bet) => bet.type === 'correct_score');
+    assert.ok(exact, 'correct_score should still be available as high risk option');
+    assert.equal(exact.risk_label, 'high');
   });
 
   it('returns empty for null input', () => {

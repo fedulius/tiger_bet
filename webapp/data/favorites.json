@@ -40,5 +40,13 @@
   },
   "preview": {
     "sport_settings": []
+  },
+  "telegram:340291652": {
+    "sport_settings": [
+      {
+        "name": "Футбол",
+        "leagues": []
+      }
+    ]
   }
 }

@@ -166,14 +166,13 @@ test('refreshMatchBrief persists ready generation and current row', async () => 
   assert.ok(upsertedCurrent.expiresAt);
 });
 
-test('refreshMatchBrief handles source skip and preserves stale semantics', async () => {
-  let staleArgs = null;
+test('refreshMatchBrief handles source skip without DB writes', async () => {
+  let insertCalled = false;
+  let staleCalled = false;
   const store = makeStore({
     getCurrentBriefByMatchId: async () => ({ match_id: 101, status: 'ready' }),
-    insertGeneration: async (_pg, params) => ({ id: 900, ...params }),
-    markCurrentBriefStaleAfterSkip: async (_pg, params) => {
-      staleArgs = params;
-    },
+    insertGeneration: async () => { insertCalled = true; return { id: 900 }; },
+    markCurrentBriefStaleAfterSkip: async () => { staleCalled = true; },
   });
 
   const result = await refreshMatchBrief({
@@ -186,15 +185,8 @@ test('refreshMatchBrief handles source skip and preserves stale semantics', asyn
 
   assert.equal(result.outcome, 'skipped');
   assert.equal(result.counts.skipped, 1);
-  assert.equal(result.counts.stale_transitions, 1);
-  assert.deepEqual(staleArgs, {
-    matchId: 101,
-    generationId: 900,
-    skipReason: 'insufficient_data',
-    sourceMode: 'skip',
-    sourceHash: null,
-    sourcePayload: { source_mode: 'skip', skip_reason: 'insufficient_data', match_slug: 'team-a-team-b' },
-  });
+  assert.equal(insertCalled, false, 'skip should not write to generation table');
+  assert.equal(staleCalled, false, 'skip should not write to current table');
 });
 
 test('refreshMatchBrief handles generation failure and preserves stale semantics', async () => {
@@ -284,7 +276,7 @@ test('runAiBriefBatch collects counters across mixed outcomes', async () => {
   assert.equal(summary.ready, 1);
   assert.equal(summary.unchanged, 1);
   assert.equal(summary.skipped, 1);
-  assert.equal(summary.stale_transitions, 1);
+  assert.equal(summary.stale_transitions, 0, 'skip no longer produces stale_transitions');
 });
 
 test('selectCandidateMatches keeps slug-only future matches', () => {
