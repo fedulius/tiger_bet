@@ -85,3 +85,22 @@ export function getFeed({ window, sport, country, league, feed_version, limit = 
   params.set('offset', String(offset));
   return getJson(`/feed?${params.toString()}`);
 }
+
+export function getHomeMatches() {
+  return getJson('/home');
+}
+
+export async function fetchJSON(url, options = {}) {
+  const hasBody = options.body != null;
+  const headers = buildHeaders({
+    ...(hasBody ? { 'content-type': 'application/json' } : {}),
+    ...options.headers,
+  });
+  const response = await fetch(url, { ...options, headers });
+  if (!response.ok) {
+    const error = new Error(`HTTP ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
+  return response.json();
+}

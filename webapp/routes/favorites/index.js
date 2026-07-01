@@ -22,7 +22,7 @@ function normalizeSportOutput(row = {}) {
 async function loadResolvedFavoriteSports(fastify, userId, profile) {
   const rows = await fastify.pg.connection(`
     SELECT s.sport_id, s.sport_name, s.sport_url
-    FROM public.favorite_sport fs
+    FROM public.user_sport fs
     JOIN public.sport s ON s.sport_id = fs.sport_id
     WHERE fs.user_id = $1
     ORDER BY fs.sport_id
@@ -64,7 +64,7 @@ async function favoritesRoutes(fastify) {
     const profile = String(request.user?.profile || '');
     const rows = await fastify.pg.connection(`
       SELECT s.sport_name, s.sport_url
-      FROM public.favorite_sport fs
+      FROM public.user_sport fs
       JOIN public.sport s ON s.sport_id = fs.sport_id
       WHERE fs.user_id = $1
       ORDER BY fs.sport_id
@@ -125,11 +125,11 @@ async function favoritesRoutes(fastify) {
           .filter(Number.isFinite),
       )];
 
-      await fastify.pg.connection('DELETE FROM public.favorite_sport WHERE user_id = $1', [userId]);
+      await fastify.pg.connection('DELETE FROM public.user_sport WHERE user_id = $1', [userId]);
 
       for (const sportId of resolvedSportIds) {
         await fastify.pg.connection(
-          'INSERT INTO public.favorite_sport (user_id, sport_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+          'INSERT INTO public.user_sport (user_id, sport_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
           [userId, sportId],
         );
       }
@@ -173,7 +173,7 @@ async function favoritesRoutes(fastify) {
     const profile = String(request.user?.profile || '');
     const previousFavorites = await loadResolvedFavoriteSports(fastify, userId, profile);
 
-    await fastify.pg.connection('DELETE FROM public.favorite_sport WHERE user_id = $1', [userId]);
+    await fastify.pg.connection('DELETE FROM public.user_sport WHERE user_id = $1', [userId]);
     saveFavoritesByProfile(profile, { sport_settings: [] });
     await invalidateRecommendationsCache({
       favoriteSportsSets: [previousFavorites, []],

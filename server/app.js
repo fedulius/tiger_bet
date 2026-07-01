@@ -74,7 +74,7 @@ function buildApp({
     origin: true,
   });
 
-  const publicPrefixes = ['/health', '/webapp', '/auth'];
+  const publicPrefixes = ['/health', '/webapp', '/auth', '/leagues', '/sport-icons', '/country-flags', '/league-logos'];
   fastify.addHook('onRequest', async (request, reply) => {
     const urlPath = String(request.url || '').split('?')[0];
     const isPublic = publicPrefixes.some((prefix) => urlPath === prefix || urlPath.startsWith(`${prefix}/`));
@@ -129,6 +129,22 @@ function buildApp({
   fastify.get('/webapp', async (request, reply) => sendReactIndex(reply));
   fastify.get('/webapp/', async (request, reply) => sendReactIndex(reply));
   fastify.get('/webapp/match.html', async (request, reply) => sendReactIndex(reply));
+
+  // Static assets from public/
+  const publicDir = path.join(__dirname, '..', 'webapp-react', 'public');
+  for (const dir of ['sport-icons', 'country-flags', 'league-logos']) {
+    fastify.get(`/${dir}/*`, async (request, reply) => {
+      const file = request.params['*'];
+      const filePath = path.join(publicDir, dir, file);
+      if (!filePath.startsWith(publicDir)) return reply.status(400).send('Bad Request');
+      try {
+        const content = fs.readFileSync(filePath);
+        return reply.type(resolveContentType(filePath)).send(content);
+      } catch {
+        return reply.status(404).send('Not Found');
+      }
+    });
+  }
 
   fastify.get('/webapp/*', async (request, reply) => {
     if (!isReactDistReady()) {

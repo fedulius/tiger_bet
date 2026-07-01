@@ -50,7 +50,7 @@ test('GET /recommendations returns favorite-based items when user has favorite s
   const cleanup = withTempFavoritesFile();
   const fakePg = createFakePg({
     handler(query) {
-      if (/FROM public\.favorite_sport fs/i.test(query)) {
+      if (/FROM public\.user_sport fs/i.test(query)) {
         return [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' }];
       }
       return [];
@@ -92,7 +92,7 @@ test('GET /recommendations does not inject fallback placeholder items for favori
 
   const fakePg = createFakePg({
     handler(query) {
-      if (/FROM public\.favorite_sport fs/i.test(query)) {
+      if (/FROM public\.user_sport fs/i.test(query)) {
         return [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' }];
       }
       return [];
@@ -131,7 +131,7 @@ test('GET /recommendations does not fall back to football when user favorites ha
 
   const fakePg = createFakePg({
     handler(query) {
-      if (/FROM public\.favorite_sport fs/i.test(query)) {
+      if (/FROM public\.user_sport fs/i.test(query)) {
         return [{ sport_id: 2, sport_name: 'Теннис', sport_url: 'tennis' }];
       }
       return [];
@@ -328,11 +328,11 @@ test('GET /recommendations reflects updated favorites immediately after PUT /fav
   let sportsDeleted = false;
   const fakePg = createFakePg({
     handler(query) {
-      if (/DELETE FROM public\.favorite_sport/i.test(query)) {
+      if (/DELETE FROM public\.user_sport/i.test(query)) {
         sportsDeleted = true;
         return [];
       }
-      if (/FROM public\.favorite_sport fs/i.test(query)) {
+      if (/FROM public\.user_sport fs/i.test(query)) {
         return sportsDeleted ? [] : [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' }];
       }
       if (/FROM public\.sport/i.test(query)) {
@@ -399,7 +399,7 @@ test('GET /recommendations attaches ai_brief to item when ready brief exists', a
   const fakeRedis = makeFakeRedis({ store: { 'recommendations:default': cachedPayload } });
   const fakePg = createFakePg({
     handler(query) {
-      if (/FROM public\.favorite_sport fs/i.test(query)) return [];
+      if (/FROM public\.user_sport fs/i.test(query)) return [];
       if (/FROM public\.ai_recommendation_briefs/i.test(query)) {
         return [{
           match_id: 42,
@@ -472,7 +472,7 @@ test('GET /recommendations attaches ai_brief with stale=true when brief_status i
   const fakeRedis = makeFakeRedis({ store: { 'recommendations:default': cachedPayload } });
   const fakePg = createFakePg({
     handler(query) {
-      if (/FROM public\.favorite_sport fs/i.test(query)) return [];
+      if (/FROM public\.user_sport fs/i.test(query)) return [];
       if (/FROM public\.ai_recommendation_briefs/i.test(query)) {
         return [{
           match_id: 43,
@@ -534,7 +534,7 @@ test('GET /recommendations omits ai_brief when no brief row exists for match', a
   const fakeRedis = makeFakeRedis({ store: { 'recommendations:default': cachedPayload } });
   const fakePg = createFakePg({
     handler(query) {
-      if (/FROM public\.favorite_sport fs/i.test(query)) return [];
+      if (/FROM public\.user_sport fs/i.test(query)) return [];
       if (/FROM public\.ai_recommendation_briefs/i.test(query)) return [];
       return [];
     },
@@ -585,7 +585,7 @@ test('GET /recommendations returns base items unchanged when ai brief store fail
   const fakeRedis = makeFakeRedis({ store: { 'recommendations:default': cachedPayload } });
   const fakePg = createFakePg({
     handler(query) {
-      if (/FROM public\.favorite_sport fs/i.test(query)) return [];
+      if (/FROM public\.user_sport fs/i.test(query)) return [];
       if (/FROM public\.ai_recommendation_briefs/i.test(query)) throw new Error('DB connection error');
       return [];
     },
@@ -637,7 +637,7 @@ test('GET /recommendations attaches ai_brief for item with synthetic match_id vi
   const fakeRedis = makeFakeRedis({ store: { 'recommendations:default': cachedPayload } });
   const fakePg = createFakePg({
     handler(query) {
-      if (/FROM public\.favorite_sport fs/i.test(query)) return [];
+      if (/FROM public\.user_sport fs/i.test(query)) return [];
       if (/match_slug IN/i.test(query)) {
         return [{
           match_id: 100,
@@ -701,7 +701,7 @@ test('GET /recommendations omits ai_brief for item with synthetic match_id when 
   const fakeRedis = makeFakeRedis({ store: { 'recommendations:default': cachedPayload } });
   const fakePg = createFakePg({
     handler(query) {
-      if (/FROM public\.favorite_sport fs/i.test(query)) return [];
+      if (/FROM public\.user_sport fs/i.test(query)) return [];
       if (/match_slug IN/i.test(query)) return [];
       return [];
     },
@@ -777,7 +777,7 @@ test('GET /recommendations serves cached payload with favorite and fallback-fill
   const fakeRedis = makeFakeRedis({ store: { 'recommendations:default': cachedPayload } });
   const fakePg = createFakePg({
     handler(query) {
-      if (/FROM public\.favorite_sport fs/i.test(query)) return [];
+      if (/FROM public\.user_sport fs/i.test(query)) return [];
       if (/FROM public\.ai_recommendation_briefs/i.test(query)) return [];
       return [];
     },
@@ -859,7 +859,7 @@ test('GET /recommendations enriches mixed numeric and synthetic items in one res
   const fakeRedis = makeFakeRedis({ store: { 'recommendations:default': cachedPayload } });
   const fakePg = createFakePg({
     handler(query) {
-      if (/FROM public\.favorite_sport fs/i.test(query)) return [];
+      if (/FROM public\.user_sport fs/i.test(query)) return [];
       if (/WHERE match_id IN/i.test(query)) {
         return [{
           match_id: 501,
@@ -938,7 +938,7 @@ test('GET /recommendations leaves synthetic item unchanged when match_slug is mi
   const fakeRedis = makeFakeRedis({ store: { 'recommendations:default': cachedPayload } });
   const fakePg = createFakePg({
     handler(query) {
-      if (/FROM public\.favorite_sport fs/i.test(query)) return [];
+      if (/FROM public\.user_sport fs/i.test(query)) return [];
       if (/FROM public\.ai_recommendation_briefs/i.test(query)) {
         throw new Error('brief store should not be queried without numeric match_id or match_slug');
       }
