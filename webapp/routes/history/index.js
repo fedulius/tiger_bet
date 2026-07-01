@@ -3,7 +3,7 @@ const { getHistory } = require('../../services/historyService');
 async function loadFavoriteSports(fastify, userId) {
   return await fastify.pg.connection(`
     SELECT s.sport_id, s.sport_name, s.sport_url
-    FROM public.favorite_sport fs
+    FROM public.user_sport fs
     JOIN public.sport s ON s.sport_id = fs.sport_id
     WHERE fs.user_id = $1
     ORDER BY fs.sport_id

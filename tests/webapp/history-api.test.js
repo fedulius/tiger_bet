@@ -7,7 +7,7 @@ const { buildTestApp, createFakePg, makeAuthHeaders } = require('./testHelpers')
 test('GET /history returns favorite-based items when user has favorite sports', async () => {
   const fakePg = createFakePg({
     handler(query) {
-      if (/FROM public\.favorite_sport fs/i.test(query)) {
+      if (/FROM public\.user_sport fs/i.test(query)) {
         return [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' }];
       }
       return [];
