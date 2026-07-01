@@ -1,5 +1,25 @@
 const TG_INIT_DATA_HEADER = 'x-telegram-init-data';
 
+export function tryEnterTelegramFullscreen(globalRef = globalThis) {
+  const webApp =
+    globalRef?.Telegram?.WebApp ||
+    globalRef?.window?.Telegram?.WebApp ||
+    null;
+
+  if (!webApp) {
+    return false;
+  }
+
+  try {
+    webApp.ready?.();
+    webApp.expand?.();
+    webApp.requestFullscreen?.();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function extractTgWebAppDataFromLocation(locationLike) {
   if (!locationLike) {
     return '';
