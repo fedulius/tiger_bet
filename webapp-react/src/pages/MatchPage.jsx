@@ -418,7 +418,17 @@ export function MatchPage() {
                     </>
                   );
                 })() : (
-                  <EmptyState text="Нет данных о травмированных игроках" />
+                  <div style={{ padding: '20px 16px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'oklch(0.72 0.09 150 / 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="oklch(0.72 0.09 150)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text)', marginBottom: '4px' }}>Потерь нет</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-3)', lineHeight: '1.4' }}>Обе команды в оптимальных составах — травмированных и дисквалифицированных нет.</div>
+                    </div>
+                  </div>
                 )}
               </div>
 
