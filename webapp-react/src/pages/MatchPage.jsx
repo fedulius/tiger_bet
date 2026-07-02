@@ -67,8 +67,6 @@ function EventRow({ event, homeTeamId, homeTeamCode, awayTeamCode, score }) {
     else { icon = '🟨'; iconBg = 'oklch(0.78 0.12 72 / 0.18)'; typeLabel = 'Жёлтая карточка'; }
   } else if (event.type === 3) {
     icon = '🔄'; iconBg = 'oklch(0.65 0.02 250 / 0.14)'; typeLabel = 'Замена';
-    // Extract player names from name like "Substitution 1"
-    if (event.player) desc = event.player;
   } else if (event.type === 4) {
     icon = '❌'; iconBg = 'oklch(0.66 0.13 25 / 0.15)'; typeLabel = 'Пенальти отменён';
   }
@@ -78,17 +76,15 @@ function EventRow({ event, homeTeamId, homeTeamCode, awayTeamCode, score }) {
   const showScore = event.type === 1 && score;
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 0', position: 'relative' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 0' }}>
       {/* Minute */}
-      <div style={{ minWidth: '32px', fontSize: '13px', fontWeight: 600, color: 'var(--text-3)', textAlign: 'right' }}>{minute}</div>
-      {/* Team badge */}
-      <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: 'var(--sep)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '8px', fontWeight: 800, color: 'var(--text-3)', flexShrink: 0, overflow: 'hidden' }}>
-        {teamCode && teamCode !== 'WW' ? (
-          <img src={`/country-flags/${teamCode}.svg`} alt={teamCode} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        ) : (teamCode || '???').slice(0, 3).toUpperCase()}
+      <div style={{ minWidth: '30px', fontSize: '13px', fontWeight: 600, color: 'var(--text-3)', textAlign: 'right' }}>{minute}</div>
+      {/* Country code badge */}
+      <div style={{ width: '28px', height: '20px', borderRadius: '4px', background: 'var(--sep)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '8px', fontWeight: 800, color: 'var(--text-3)', flexShrink: 0, letterSpacing: '0.3px' }}>
+        {(teamCode || '???').slice(0, 3).toUpperCase()}
       </div>
       {/* Event icon */}
-      <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', flexShrink: 0 }}>
+      <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', flexShrink: 0 }}>
         {icon}
       </div>
       {/* Event text */}
@@ -96,7 +92,6 @@ function EventRow({ event, homeTeamId, homeTeamCode, awayTeamCode, score }) {
         <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {typeLabel}{playerName ? ` — ${playerName}` : ''}
         </div>
-        {desc && <div style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: '1px' }}>{desc}</div>}
       </div>
       {/* Score */}
       {showScore && (
