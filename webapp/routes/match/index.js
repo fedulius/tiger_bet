@@ -36,10 +36,10 @@ function isFinished(status) {
   return [8, 9, 10, 17, 18].includes(status);
 }
 
-async function fetchSstatsMatch(gameId) {
+async function fetchSstatsMatch(gameId, retries = 2) {
   const url = `${SSTATS_BASE}/Games/${gameId}`;
-  const resp = await fetch(url);
-  if (!resp.ok) return null;
+  const resp = await fetchWithRetry(url, retries);
+  if (!resp || !resp.ok) return null;
   const json = await resp.json();
   const full = json.data || null;
   if (!full) return null;
@@ -51,6 +51,18 @@ async function fetchSstatsMatch(gameId) {
 }
 
 // ── Analytics fetchers ──────────────────────────────────────
+async function fetchWithRetry(url, retries = 2) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const resp = await fetch(url);
+    if (resp.status === 429 && attempt < retries) {
+      await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+      continue;
+    }
+    return resp;
+  }
+  return null;
+}
+
 async function fetchH2H(homeTeamId, awayTeamId) {
   if (!homeTeamId || !awayTeamId) return [];
   try {
@@ -66,8 +78,8 @@ async function fetchH2H(homeTeamId, awayTeamId) {
       TimeZone: '3',
     });
     const url = `${SSTATS_BASE}/Games/list?${params.toString()}`;
-    const resp = await fetch(url);
-    if (!resp.ok) return [];
+    const resp = await fetchWithRetry(url);
+    if (!resp || !resp.ok) return [];
     const json = await resp.json();
     const games = json.data || [];
     // Map, sort newest first, take 5
@@ -89,8 +101,8 @@ async function fetchH2H(homeTeamId, awayTeamId) {
 async function fetchForm(gameId, homeTeamId, awayTeamId, leagueId) {
   try {
     const url = `${SSTATS_BASE}/Games/last-games-stats?gameId=${gameId}`;
-    const resp = await fetch(url);
-    if (!resp.ok) return null;
+    const resp = await fetchWithRetry(url);
+    if (!resp || !resp.ok) return null;
     const json = await resp.json();
     const data = json;
     if (!data || !data.home) return null;
@@ -123,8 +135,8 @@ async function fetchForm(gameId, homeTeamId, awayTeamId, leagueId) {
           TimeZone: '3',
         });
         if (leagueId) params.set('leagueid', String(leagueId));
-        const r = await fetch(`${SSTATS_BASE}/Games/list?${params.toString()}`);
-        if (!r.ok) return [];
+        const r = await fetchWithRetry(`${SSTATS_BASE}/Games/list?${params.toString()}`);
+        if (!r || !r.ok) return [];
         const j = await r.json();
         // Filter to games where this team actually played
         const teamGames = (j.data || []).filter((gg) =>
@@ -204,8 +216,8 @@ const INJURY_LOCALE = {
 async function fetchInjuries(gameId) {
   try {
     const url = `${SSTATS_BASE}/Games/injuries?gameId=${gameId}`;
-    const resp = await fetch(url);
-    if (!resp.ok) return [];
+    const resp = await fetchWithRetry(url);
+    if (!resp || !resp.ok) return [];
     const json = await resp.json();
     const items = json.data || [];
     return items.map((item) => ({
@@ -221,8 +233,8 @@ async function fetchInjuries(gameId) {
 async function fetchGlicko(gameId) {
   try {
     const url = `${SSTATS_BASE}/Games/glicko/${gameId}`;
-    const resp = await fetch(url);
-    if (!resp.ok) return null;
+    const resp = await fetchWithRetry(url);
+    if (!resp || !resp.ok) return null;
     const json = await resp.json();
     const g = json.data?.glicko;
     if (!g || (g.homeWinProbability == null && g.awayWinProbability == null)) return null;
