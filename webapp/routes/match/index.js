@@ -51,17 +51,28 @@ async function fetchSstatsMatch(gameId) {
 }
 
 // ── Analytics fetchers ──────────────────────────────────────
-async function fetchH2H(homeTeamId, awayTeamId) {
+async function fetchH2H(homeTeamId, awayTeamId, leagueId) {
   if (!homeTeamId || !awayTeamId) return [];
   try {
-    // bothTeams requires from/to to avoid SStats returning only 1000 old games
+    // SStats API does NOT support teamId filtering — fetch by league + date range and filter client-side
     const from = '2020-01-01T00:00:00+03:00';
     const to = new Date().toISOString().slice(0, 10) + 'T23:59:59+03:00';
-    const url = `${SSTATS_BASE}/Games/list?ended=true&bothTeams=${homeTeamId},${awayTeamId}&from=${from}&to=${to}&limit=200&TimeZone=3`;
+    const params = new URLSearchParams({
+      ended: 'true',
+      from,
+      to,
+      limit: '1000',
+      TimeZone: '3',
+    });
+    if (leagueId) params.set('leagueid', String(leagueId));
+    const url = `${SSTATS_BASE}/Games/list?${params.toString()}`;
     const resp = await fetch(url);
     if (!resp.ok) return [];
     const json = await resp.json();
-    const games = json.data || [];
+    const games = (json.data || []).filter((g) =>
+      (g.homeTeam?.id === homeTeamId && g.awayTeam?.id === awayTeamId) ||
+      (g.homeTeam?.id === awayTeamId && g.awayTeam?.id === homeTeamId)
+    );
     // Map, sort newest first, take 5
     const mapped = games.map((g) => ({
       id: g.id,
@@ -338,7 +349,7 @@ async function matchRoutes(fastify) {
 
       // Fetch analytics data in parallel
       const [h2h, form, injuries, glicko] = await Promise.all([
-        fetchH2H(match.homeTeam?.id, match.awayTeam?.id),
+        fetchH2H(match.homeTeam?.id, match.awayTeam?.id, match.season?.league?.id),
         fetchForm(match.id, match.homeTeam?.id, match.awayTeam?.id, match.season?.league?.id),
         fetchInjuries(match.id),
         fetchGlicko(match.id),
