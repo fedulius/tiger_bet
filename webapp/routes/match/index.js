@@ -75,7 +75,7 @@ async function fetchH2H(homeTeamId, awayTeamId) {
   }
 }
 
-async function fetchForm(gameId, homeTeamId, awayTeamId) {
+async function fetchForm(gameId, homeTeamId, awayTeamId, leagueId) {
   try {
     const url = `${SSTATS_BASE}/Games/last-games-stats?gameId=${gameId}`;
     const resp = await fetch(url);
@@ -96,11 +96,11 @@ async function fetchForm(gameId, homeTeamId, awayTeamId) {
     });
 
     // Fetch last 5 individual match results per team
-    // SStats API does NOT support teamId filtering — fetch by date range and filter client-side
+    // SStats API does NOT support teamId filtering — fetch by league + date range and filter client-side
     const fetchLast5 = async (teamId) => {
       if (!teamId) return [];
       try {
-        // Fetch recent finished games (last 6 months to cover full season)
+        // Fetch recent finished games from the same league (last 6 months)
         const now = new Date();
         const from = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
         const to = now.toISOString().slice(0, 10);
@@ -111,6 +111,7 @@ async function fetchForm(gameId, homeTeamId, awayTeamId) {
           limit: '500',
           TimeZone: '3',
         });
+        if (leagueId) params.set('leagueid', String(leagueId));
         const r = await fetch(`${SSTATS_BASE}/Games/list?${params.toString()}`);
         if (!r.ok) return [];
         const j = await r.json();
@@ -334,7 +335,7 @@ async function matchRoutes(fastify) {
       // Fetch analytics data in parallel
       const [h2h, form, injuries, glicko] = await Promise.all([
         fetchH2H(match.homeTeam?.id, match.awayTeam?.id),
-        fetchForm(match.id, match.homeTeam?.id, match.awayTeam?.id),
+        fetchForm(match.id, match.homeTeam?.id, match.awayTeam?.id, match.season?.league?.id),
         fetchInjuries(match.id),
         fetchGlicko(match.id),
       ]);
