@@ -507,14 +507,14 @@ export function MatchPage() {
                           const hasDraw = dp > 0;
                           return (
                             <>
-                              <div style={{ display: 'flex', gap: hasDraw ? '3px' : '0', height: '8px', borderRadius: '4px', overflow: 'hidden', marginBottom: '8px' }}>
-                                <div style={{ flex: hp / total, background: 'var(--accent, #e9b949)', borderRadius: hasDraw ? '4px 0 0 4px' : '4px' }} />
-                                {hasDraw && <div style={{ flex: dp / total, background: 'var(--text-3, #666)' }} />}
-                                <div style={{ flex: ap / total, background: 'var(--text-2, #999)', borderRadius: hasDraw ? '0 4px 4px 0' : '0 4px 4px 0' }} />
+                              <div style={{ display: 'flex', height: '8px', borderRadius: '4px', overflow: 'hidden', marginBottom: '8px' }}>
+                                <div style={{ flex: hp / total, background: 'var(--accent, #e9b949)' }} />
+                                {hasDraw && <div style={{ flex: dp / total, background: 'var(--text-3, #666)', borderLeft: '2px solid var(--surface)', borderRight: '2px solid var(--surface)' }} />}
+                                <div style={{ flex: ap / total, background: 'var(--text-2, #999)' }} />
                               </div>
                               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
                                 <span style={{ color: 'var(--accent, #e9b949)', fontWeight: 700 }}>{hp}%</span>
-                                {hasDraw && <span style={{ color: 'var(--text-3)' }}>{dp}%</span>}
+                                {hasDraw && <span style={{ color: 'var(--text-2, #999)', fontWeight: 600 }}>{dp}%</span>}
                                 <span style={{ color: 'var(--text-2)', fontWeight: 700 }}>{ap}%</span>
                               </div>
                               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-3)', marginTop: '2px' }}>
