@@ -54,24 +54,14 @@ async function fetchSstatsMatch(gameId) {
 async function fetchH2H(homeTeamId, awayTeamId) {
   if (!homeTeamId || !awayTeamId) return [];
   try {
-    // H2H must search across ALL leagues — teams may have met in qualifiers, Nations League, etc.
+    // bothTeams searches across ALL leagues (cross-competition H2H)
     const from = '2020-01-01T00:00:00+03:00';
     const to = new Date().toISOString().slice(0, 10) + 'T23:59:59+03:00';
-    const params = new URLSearchParams({
-      ended: 'true',
-      from,
-      to,
-      limit: '1000',
-      TimeZone: '3',
-    });
-    const url = `${SSTATS_BASE}/Games/list?${params.toString()}`;
+    const url = `${SSTATS_BASE}/Games/list?ended=true&bothTeams=${homeTeamId},${awayTeamId}&from=${from}&to=${to}&limit=1000&TimeZone=3`;
     const resp = await fetch(url);
     if (!resp.ok) return [];
     const json = await resp.json();
-    const games = (json.data || []).filter((g) =>
-      (g.homeTeam?.id === homeTeamId && g.awayTeam?.id === awayTeamId) ||
-      (g.homeTeam?.id === awayTeamId && g.awayTeam?.id === homeTeamId)
-    );
+    const games = json.data || [];
     // Map, sort newest first, take 5
     const mapped = games.map((g) => ({
       id: g.id,
