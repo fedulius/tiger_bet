@@ -52,29 +52,44 @@ function StatRow({ label, home, away, isBar, decimals }) {
 
 function EventRow({ event, homeTeamId, homeTeamName, awayTeamName }) {
   const isHome = event.teamId === homeTeamId;
-  // SStats: type=1 Goal/Penalty/Missed Penalty, type=2 Yellow/Red (check name), type=3 Substitution
-  let typeEmoji = '•';
+  let icon = '⚽';
+  let iconBg = 'oklch(0.72 0.09 150 / 0.15)';
+  let iconColor = 'oklch(0.72 0.09 150)';
+  let typeLabel = 'Гол';
+  let detail = '';
+
   if (event.type === 1) {
-    if (event.name === 'Penalty') typeEmoji = '⚽';
-    else if (event.name === 'Missed Penalty') typeEmoji = '❌';
-    else typeEmoji = '⚽';
-  } else if (event.type === 2) typeEmoji = event.name?.includes('Red') ? '🟥' : '🟨';
-  else if (event.type === 3) typeEmoji = '🔄';
+    if (event.name === 'Penalty') { typeLabel = 'Гол'; detail = '(с пенальти)'; }
+    else if (event.name === 'Missed Penalty') { icon = '❌'; iconBg = 'oklch(0.66 0.13 25 / 0.15)'; iconColor = 'oklch(0.66 0.13 25)'; typeLabel = 'Нереализ. пенальти'; }
+    else { typeLabel = 'Гол'; }
+  } else if (event.type === 2) {
+    if (event.name?.includes('Red')) { icon = '🟥'; iconBg = 'oklch(0.66 0.13 25 / 0.15)'; iconColor = 'oklch(0.66 0.13 25)'; typeLabel = 'Красная карточка'; }
+    else { icon = '🟨'; iconBg = 'oklch(0.78 0.12 72 / 0.15)'; iconColor = 'oklch(0.65 0.12 72)'; typeLabel = 'Жёлтая карточка'; }
+  } else if (event.type === 3) {
+    icon = '🔄'; iconBg = 'oklch(0.65 0.02 250 / 0.12)'; iconColor = 'oklch(0.65 0.02 250)'; typeLabel = 'Замена';
+  }
+
   const minute = event.minute != null ? `${event.minute}'` : '';
   const teamName = isHome ? homeTeamName : awayTeamName;
+  const playerName = event.player || '';
+  const desc = event.name && event.type !== 1 && event.type !== 2 && event.type !== 3 ? event.name : '';
 
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 0',
-      fontSize: '13px', color: 'var(--text)', borderBottom: '1px solid var(--sep)',
-    }}>
-      <span style={{ minWidth: '36px', textAlign: 'right', color: 'var(--text-3)', fontSize: '12px', fontWeight: 600 }}>
-        {minute}
-      </span>
-      <span style={{ fontSize: '16px', minWidth: '24px', textAlign: 'center' }}>{typeEmoji}</span>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1px' }}>
-        <span style={{ fontWeight: 600 }}>{event.player || event.name || ''}</span>
-        <span style={{ fontSize: '11px', color: 'var(--text-3)' }}>{teamName}</span>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: isHome ? 'flex-start' : 'flex-end', padding: '6px 0' }}>
+      {/* Type label */}
+      <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text)', marginBottom: '4px', textAlign: isHome ? 'left' : 'right', width: '100%' }}>{typeLabel}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%', flexDirection: isHome ? 'row' : 'row-reverse' }}>
+        {/* Text side */}
+        <div style={{ flex: 1, textAlign: isHome ? 'left' : 'right' }}>
+          {playerName && <div style={{ fontSize: '13px', color: 'var(--text-2)' }}>{playerName}{detail ? ` ${detail}` : ''}</div>}
+          {desc && <div style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: '1px' }}>{desc}</div>}
+        </div>
+        {/* Icon circle */}
+        <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', flexShrink: 0 }}>
+          {icon}
+        </div>
+        {/* Minute */}
+        <div style={{ minWidth: '30px', fontSize: '12px', fontWeight: 600, color: 'var(--text-3)', textAlign: isHome ? 'left' : 'right' }}>{minute}</div>
       </div>
     </div>
   );
@@ -546,9 +561,9 @@ export function MatchPage() {
               )}
               {events.length > 0 && (
                 <>
-                  <div className="section-header">События</div>
-                  <div style={{ margin: '0 16px', background: 'var(--surface)', borderRadius: 'var(--radius)', border: '1px solid var(--sep)', padding: '8px 16px' }}>
-                    {[...events].sort((a, b) => (b.minute || 0) - (a.minute || 0)).map((e) => (
+                  <div className="section-header">Хронология матча</div>
+                  <div style={{ margin: '0 16px', background: 'var(--surface)', borderRadius: 'var(--radius)', border: '1px solid var(--sep)', padding: '8px 16px', maxHeight: '320px', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                    {[...events].sort((a, b) => (a.minute || 0) - (b.minute || 0)).map((e) => (
                       <EventRow key={e.id} event={e} homeTeamId={item.homeTeamId}
                         homeTeamName={team1Name} awayTeamName={team2Name} />
                     ))}
