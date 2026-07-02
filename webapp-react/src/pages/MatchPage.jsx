@@ -50,7 +50,7 @@ function StatRow({ label, home, away, isBar, decimals }) {
   );
 }
 
-function EventRow({ event, homeTeamId, homeTeamCode, awayTeamCode, score }) {
+function EventRow({ event, homeTeamId, homeTeamCode, awayTeamCode, score, isLast }) {
   const isHome = event.teamId === homeTeamId;
   const teamCode = isHome ? homeTeamCode : awayTeamCode;
   let icon = '⚽';
@@ -76,7 +76,7 @@ function EventRow({ event, homeTeamId, homeTeamCode, awayTeamCode, score }) {
   const showScore = event.type === 1 && score;
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 0' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 0', marginLeft: '-8px', borderBottom: isLast ? 'none' : '1px solid var(--sep)' }}>
       {/* Minute */}
       <div style={{ minWidth: '30px', fontSize: '13px', fontWeight: 600, color: 'var(--text-3)', textAlign: 'right' }}>{minute}</div>
       {/* Country code badge */}
@@ -580,10 +580,11 @@ export function MatchPage() {
                           scoreMap.set(e.id, `${homeGoals}:${awayGoals}`);
                         }
                       }
-                      return sorted.map((e) => (
+                      return sorted.map((e, i) => (
                         <EventRow key={e.id} event={e} homeTeamId={item.homeTeamId}
                           homeTeamCode={team1Code} awayTeamCode={team2Code}
-                          score={scoreMap.get(e.id)} />
+                          score={scoreMap.get(e.id)}
+                          isLast={i === sorted.length - 1} />
                       ));
                     })()}
                   </div>
