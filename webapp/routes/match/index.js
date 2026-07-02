@@ -51,10 +51,10 @@ async function fetchSstatsMatch(gameId) {
 }
 
 // ── Analytics fetchers ──────────────────────────────────────
-async function fetchH2H(homeTeamId, awayTeamId, leagueId) {
+async function fetchH2H(homeTeamId, awayTeamId) {
   if (!homeTeamId || !awayTeamId) return [];
   try {
-    // SStats API does NOT support teamId filtering — fetch by league + date range and filter client-side
+    // H2H must search across ALL leagues — teams may have met in qualifiers, Nations League, etc.
     const from = '2020-01-01T00:00:00+03:00';
     const to = new Date().toISOString().slice(0, 10) + 'T23:59:59+03:00';
     const params = new URLSearchParams({
@@ -64,7 +64,6 @@ async function fetchH2H(homeTeamId, awayTeamId, leagueId) {
       limit: '1000',
       TimeZone: '3',
     });
-    if (leagueId) params.set('leagueid', String(leagueId));
     const url = `${SSTATS_BASE}/Games/list?${params.toString()}`;
     const resp = await fetch(url);
     if (!resp.ok) return [];
@@ -349,7 +348,7 @@ async function matchRoutes(fastify) {
 
       // Fetch analytics data in parallel
       const [h2h, form, injuries, glicko] = await Promise.all([
-        fetchH2H(match.homeTeam?.id, match.awayTeam?.id, match.season?.league?.id),
+        fetchH2H(match.homeTeam?.id, match.awayTeam?.id),
         fetchForm(match.id, match.homeTeam?.id, match.awayTeam?.id, match.season?.league?.id),
         fetchInjuries(match.id),
         fetchGlicko(match.id),
