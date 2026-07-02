@@ -321,15 +321,15 @@ export function MatchPage() {
                     <>
                       {/* Summary bar */}
                       <div style={{ display: 'flex', textAlign: 'center', borderBottom: '1px solid var(--sep)' }}>
-                        <div style={{ flex: homeWins, padding: '14px 8px 10px', background: 'oklch(0.72 0.09 150 / 0.12)' }}>
+                        <div style={{ flex: 1, padding: '14px 8px 10px', background: 'oklch(0.72 0.09 150 / 0.12)' }}>
                           <div style={{ fontSize: '22px', fontWeight: 800, color: 'oklch(0.72 0.09 150)' }}>{homeWins}</div>
                           <div style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: '2px' }}>{team1Name}</div>
                         </div>
-                        <div style={{ flex: draws, padding: '14px 8px 10px', background: 'var(--sep)' }}>
+                        <div style={{ flex: 1, padding: '14px 8px 10px', background: 'var(--sep)' }}>
                           <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-3)' }}>{draws}</div>
                           <div style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: '2px' }}>Ничьи</div>
                         </div>
-                        <div style={{ flex: awayWins, padding: '14px 8px 10px', background: 'oklch(0.66 0.13 25 / 0.12)' }}>
+                        <div style={{ flex: 1, padding: '14px 8px 10px', background: 'oklch(0.66 0.13 25 / 0.12)' }}>
                           <div style={{ fontSize: '22px', fontWeight: 800, color: 'oklch(0.66 0.13 25)' }}>{awayWins}</div>
                           <div style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: '2px' }}>{team2Name}</div>
                         </div>
