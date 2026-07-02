@@ -13,8 +13,8 @@ const CACHE_TTL = {
 };
 const _cache = new Map(); // key: "dayType:1,2,235", value: { data, expiresAt }
 
-function makeCacheKey(dayType, leagueIds) {
-  return `${dayType}:${[...leagueIds].sort((a, b) => a - b).join(',')}`;
+function makeCacheKey(dayType, leagueIds, dateStr) {
+  return `${dayType}:${dateStr}:${[...leagueIds].sort((a, b) => a - b).join(',')}`;
 }
 
 function cacheGet(key) {
@@ -119,7 +119,7 @@ function groupByLeague(matches) {
 
 // ── Fetch + cache per day ──────────────────────────────────
 async function fetchDay(dayType, leagueIds, dateStr, ended) {
-  const key = makeCacheKey(dayType, leagueIds);
+  const key = makeCacheKey(dayType, leagueIds, dateStr);
   const cached = cacheGet(key);
   if (cached !== null) return cached;
 
@@ -228,3 +228,8 @@ async function homeRoutes(fastify) {
 }
 
 module.exports = homeRoutes;
+module.exports.__private = {
+  makeCacheKey,
+  getDayRange,
+  getMoscowDate,
+};

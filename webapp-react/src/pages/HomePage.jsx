@@ -117,7 +117,9 @@ function EmptyDay({ message }) {
 }
 
 export function HomePage() {
-  const [activeTab, setActiveTab] = useState('today');
+  const [activeTab, setActiveTab] = useState(() => {
+    try { return sessionStorage.getItem('homeTab') || 'today'; } catch { return 'today'; }
+  });
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authState, setAuthState] = useState('pending');
@@ -266,7 +268,7 @@ export function HomePage() {
               <button
                 key={key}
                 className={`date-pill${key === activeTab ? ' active' : ''}`}
-                onClick={() => setActiveTab(key)}
+                onClick={() => { try { sessionStorage.setItem('homeTab', key); } catch {} setActiveTab(key); }}
               >
                 {label}
               </button>
@@ -296,7 +298,7 @@ export function HomePage() {
                     <MatchCard
                       key={match.id}
                       match={match}
-                      onClick={() => navigate(`/match/${match.id}`)}
+                      onClick={() => navigate(`/match/${match.id}`, { state: { fromTab: activeTab } })}
                     />
                   ))}
                 </div>

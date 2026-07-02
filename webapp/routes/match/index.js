@@ -50,6 +50,183 @@ async function fetchSstatsMatch(gameId) {
   };
 }
 
+// ── Analytics fetchers ──────────────────────────────────────
+async function fetchH2H(homeTeamId, awayTeamId) {
+  if (!homeTeamId || !awayTeamId) return [];
+  try {
+    const url = `${SSTATS_BASE}/Games/list?ended=true&bothTeams=${homeTeamId},${awayTeamId}`;
+    const resp = await fetch(url);
+    if (!resp.ok) return [];
+    const json = await resp.json();
+    const games = json.data || [];
+    // Map, sort newest first, take 5
+    const mapped = games.map((g) => ({
+      id: g.id,
+      date: g.date,
+      homeTeam: resolveTeamName(g.homeTeam?.name || ''),
+      awayTeam: resolveTeamName(g.awayTeam?.name || ''),
+      homeResult: g.homeResult,
+      awayResult: g.awayResult,
+    }));
+    mapped.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    return mapped.slice(0, 5);
+  } catch {
+    return [];
+  }
+}
+
+async function fetchForm(gameId, homeTeamId, awayTeamId, leagueId) {
+  try {
+    const url = `${SSTATS_BASE}/Games/last-games-stats?gameId=${gameId}`;
+    const resp = await fetch(url);
+    if (!resp.ok) return null;
+    const json = await resp.json();
+    const data = json;
+    if (!data || !data.home) return null;
+    const mapTeam = (t) => ({
+      gamesCount: t.gamesCount || 0,
+      wins: t.wins || 0,
+      draws: t.draws || 0,
+      losses: t.loses || 0,
+      avgScore: t.avgScore != null ? Math.round(t.avgScore * 10) / 10 : null,
+      avgConceded: t.avgConceded != null ? Math.round(t.avgConceded * 10) / 10 : null,
+      avgShots: t.avgShots != null ? Math.round(t.avgShots * 10) / 10 : null,
+      avgCards: t.avgCards != null ? Math.round(t.avgCards * 10) / 10 : null,
+      avgCorners: t.avgCorners != null ? Math.round(t.avgCorners * 10) / 10 : null,
+    });
+
+    // Fetch last 5 individual match results per team
+    // SStats API does NOT support teamId filtering — use leagueid + date range instead
+    const fetchLast5 = async (teamId) => {
+      if (!teamId) return [];
+      try {
+        // Fetch recent finished games from the same league (last 4 months)
+        const now = new Date();
+        const from = new Date(now.getTime() - 120 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+        const to = now.toISOString().slice(0, 10);
+        const params = new URLSearchParams({
+          ended: 'true',
+          from,
+          to,
+          limit: '200',
+          TimeZone: '3',
+        });
+        if (leagueId) params.set('leagueid', String(leagueId));
+        const r = await fetch(`${SSTATS_BASE}/Games/list?${params.toString()}`);
+        if (!r.ok) return [];
+        const j = await r.json();
+        // Filter to games where this team actually played
+        const teamGames = (j.data || []).filter((gg) =>
+          gg.id !== gameId &&
+          (gg.homeTeam?.id === teamId || gg.awayTeam?.id === teamId)
+        );
+        // Sort by date descending (most recent first), take 5
+        teamGames.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+        return teamGames.slice(0, 5).map((gg) => {
+          const isHome = gg.homeTeam?.id === teamId;
+          const goalsFor = isHome ? gg.homeResult : gg.awayResult;
+          const goalsAgainst = isHome ? gg.awayResult : gg.homeResult;
+          return {
+            result: goalsFor > goalsAgainst ? 'W' : goalsFor < goalsAgainst ? 'L' : 'D',
+            score: `${goalsFor}:${goalsAgainst}`,
+            opponent: resolveTeamName(isHome ? (gg.awayTeam?.name || '') : (gg.homeTeam?.name || '')),
+            date: gg.date || '',
+          };
+        });
+      } catch {
+        return [];
+      }
+    };
+
+    const [homeRecent, awayRecent] = await Promise.all([
+      fetchLast5(homeTeamId),
+      fetchLast5(awayTeamId),
+    ]);
+
+    const home = mapTeam(data.home);
+    const away = mapTeam(data.away);
+    // Override aggregate stats with last-5 stats
+    const applyRecentStats = (team, recent) => {
+      if (recent.length === 0) return;
+      team.recent = recent;
+      team.gamesCount = recent.length;
+      team.wins = recent.filter((m) => m.result === 'W').length;
+      team.draws = recent.filter((m) => m.result === 'D').length;
+      team.losses = recent.filter((m) => m.result === 'L').length;
+      const goalsFor = recent.reduce((s, m) => s + parseInt(m.score.split(':')[0]) || 0, 0);
+      const goalsAgainst = recent.reduce((s, m) => s + parseInt(m.score.split(':')[1]) || 0, 0);
+      team.avgScore = recent.length ? Math.round(goalsFor / recent.length * 10) / 10 : null;
+      team.avgConceded = recent.length ? Math.round(goalsAgainst / recent.length * 10) / 10 : null;
+    };
+    applyRecentStats(home, homeRecent);
+    applyRecentStats(away, awayRecent);
+    return { home, away };
+  } catch {
+    return null;
+  }
+}
+
+const INJURY_LOCALE = {
+  'Muscle bruise': 'Ушиб мышцы',
+  'Knee injury': 'Травма колена',
+  'Ankle injury': 'Травма лодыжки',
+  'Hamstring strain': 'Растяжение задней поверхности бедра',
+  'Thigh injury': 'Травма бедра',
+  'Groin injury': 'Травма паха',
+  'Calf injury': 'Травма икроножной мышцы',
+  'Foot injury': 'Травма стопы',
+  'Back injury': 'Травма спины',
+  'Shoulder injury': 'Травма плеча',
+  'Concussion': 'Сотрясение мозга',
+  'Fracture': 'Перелом',
+  'Sprain': 'Вывих/растяжение',
+  'Strain': 'Растяжение',
+  'Bruised ribs': 'Ушиб рёбер',
+  'Muscle injury': 'Травма мышцы',
+  'Leg injury': 'Травма ноги',
+  'Cruciate ligament': 'Повреждение крестообразной связки',
+  'ACL injury': 'Повреждение ACL',
+  'Suspended': 'Дисквалификация',
+  'Yellow cards': 'Жёлтые карточки',
+};
+
+async function fetchInjuries(gameId) {
+  try {
+    const url = `${SSTATS_BASE}/Games/injuries?gameId=${gameId}`;
+    const resp = await fetch(url);
+    if (!resp.ok) return [];
+    const json = await resp.json();
+    const items = json.data || [];
+    return items.map((item) => ({
+      playerName: item.player?.name || '',
+      teamId: item.teamId,
+      reason: INJURY_LOCALE[item.reason] || item.reason || '',
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function fetchGlicko(gameId) {
+  try {
+    const url = `${SSTATS_BASE}/Games/glicko/${gameId}`;
+    const resp = await fetch(url);
+    if (!resp.ok) return null;
+    const json = await resp.json();
+    const g = json.data?.glicko;
+    if (!g || (g.homeWinProbability == null && g.awayWinProbability == null)) return null;
+    return {
+      homeRating: g.homeRating,
+      awayRating: g.awayRating,
+      homeWinProbability: g.homeWinProbability,
+      awayWinProbability: g.awayWinProbability,
+      drawProbability: g.drawProbability,
+    };
+  } catch {
+    return null;
+  }
+}
+
 const MOCK_MATCHES = {
   'fallback-1': {
     id: 'fallback-1', match: 'Arsenal vs Chelsea', league: 'Premier League',
@@ -154,6 +331,21 @@ async function matchRoutes(fastify) {
         penaltyResult,
         source: 'sstats',
       };
+
+      // Fetch analytics data in parallel
+      const [h2h, form, injuries, glicko] = await Promise.all([
+        fetchH2H(match.homeTeam?.id, match.awayTeam?.id),
+        fetchForm(match.id, match.homeTeam?.id, match.awayTeam?.id, match.season?.league?.id),
+        fetchInjuries(match.id),
+        fetchGlicko(match.id),
+      ]);
+
+      if (h2h.length > 0) response.h2h = h2h;
+      if (form) response.form = form;
+      if (injuries.length > 0) response.injuries = injuries;
+      if (glicko) response.glicko = glicko;
+
+      response.hasAnalytics = !!(h2h.length > 0 || form || injuries.length > 0 || glicko);
 
       // Cache with appropriate TTL
       const ttl = isLive(match.status)

@@ -19,6 +19,14 @@ const STAT_ROWS = [
   { key: 'bigChances', label: 'Опасные моменты' },
 ];
 
+function EmptyState({ text }) {
+  return (
+    <div style={{ padding: '16px', textAlign: 'center', fontSize: '13px', color: 'var(--text-3)' }}>
+      {text}
+    </div>
+  );
+}
+
 function StatRow({ label, home, away, isBar, decimals }) {
   const hVal = home != null ? (decimals ? Number(home).toFixed(decimals) : home) : '—';
   const aVal = away != null ? (decimals ? Number(away).toFixed(decimals) : away) : '—';
@@ -83,6 +91,7 @@ export function MatchPage() {
   );
 
   const [state, setState] = useState({ loading: true, error: '', item: null, unauthorized: false });
+  const [activeTab, setActiveTab] = useState('analytics');
 
   // Auto-refresh for live matches
   useEffect(() => {
@@ -234,35 +243,168 @@ export function MatchPage() {
             </div>
           </div>
 
-          {/* Statistics */}
-          {Object.keys(stats).length > 0 && (
+          {/* Tab toggle — only when match is live/finished AND has analytics */}
+          {item.hasAnalytics && (item.isLive || item.isFinished) && (
+            <div style={{ display: 'flex', margin: '16px 16px 0', background: 'var(--surface)', borderRadius: 'var(--radius)', border: '1px solid var(--sep)', overflow: 'hidden' }}>
+              <button
+                onClick={() => setActiveTab('analytics')}
+                style={{
+                  flex: 1, padding: '10px 0', border: 'none', cursor: 'pointer',
+                  background: activeTab === 'analytics' ? 'var(--accent, #e9b949)' : 'transparent',
+                  color: activeTab === 'analytics' ? '#0c0d10' : 'var(--text-2)',
+                  fontWeight: 700, fontSize: '13px', transition: 'all 0.2s',
+                }}
+              >Аналитика</button>
+              <button
+                onClick={() => setActiveTab('stats')}
+                style={{
+                  flex: 1, padding: '10px 0', border: 'none', cursor: 'pointer',
+                  background: activeTab === 'stats' ? 'var(--accent, #e9b949)' : 'transparent',
+                  color: activeTab === 'stats' ? '#0c0d10' : 'var(--text-2)',
+                  fontWeight: 700, fontSize: '13px', transition: 'all 0.2s',
+                }}
+              >Статистика</button>
+            </div>
+          )}
+
+          {/* Analytics tab — shown when: no toggle (upcoming), or analytics tab active */}
+          {(activeTab === 'analytics' || !item.hasAnalytics || (!item.isLive && !item.isFinished)) && (
             <>
-              <div className="section-header">Статистика</div>
+              {/* Form */}
+              <div className="section-header">Форма команд</div>
               <div style={{ margin: '0 16px', background: 'var(--surface)', borderRadius: 'var(--radius)', border: '1px solid var(--sep)', padding: '12px 16px' }}>
-                {STAT_ROWS.filter((r) => stats[r.key] && (stats[r.key].home != null || stats[r.key].away != null)).map((row) => (
-                  <StatRow
-                    key={row.key}
-                    label={row.label}
-                    home={stats[row.key]?.home}
-                    away={stats[row.key]?.away}
-                    isBar={row.isBar}
-                    decimals={row.decimals}
-                  />
-                ))}
+                {item.form ? (
+                  [{ label: team1Name, isHome: true }, { label: team2Name, isHome: false }].map((team) => {
+                    const tData = team.isHome ? item.form.home : item.form.away;
+                    return (
+                      <div key={team.label} style={{ padding: '10px 0', borderBottom: team.isHome ? '1px solid var(--sep)' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text)' }}>{team.label}</span>
+                        {tData.recent && tData.recent.length > 0 && (
+                          <div style={{ display: 'flex', gap: '5px' }}>
+                            {tData.recent.map((m, i) => {
+                              const chipColor = m.result === 'W' ? 'oklch(0.72 0.09 150)' : m.result === 'D' ? 'oklch(0.78 0.10 72)' : 'oklch(0.66 0.13 25)';
+                              const chipBg = m.result === 'W' ? 'oklch(0.72 0.09 150 / 0.16)' : m.result === 'D' ? 'oklch(0.78 0.10 72 / 0.16)' : 'oklch(0.66 0.13 25 / 0.16)';
+                              const label = m.result === 'W' ? 'В' : m.result === 'D' ? 'Н' : 'П';
+                              return (
+                                <div key={i} style={{
+                                  width: '28px', height: '28px', borderRadius: '8px',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  fontSize: '12px', fontWeight: 800, color: chipColor, background: chipBg,
+                                }}>{label}</div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                ) : (
+                  <EmptyState text="Нет данных о форме команд" />
+                )}
+              </div>
+
+              {/* H2H */}
+              <div className="section-header">Личные встречи</div>
+              <div style={{ margin: '0 16px', background: 'var(--surface)', borderRadius: 'var(--radius)', border: '1px solid var(--sep)', overflow: 'hidden' }}>
+                {item.h2h && item.h2h.length > 0 ? (
+                  item.h2h.map((m) => (
+                    <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 16px', borderBottom: '1px solid var(--sep)' }}>
+                      <span style={{ fontSize: '11px', color: 'var(--text-3)', minWidth: '75px' }}>{m.date?.split('T')[0] || ''}</span>
+                      <span style={{ flex: 1, fontSize: '13px', color: 'var(--text)', textAlign: 'right' }}>{m.homeTeam}</span>
+                      <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text)', minWidth: '45px', textAlign: 'center' }}>{m.homeResult} : {m.awayResult}</span>
+                      <span style={{ flex: 1, fontSize: '13px', color: 'var(--text)' }}>{m.awayTeam}</span>
+                    </div>
+                  ))
+                ) : (
+                  <EmptyState text="Нет данных о личных встречах" />
+                )}
+              </div>
+
+              {/* Injuries */}
+              <div className="section-header">Травмы и дисквалификации</div>
+              <div style={{ margin: '0 16px', background: 'var(--surface)', borderRadius: 'var(--radius)', border: '1px solid var(--sep)', overflow: 'hidden' }}>
+                {item.injuries && item.injuries.length > 0 ? (
+                  item.injuries.map((inj, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 16px', borderBottom: i < item.injuries.length - 1 ? '1px solid var(--sep)' : 'none' }}>
+                      <span style={{ flex: 1, fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>{inj.playerName}</span>
+                      <span style={{ fontSize: '11px', color: 'var(--text-3)', maxWidth: '100px', textAlign: 'right' }}>{inj.reason}</span>
+                    </div>
+                  ))
+                ) : (
+                  <EmptyState text="Нет данных о травмированных игроках" />
+                )}
+              </div>
+
+              {/* Glicko probabilities */}
+              <div className="section-header">Вероятности модели</div>
+              <div style={{ margin: '0 16px', background: 'var(--surface)', borderRadius: 'var(--radius)', border: '1px solid var(--sep)', padding: '12px 16px' }}>
+                {item.glicko && item.glicko.homeWinProbability != null ? (
+                  <>
+                    {(() => {
+                      const hp = Math.round((item.glicko.homeWinProbability || 0) * 100);
+                      const dp = Math.round((item.glicko.drawProbability || 0) * 100);
+                      const ap = Math.round((item.glicko.awayWinProbability || 0) * 100);
+                      const total = hp + dp + ap || 1;
+                      const hasDraw = dp > 0;
+                      return (
+                        <>
+                          <div style={{ display: 'flex', gap: hasDraw ? '3px' : '0', height: '8px', borderRadius: '4px', overflow: 'hidden', marginBottom: '10px' }}>
+                            <div style={{ flex: hp / total, background: 'var(--accent, #e9b949)', borderRadius: hasDraw ? '4px 0 0 4px' : '4px 0 0 4px' }} />
+                            {hasDraw && <div style={{ flex: dp / total, background: 'var(--text-3, #666)' }} />}
+                            <div style={{ flex: ap / total, background: 'var(--text-2, #999)', borderRadius: hasDraw ? '0 4px 4px 0' : '0 4px 4px 0' }} />
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                            <span style={{ color: 'var(--accent, #e9b949)', fontWeight: 700 }}>{hp}%</span>
+                            <span style={{ color: 'var(--text-3)' }}>{dp}%</span>
+                            <span style={{ color: 'var(--text-2)', fontWeight: 700 }}>{ap}%</span>
+                          </div>
+                        </>
+                      );
+                    })()}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-3)', marginTop: '2px' }}>
+                      <span>{team1Name}</span>
+                      <span>Ничья</span>
+                      <span>{team2Name}</span>
+                    </div>
+                  </>
+                ) : (
+                  <EmptyState text="Нет данных о вероятностях" />
+                )}
               </div>
             </>
           )}
 
-          {/* Events */}
-          {events.length > 0 && (
+          {/* Stats tab */}
+          {activeTab === 'stats' && (
             <>
-              <div className="section-header">События</div>
-              <div style={{ margin: '0 16px', background: 'var(--surface)', borderRadius: 'var(--radius)', border: '1px solid var(--sep)', padding: '8px 16px' }}>
-                {[...events].sort((a, b) => (b.minute || 0) - (a.minute || 0)).map((e) => (
-                  <EventRow key={e.id} event={e} homeTeamId={item.homeTeamId}
-                    homeTeamName={team1Name} awayTeamName={team2Name} />
-                ))}
-              </div>
+              {Object.keys(stats).length > 0 && (
+                <>
+                  <div className="section-header">Статистика</div>
+                  <div style={{ margin: '0 16px', background: 'var(--surface)', borderRadius: 'var(--radius)', border: '1px solid var(--sep)', padding: '12px 16px' }}>
+                    {STAT_ROWS.filter((r) => stats[r.key] && (stats[r.key].home != null || stats[r.key].away != null)).map((row) => (
+                      <StatRow
+                        key={row.key}
+                        label={row.label}
+                        home={stats[row.key]?.home}
+                        away={stats[row.key]?.away}
+                        isBar={row.isBar}
+                        decimals={row.decimals}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+              {events.length > 0 && (
+                <>
+                  <div className="section-header">События</div>
+                  <div style={{ margin: '0 16px', background: 'var(--surface)', borderRadius: 'var(--radius)', border: '1px solid var(--sep)', padding: '8px 16px' }}>
+                    {[...events].sort((a, b) => (b.minute || 0) - (a.minute || 0)).map((e) => (
+                      <EventRow key={e.id} event={e} homeTeamId={item.homeTeamId}
+                        homeTeamName={team1Name} awayTeamName={team2Name} />
+                    ))}
+                  </div>
+                </>
+              )}
             </>
           )}
 
