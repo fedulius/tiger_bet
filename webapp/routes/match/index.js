@@ -243,7 +243,9 @@ async function fetchGlicko(gameId) {
       awayRating: g.awayRating,
       homeWinProbability: g.homeWinProbability,
       awayWinProbability: g.awayWinProbability,
-      drawProbability: g.drawProbability,
+      drawProbability: g.drawProbability ?? (g.homeWinProbability != null && g.awayWinProbability != null
+        ? Math.max(0, 1 - g.homeWinProbability - g.awayWinProbability)
+        : null),
     };
   } catch {
     return null;
