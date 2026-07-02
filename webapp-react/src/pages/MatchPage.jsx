@@ -445,18 +445,54 @@ export function MatchPage() {
               {/* Brief analytics */}
               <div className="section-header">Краткая аналитика</div>
               <div style={{ margin: '0 16px', background: 'var(--surface)', borderRadius: 'var(--radius)', border: '1px solid var(--sep)', overflow: 'hidden' }}>
-                {item.ai_brief ? (
-                  <div style={{ padding: '14px 16px' }}>
-                    {item.ai_brief.headline && (
-                      <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text)', marginBottom: '8px' }}>{item.ai_brief.headline}</div>
+                {(item.ai_brief || (item.glicko && item.glicko.homeWinProbability != null)) ? (
+                  <>
+                    {item.ai_brief && (
+                      <div style={{ padding: '14px 16px' }}>
+                        {item.ai_brief.headline && (
+                          <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text)', marginBottom: '8px' }}>{item.ai_brief.headline}</div>
+                        )}
+                        {item.ai_brief.brief && (
+                          <div style={{ fontSize: '13px', color: 'var(--text-2)', lineHeight: '1.5' }}>{item.ai_brief.brief}</div>
+                        )}
+                        {item.ai_brief.risk_note && (
+                          <div style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '8px', fontStyle: 'italic' }}>{item.ai_brief.risk_note}</div>
+                        )}
+                      </div>
                     )}
-                    {item.ai_brief.brief && (
-                      <div style={{ fontSize: '13px', color: 'var(--text-2)', lineHeight: '1.5' }}>{item.ai_brief.brief}</div>
+                    {item.glicko && item.glicko.homeWinProbability != null && (
+                      <div style={{ padding: item.ai_brief ? '0 16px 14px' : '14px 16px' }}>
+                        {item.ai_brief && <div style={{ borderTop: '1px solid var(--sep)', margin: '0 -16px 12px', paddingTop: '12px' }} />}
+                        <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-3)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Вероятности модели</div>
+                        {(() => {
+                          const hp = Math.round((item.glicko.homeWinProbability || 0) * 100);
+                          const dp = Math.round((item.glicko.drawProbability || 0) * 100);
+                          const ap = Math.round((item.glicko.awayWinProbability || 0) * 100);
+                          const total = hp + dp + ap || 1;
+                          const hasDraw = dp > 0;
+                          return (
+                            <>
+                              <div style={{ display: 'flex', gap: hasDraw ? '3px' : '0', height: '8px', borderRadius: '4px', overflow: 'hidden', marginBottom: '8px' }}>
+                                <div style={{ flex: hp / total, background: 'var(--accent, #e9b949)', borderRadius: hasDraw ? '4px 0 0 4px' : '4px' }} />
+                                {hasDraw && <div style={{ flex: dp / total, background: 'var(--text-3, #666)' }} />}
+                                <div style={{ flex: ap / total, background: 'var(--text-2, #999)', borderRadius: hasDraw ? '0 4px 4px 0' : '0 4px 4px 0' }} />
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                                <span style={{ color: 'var(--accent, #e9b949)', fontWeight: 700 }}>{hp}%</span>
+                                {hasDraw && <span style={{ color: 'var(--text-3)' }}>{dp}%</span>}
+                                <span style={{ color: 'var(--text-2)', fontWeight: 700 }}>{ap}%</span>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-3)', marginTop: '2px' }}>
+                                <span>{team1Name}</span>
+                                {hasDraw && <span>Ничья</span>}
+                                <span>{team2Name}</span>
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
                     )}
-                    {item.ai_brief.risk_note && (
-                      <div style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '8px', fontStyle: 'italic' }}>{item.ai_brief.risk_note}</div>
-                    )}
-                  </div>
+                  </>
                 ) : (
                   <div style={{ padding: '20px 16px', display: 'flex', alignItems: 'center', gap: '14px' }}>
                     <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'oklch(0.78 0.12 72 / 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -469,43 +505,6 @@ export function MatchPage() {
                       <div style={{ fontSize: '12px', color: 'var(--text-3)', lineHeight: '1.4' }}>Прогноз Tiger AI появится ближе к началу матча.</div>
                     </div>
                   </div>
-                )}
-              </div>
-
-              {/* Glicko probabilities */}
-              <div className="section-header">Вероятности модели</div>
-              <div style={{ margin: '0 16px', background: 'var(--surface)', borderRadius: 'var(--radius)', border: '1px solid var(--sep)', padding: '12px 16px' }}>
-                {item.glicko && item.glicko.homeWinProbability != null ? (
-                  <>
-                    {(() => {
-                      const hp = Math.round((item.glicko.homeWinProbability || 0) * 100);
-                      const dp = Math.round((item.glicko.drawProbability || 0) * 100);
-                      const ap = Math.round((item.glicko.awayWinProbability || 0) * 100);
-                      const total = hp + dp + ap || 1;
-                      const hasDraw = dp > 0;
-                      return (
-                        <>
-                          <div style={{ display: 'flex', gap: hasDraw ? '3px' : '0', height: '8px', borderRadius: '4px', overflow: 'hidden', marginBottom: '10px' }}>
-                            <div style={{ flex: hp / total, background: 'var(--accent, #e9b949)', borderRadius: hasDraw ? '4px 0 0 4px' : '4px 0 0 4px' }} />
-                            {hasDraw && <div style={{ flex: dp / total, background: 'var(--text-3, #666)' }} />}
-                            <div style={{ flex: ap / total, background: 'var(--text-2, #999)', borderRadius: hasDraw ? '0 4px 4px 0' : '0 4px 4px 0' }} />
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
-                            <span style={{ color: 'var(--accent, #e9b949)', fontWeight: 700 }}>{hp}%</span>
-                            <span style={{ color: 'var(--text-3)' }}>{dp}%</span>
-                            <span style={{ color: 'var(--text-2)', fontWeight: 700 }}>{ap}%</span>
-                          </div>
-                        </>
-                      );
-                    })()}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-3)', marginTop: '2px' }}>
-                      <span>{team1Name}</span>
-                      <span>Ничья</span>
-                      <span>{team2Name}</span>
-                    </div>
-                  </>
-                ) : (
-                  <EmptyState text="Нет данных о вероятностях" />
                 )}
               </div>
             </>
