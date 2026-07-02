@@ -50,52 +50,58 @@ function StatRow({ label, home, away, isBar, decimals }) {
   );
 }
 
-function EventRow({ event, homeTeamId, homeTeamName, awayTeamName }) {
+function EventRow({ event, homeTeamId, homeTeamCode, awayTeamCode, score }) {
   const isHome = event.teamId === homeTeamId;
+  const teamCode = isHome ? homeTeamCode : awayTeamCode;
   let icon = '⚽';
-  let iconBg = 'oklch(0.72 0.09 150 / 0.15)';
+  let iconBg = 'oklch(0.72 0.09 150 / 0.18)';
   let typeLabel = 'Гол';
+  let desc = '';
 
   if (event.type === 1) {
     if (event.name === 'Missed Penalty') { icon = '❌'; iconBg = 'oklch(0.66 0.13 25 / 0.15)'; typeLabel = 'Нереализ. пенальти'; }
-    else { typeLabel = event.name === 'Penalty' ? 'Гол (пен.)' : 'Гол'; }
+    else if (event.name === 'Penalty') { typeLabel = 'Гол'; desc = 'Пенальти'; }
+    else { typeLabel = 'Гол'; }
   } else if (event.type === 2) {
-    if (event.name?.includes('Red')) { icon = '🟥'; iconBg = 'oklch(0.66 0.13 25 / 0.15)'; typeLabel = 'Красная карточка'; }
-    else { icon = '🟨'; iconBg = 'oklch(0.78 0.12 72 / 0.15)'; typeLabel = 'Жёлтая карточка'; }
+    if (event.name?.includes('Red')) { icon = '🟥'; iconBg = 'oklch(0.66 0.13 25 / 0.18)'; typeLabel = 'Красная карточка'; }
+    else { icon = '🟨'; iconBg = 'oklch(0.78 0.12 72 / 0.18)'; typeLabel = 'Жёлтая карточка'; }
   } else if (event.type === 3) {
-    icon = '🔄'; iconBg = 'oklch(0.65 0.02 250 / 0.12)'; typeLabel = 'Замена';
+    icon = '🔄'; iconBg = 'oklch(0.65 0.02 250 / 0.14)'; typeLabel = 'Замена';
+    // Extract player names from name like "Substitution 1"
+    if (event.player) desc = event.player;
+  } else if (event.type === 4) {
+    icon = '❌'; iconBg = 'oklch(0.66 0.13 25 / 0.15)'; typeLabel = 'Пенальти отменён';
   }
 
   const minute = event.minute != null ? `${event.minute}'` : '';
   const playerName = event.player || '';
+  const showScore = event.type === 1 && score;
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 40px 1fr', alignItems: 'center', gap: '0', padding: '8px 0' }}>
-      {/* Left side — home team */}
-      <div style={{ textAlign: 'right', paddingRight: '10px' }}>
-        {isHome ? (
-          <>
-            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text)' }}>{typeLabel}</div>
-            {playerName && <div style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '2px' }}>{playerName}</div>}
-          </>
-        ) : null}
+    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 0', position: 'relative' }}>
+      {/* Minute */}
+      <div style={{ minWidth: '32px', fontSize: '13px', fontWeight: 600, color: 'var(--text-3)', textAlign: 'right' }}>{minute}</div>
+      {/* Team badge */}
+      <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: 'var(--sep)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '8px', fontWeight: 800, color: 'var(--text-3)', flexShrink: 0, overflow: 'hidden' }}>
+        {teamCode && teamCode !== 'WW' ? (
+          <img src={`/country-flags/${teamCode}.svg`} alt={teamCode} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        ) : (teamCode || '???').slice(0, 3).toUpperCase()}
       </div>
-      {/* Center — icon + minute */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-        <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px' }}>
-          {icon}
+      {/* Event icon */}
+      <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', flexShrink: 0 }}>
+        {icon}
+      </div>
+      {/* Event text */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {typeLabel}{playerName ? ` — ${playerName}` : ''}
         </div>
-        <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-3)' }}>{minute}</div>
+        {desc && <div style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: '1px' }}>{desc}</div>}
       </div>
-      {/* Right side — away team */}
-      <div style={{ textAlign: 'left', paddingLeft: '10px' }}>
-        {!isHome ? (
-          <>
-            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text)' }}>{typeLabel}</div>
-            {playerName && <div style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '2px' }}>{playerName}</div>}
-          </>
-        ) : null}
-      </div>
+      {/* Score */}
+      {showScore && (
+        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap' }}>{score}</div>
+      )}
     </div>
   );
 }
@@ -568,10 +574,23 @@ export function MatchPage() {
                 <>
                   <div className="section-header">Хронология матча</div>
                   <div style={{ margin: '0 16px', background: 'var(--surface)', borderRadius: 'var(--radius)', border: '1px solid var(--sep)', padding: '8px 16px', maxHeight: '320px', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                    {[...events].sort((a, b) => (a.minute || 0) - (b.minute || 0)).map((e) => (
-                      <EventRow key={e.id} event={e} homeTeamId={item.homeTeamId}
-                        homeTeamName={team1Name} awayTeamName={team2Name} />
-                    ))}
+                    {(() => {
+                      const sorted = [...events].sort((a, b) => (a.minute || 0) - (b.minute || 0));
+                      let homeGoals = 0, awayGoals = 0;
+                      const scoreMap = new Map();
+                      for (const e of sorted) {
+                        if (e.type === 1 && e.name !== 'Missed Penalty') {
+                          if (e.teamId === item.homeTeamId) homeGoals++;
+                          else awayGoals++;
+                          scoreMap.set(e.id, `${homeGoals}:${awayGoals}`);
+                        }
+                      }
+                      return sorted.map((e) => (
+                        <EventRow key={e.id} event={e} homeTeamId={item.homeTeamId}
+                          homeTeamCode={team1Code} awayTeamCode={team2Code}
+                          score={scoreMap.get(e.id)} />
+                      ));
+                    })()}
                   </div>
                 </>
               )}
