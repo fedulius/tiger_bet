@@ -55,7 +55,7 @@ async function fetchH2H(homeTeamId, awayTeamId) {
   if (!homeTeamId || !awayTeamId) return [];
   try {
     // bothTeams searches across ALL leagues (cross-competition H2H)
-    const from = '2020-01-01T00:00:00+03:00';
+    const from = '2010-01-01T00:00:00+03:00';
     const to = new Date().toISOString().slice(0, 10) + 'T23:59:59+03:00';
     const url = `${SSTATS_BASE}/Games/list?ended=true&bothTeams=${homeTeamId},${awayTeamId}&from=${from}&to=${to}&limit=1000&TimeZone=3`;
     const resp = await fetch(url);
