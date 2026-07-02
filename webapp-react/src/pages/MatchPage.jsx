@@ -306,16 +306,54 @@ export function MatchPage() {
               {/* H2H */}
               <div className="section-header">Личные встречи</div>
               <div style={{ margin: '0 16px', background: 'var(--surface)', borderRadius: 'var(--radius)', border: '1px solid var(--sep)', overflow: 'hidden' }}>
-                {item.h2h && item.h2h.length > 0 ? (
-                  item.h2h.map((m) => (
-                    <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 16px', borderBottom: '1px solid var(--sep)' }}>
-                      <span style={{ fontSize: '11px', color: 'var(--text-3)', minWidth: '75px' }}>{m.date?.split('T')[0] || ''}</span>
-                      <span style={{ flex: 1, fontSize: '13px', color: 'var(--text)', textAlign: 'right' }}>{m.homeTeam}</span>
-                      <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text)', minWidth: '45px', textAlign: 'center' }}>{m.homeResult} : {m.awayResult}</span>
-                      <span style={{ flex: 1, fontSize: '13px', color: 'var(--text)' }}>{m.awayTeam}</span>
-                    </div>
-                  ))
-                ) : (
+                {item.h2h && item.h2h.length > 0 ? (() => {
+                  // Compute summary
+                  let homeWins = 0, draws = 0, awayWins = 0;
+                  for (const m of item.h2h) {
+                    const h = Number(m.homeResult);
+                    const a = Number(m.awayResult);
+                    if (h > a) homeWins++;
+                    else if (h < a) awayWins++;
+                    else draws++;
+                  }
+                  const total = item.h2h.length;
+                  return (
+                    <>
+                      {/* Summary bar */}
+                      <div style={{ display: 'flex', textAlign: 'center', borderBottom: '1px solid var(--sep)' }}>
+                        <div style={{ flex: homeWins, padding: '14px 8px 10px', background: 'oklch(0.72 0.09 150 / 0.12)' }}>
+                          <div style={{ fontSize: '22px', fontWeight: 800, color: 'oklch(0.72 0.09 150)' }}>{homeWins}</div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: '2px' }}>{team1Name}</div>
+                        </div>
+                        <div style={{ flex: draws, padding: '14px 8px 10px', background: 'var(--sep)' }}>
+                          <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-3)' }}>{draws}</div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: '2px' }}>Ничьи</div>
+                        </div>
+                        <div style={{ flex: awayWins, padding: '14px 8px 10px', background: 'oklch(0.66 0.13 25 / 0.12)' }}>
+                          <div style={{ fontSize: '22px', fontWeight: 800, color: 'oklch(0.66 0.13 25)' }}>{awayWins}</div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: '2px' }}>{team2Name}</div>
+                        </div>
+                      </div>
+                      {/* Progress bar */}
+                      {total > 0 && (
+                        <div style={{ display: 'flex', height: '5px' }}>
+                          <div style={{ flex: homeWins, background: 'oklch(0.72 0.09 150)' }} />
+                          <div style={{ flex: draws, background: 'var(--text-3)' }} />
+                          <div style={{ flex: awayWins, background: 'oklch(0.66 0.13 25)' }} />
+                        </div>
+                      )}
+                      {/* Match list */}
+                      {item.h2h.map((m) => (
+                        <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 16px', borderBottom: '1px solid var(--sep)' }}>
+                          <span style={{ fontSize: '11px', color: 'var(--text-3)', minWidth: '75px' }}>{m.date?.split('T')[0] || ''}</span>
+                          <span style={{ flex: 1, fontSize: '13px', color: 'var(--text)', textAlign: 'right' }}>{m.homeTeam}</span>
+                          <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text)', minWidth: '45px', textAlign: 'center' }}>{m.homeResult} : {m.awayResult}</span>
+                          <span style={{ flex: 1, fontSize: '13px', color: 'var(--text)' }}>{m.awayTeam}</span>
+                        </div>
+                      ))}
+                    </>
+                  );
+                })() : (
                   <EmptyState text="Нет данных о личных встречах" />
                 )}
               </div>
