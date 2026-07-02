@@ -245,23 +245,37 @@ export function MatchPage() {
 
           {/* Tab toggle — only when match is live/finished AND has analytics */}
           {item.hasAnalytics && (item.isLive || item.isFinished) && (
-            <div style={{ display: 'flex', margin: '16px 16px 0', background: 'var(--surface)', borderRadius: 'var(--radius)', border: '1px solid var(--sep)', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', margin: '16px 16px 0', background: 'var(--surface)', borderRadius: 'var(--radius)', border: '1px solid var(--sep)', overflow: 'hidden', position: 'relative' }}>
+              {/* Sliding indicator */}
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                bottom: 0,
+                width: '50%',
+                background: 'var(--accent, #e9b949)',
+                borderRadius: 'var(--radius)',
+                transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                transform: activeTab === 'stats' ? 'translateX(100%)' : 'translateX(0)',
+                zIndex: 0,
+              }} />
               <button
                 onClick={() => setActiveTab('analytics')}
                 style={{
                   flex: 1, padding: '10px 0', border: 'none', cursor: 'pointer',
-                  background: activeTab === 'analytics' ? 'var(--accent, #e9b949)' : 'transparent',
+                  background: 'transparent',
                   color: activeTab === 'analytics' ? '#0c0d10' : 'var(--text-2)',
-                  fontWeight: 700, fontSize: '13px', transition: 'all 0.2s',
+                  fontWeight: 700, fontSize: '13px', transition: 'color 0.2s',
+                  position: 'relative', zIndex: 1,
                 }}
               >Аналитика</button>
               <button
                 onClick={() => setActiveTab('stats')}
                 style={{
                   flex: 1, padding: '10px 0', border: 'none', cursor: 'pointer',
-                  background: activeTab === 'stats' ? 'var(--accent, #e9b949)' : 'transparent',
+                  background: 'transparent',
                   color: activeTab === 'stats' ? '#0c0d10' : 'var(--text-2)',
-                  fontWeight: 700, fontSize: '13px', transition: 'all 0.2s',
+                  fontWeight: 700, fontSize: '13px', transition: 'color 0.2s',
+                  position: 'relative', zIndex: 1,
                 }}
               >Статистика</button>
             </div>
