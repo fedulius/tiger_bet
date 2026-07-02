@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { HomePage } from './pages/HomePage.jsx';
 import { RecommendationsPage } from './pages/RecommendationsPage.jsx';
@@ -7,10 +7,13 @@ import { LeaguesPage } from './pages/LeaguesPage.jsx';
 import { ProfilePage } from './pages/ProfilePage.jsx';
 import { MatchPage } from './pages/MatchPage.jsx';
 import { WebAppTabs } from './components/WebAppTabs.jsx';
+import { initTelegramWebApp } from './lib/telegram.js';
 
 export default function App() {
   const location = useLocation();
   const isMatchPage = location.pathname.startsWith('/match');
+
+  useEffect(() => { initTelegramWebApp(); }, []);
 
   return (
     <div className="app-shell">

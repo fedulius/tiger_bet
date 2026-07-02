@@ -48,4 +48,12 @@ export function withTelegramInitDataHeaders(headers = {}, globalRef = globalThis
   };
 }
 
+export function initTelegramWebApp(globalRef = globalThis) {
+  const tg = globalRef?.Telegram?.WebApp || globalRef?.window?.Telegram?.WebApp;
+  if (tg) {
+    try { tg.expand(); } catch {}
+    try { tg.ready(); } catch {}
+  }
+}
+
 export { TG_INIT_DATA_HEADER };
