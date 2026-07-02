@@ -54,42 +54,47 @@ function EventRow({ event, homeTeamId, homeTeamName, awayTeamName }) {
   const isHome = event.teamId === homeTeamId;
   let icon = '⚽';
   let iconBg = 'oklch(0.72 0.09 150 / 0.15)';
-  let iconColor = 'oklch(0.72 0.09 150)';
   let typeLabel = 'Гол';
-  let detail = '';
 
   if (event.type === 1) {
-    if (event.name === 'Penalty') { typeLabel = 'Гол'; detail = '(с пенальти)'; }
-    else if (event.name === 'Missed Penalty') { icon = '❌'; iconBg = 'oklch(0.66 0.13 25 / 0.15)'; iconColor = 'oklch(0.66 0.13 25)'; typeLabel = 'Нереализ. пенальти'; }
-    else { typeLabel = 'Гол'; }
+    if (event.name === 'Missed Penalty') { icon = '❌'; iconBg = 'oklch(0.66 0.13 25 / 0.15)'; typeLabel = 'Нереализ. пенальти'; }
+    else { typeLabel = event.name === 'Penalty' ? 'Гол (пен.)' : 'Гол'; }
   } else if (event.type === 2) {
-    if (event.name?.includes('Red')) { icon = '🟥'; iconBg = 'oklch(0.66 0.13 25 / 0.15)'; iconColor = 'oklch(0.66 0.13 25)'; typeLabel = 'Красная карточка'; }
-    else { icon = '🟨'; iconBg = 'oklch(0.78 0.12 72 / 0.15)'; iconColor = 'oklch(0.65 0.12 72)'; typeLabel = 'Жёлтая карточка'; }
+    if (event.name?.includes('Red')) { icon = '🟥'; iconBg = 'oklch(0.66 0.13 25 / 0.15)'; typeLabel = 'Красная карточка'; }
+    else { icon = '🟨'; iconBg = 'oklch(0.78 0.12 72 / 0.15)'; typeLabel = 'Жёлтая карточка'; }
   } else if (event.type === 3) {
-    icon = '🔄'; iconBg = 'oklch(0.65 0.02 250 / 0.12)'; iconColor = 'oklch(0.65 0.02 250)'; typeLabel = 'Замена';
+    icon = '🔄'; iconBg = 'oklch(0.65 0.02 250 / 0.12)'; typeLabel = 'Замена';
   }
 
   const minute = event.minute != null ? `${event.minute}'` : '';
-  const teamName = isHome ? homeTeamName : awayTeamName;
   const playerName = event.player || '';
-  const desc = event.name && event.type !== 1 && event.type !== 2 && event.type !== 3 ? event.name : '';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: isHome ? 'flex-start' : 'flex-end', padding: '6px 0' }}>
-      {/* Type label */}
-      <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text)', marginBottom: '4px', textAlign: isHome ? 'left' : 'right', width: '100%' }}>{typeLabel}</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%', flexDirection: isHome ? 'row' : 'row-reverse' }}>
-        {/* Text side */}
-        <div style={{ flex: 1, textAlign: isHome ? 'left' : 'right' }}>
-          {playerName && <div style={{ fontSize: '13px', color: 'var(--text-2)' }}>{playerName}{detail ? ` ${detail}` : ''}</div>}
-          {desc && <div style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: '1px' }}>{desc}</div>}
-        </div>
-        {/* Icon circle */}
-        <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', flexShrink: 0 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 40px 1fr', alignItems: 'center', gap: '0', padding: '8px 0' }}>
+      {/* Left side — home team */}
+      <div style={{ textAlign: 'right', paddingRight: '10px' }}>
+        {isHome ? (
+          <>
+            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text)' }}>{typeLabel}</div>
+            {playerName && <div style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '2px' }}>{playerName}</div>}
+          </>
+        ) : null}
+      </div>
+      {/* Center — icon + minute */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+        <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px' }}>
           {icon}
         </div>
-        {/* Minute */}
-        <div style={{ minWidth: '30px', fontSize: '12px', fontWeight: 600, color: 'var(--text-3)', textAlign: isHome ? 'left' : 'right' }}>{minute}</div>
+        <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-3)' }}>{minute}</div>
+      </div>
+      {/* Right side — away team */}
+      <div style={{ textAlign: 'left', paddingLeft: '10px' }}>
+        {!isHome ? (
+          <>
+            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text)' }}>{typeLabel}</div>
+            {playerName && <div style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '2px' }}>{playerName}</div>}
+          </>
+        ) : null}
       </div>
     </div>
   );
