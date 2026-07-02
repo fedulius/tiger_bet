@@ -318,6 +318,7 @@ async function matchRoutes(fastify) {
         team1_name_ru: resolveTeamName(homeName),
         team2_name_ru: resolveTeamName(awayName),
         homeTeamId: match.homeTeam?.id,
+        awayTeamId: match.awayTeam?.id,
         status: match.status,
         statusName: match.statusName,
         round: resolveRound(match.roundName),

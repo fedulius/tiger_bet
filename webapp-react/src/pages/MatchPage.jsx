@@ -361,14 +361,63 @@ export function MatchPage() {
               {/* Injuries */}
               <div className="section-header">Травмы и дисквалификации</div>
               <div style={{ margin: '0 16px', background: 'var(--surface)', borderRadius: 'var(--radius)', border: '1px solid var(--sep)', overflow: 'hidden' }}>
-                {item.injuries && item.injuries.length > 0 ? (
-                  item.injuries.map((inj, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 16px', borderBottom: i < item.injuries.length - 1 ? '1px solid var(--sep)' : 'none' }}>
-                      <span style={{ flex: 1, fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>{inj.playerName}</span>
-                      <span style={{ fontSize: '11px', color: 'var(--text-3)', maxWidth: '100px', textAlign: 'right' }}>{inj.reason}</span>
-                    </div>
-                  ))
-                ) : (
+                {item.injuries && item.injuries.length > 0 ? (() => {
+                  // Group by team
+                  const teams = new Map();
+                  for (const inj of item.injuries) {
+                    const tid = inj.teamId;
+                    if (!teams.has(tid)) teams.set(tid, []);
+                    teams.get(tid).push(inj);
+                  }
+                  // Render order: home team first, then away
+                  const teamOrder = [item.homeTeamId, item.awayTeamId].filter(Boolean);
+                  const allTeamIds = [...teamOrder, ...[...teams.keys()].filter((id) => !teamOrder.includes(id))];
+                  const teamNames = { [item.homeTeamId]: team1Name, [item.awayTeamId]: team2Name };
+                  const teamCodes = { [item.homeTeamId]: item.team1_code, [item.awayTeamId]: item.team2_code };
+
+                  function injuryBadge(reason) {
+                    const r = (reason || '').toLowerCase();
+                    if (r.includes('дисквалиф') || r.includes('suspended') || r.includes('yellow card') || r.includes('жёлт'))
+                      return { label: 'Дисквал.', bg: 'oklch(0.75 0.02 250 / 0.15)', color: 'oklch(0.65 0.02 250)' };
+                    if (r.includes('под вопрос') || r.includes('doubt') || r.includes('question')
+                      || r.includes('not certain') || r.includes('possible'))
+                      return { label: 'Под вопросом', bg: 'oklch(0.78 0.12 72 / 0.15)', color: 'oklch(0.65 0.12 72)' };
+                    return { label: 'Травма', bg: 'oklch(0.66 0.13 25 / 0.15)', color: 'oklch(0.66 0.13 25)' };
+                  }
+
+                  return (
+                    <>
+                      {allTeamIds.filter((tid) => teams.has(tid)).map((tid, gi) => {
+                        const players = teams.get(tid);
+                        const name = teamNames[tid] || `Команда ${tid}`;
+                        const code = teamCodes[tid] || '';
+                        return (
+                          <div key={tid}>
+                            {/* Team header */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px 8px', background: 'var(--sep)', borderBottom: '1px solid var(--sep)' }}>
+                              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 800, color: 'var(--text-3)', border: '1px solid var(--sep)', overflow: 'hidden' }}>
+                                {code && code !== 'WW' ? (
+                                  <img src={`/country-flags/${code}.svg`} alt={code} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                ) : name.slice(0, 3).toUpperCase()}
+                              </div>
+                              <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text)' }}>{name}</span>
+                            </div>
+                            {/* Players */}
+                            {players.map((inj, i) => {
+                              const badge = injuryBadge(inj.reason);
+                              return (
+                                <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: i < players.length - 1 ? '1px solid var(--sep)' : (gi < allTeamIds.filter((tid2) => teams.has(tid2)).length - 1 ? '1px solid var(--sep)' : 'none') }}>
+                                  <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text)' }}>{inj.playerName}</span>
+                                  <span style={{ fontSize: '11px', fontWeight: 600, color: badge.color, background: badge.bg, padding: '3px 8px', borderRadius: '6px', whiteSpace: 'nowrap' }}>{badge.label}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+                    </>
+                  );
+                })() : (
                   <EmptyState text="Нет данных о травмированных игроках" />
                 )}
               </div>
