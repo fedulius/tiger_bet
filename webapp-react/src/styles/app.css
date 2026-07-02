@@ -979,3 +979,11 @@ a {
 .h2h-num { font-size: 22px; font-weight: 800; color: var(--text); }
 .h2h-num-muted { font-size: 22px; font-weight: 800; color: var(--text-2); }
 .h2h-label { font-size: 11.5px; color: var(--text-2); margin-top: 4px; }
+
+@keyframes tabFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.tab-content-enter {
+  animation: tabFadeIn 0.25s ease-out;
+}

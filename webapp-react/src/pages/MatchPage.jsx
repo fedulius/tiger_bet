@@ -269,7 +269,7 @@ export function MatchPage() {
 
           {/* Analytics tab — shown when: no toggle (upcoming), or analytics tab active */}
           {(activeTab === 'analytics' || !item.hasAnalytics || (!item.isLive && !item.isFinished)) && (
-            <>
+            <div className="tab-content-enter" key={`analytics-${activeTab}`}>
               {/* Form */}
               <div className="section-header">Форма команд</div>
               <div style={{ margin: '0 16px', background: 'var(--surface)', borderRadius: 'var(--radius)', border: '1px solid var(--sep)', padding: '12px 16px' }}>
@@ -507,12 +507,12 @@ export function MatchPage() {
                   </div>
                 )}
               </div>
-            </>
+            </div>
           )}
 
           {/* Stats tab */}
           {activeTab === 'stats' && (
-            <>
+            <div className="tab-content-enter" key={`stats-${activeTab}`}>
               {Object.keys(stats).length > 0 && (
                 <>
                   <div className="section-header">Статистика</div>
@@ -541,7 +541,7 @@ export function MatchPage() {
                   </div>
                 </>
               )}
-            </>
+            </div>
           )}
 
           <div style={{ height: 20 }} />
