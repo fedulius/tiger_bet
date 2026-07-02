@@ -354,7 +354,17 @@ export function MatchPage() {
                     </>
                   );
                 })() : (
-                  <EmptyState text="Нет данных о личных встречах" />
+                  <div style={{ padding: '20px 16px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'oklch(0.65 0.02 250 / 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="oklch(0.65 0.02 250)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text)', marginBottom: '4px' }}>Встреч пока не было</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-3)', lineHeight: '1.4' }}>Команды ещё не играли друг с другом — истории личных встреч нет.</div>
+                    </div>
+                  </div>
                 )}
               </div>
 
@@ -427,6 +437,36 @@ export function MatchPage() {
                     <div>
                       <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text)', marginBottom: '4px' }}>Потерь нет</div>
                       <div style={{ fontSize: '12px', color: 'var(--text-3)', lineHeight: '1.4' }}>Обе команды в оптимальных составах — травмированных и дисквалифицированных нет.</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Brief analytics */}
+              <div className="section-header">Краткая аналитика</div>
+              <div style={{ margin: '0 16px', background: 'var(--surface)', borderRadius: 'var(--radius)', border: '1px solid var(--sep)', overflow: 'hidden' }}>
+                {item.ai_brief ? (
+                  <div style={{ padding: '14px 16px' }}>
+                    {item.ai_brief.headline && (
+                      <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text)', marginBottom: '8px' }}>{item.ai_brief.headline}</div>
+                    )}
+                    {item.ai_brief.brief && (
+                      <div style={{ fontSize: '13px', color: 'var(--text-2)', lineHeight: '1.5' }}>{item.ai_brief.brief}</div>
+                    )}
+                    {item.ai_brief.risk_note && (
+                      <div style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '8px', fontStyle: 'italic' }}>{item.ai_brief.risk_note}</div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ padding: '20px 16px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'oklch(0.78 0.12 72 / 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="oklch(0.78 0.12 72)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text)', marginBottom: '4px' }}>Аналитика готовится</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-3)', lineHeight: '1.4' }}>Прогноз Tiger AI появится ближе к началу матча.</div>
                     </div>
                   </div>
                 )}
