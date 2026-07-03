@@ -1,5 +1,44 @@
 'use strict';
 
+function normalizeName(value = '') {
+  return String(value || '').trim().toLowerCase();
+}
+
+function buildFavoriteLeagueMap(favoriteSports = []) {
+  const entries = new Map();
+
+  for (const sport of Array.isArray(favoriteSports) ? favoriteSports : []) {
+    const sportName = normalizeName(sport?.sport_name || sport?.name || sport?.sport);
+    if (!sportName) continue;
+
+    entries.set(
+      sportName,
+      new Set(
+        (Array.isArray(sport?.leagues) ? sport.leagues : [])
+          .map(normalizeName)
+          .filter(Boolean),
+      ),
+    );
+  }
+
+  return entries;
+}
+
+function filterRowsByFavoriteLeagues(rows = [], favoriteSports = []) {
+  const leagueMap = buildFavoriteLeagueMap(favoriteSports);
+  if (leagueMap.size === 0) return [];
+
+  return rows.filter((row) => {
+    const sportName = normalizeName(row?.sport_name);
+    const selectedLeagues = leagueMap.get(sportName);
+    if (!selectedLeagues) return false;
+    if (selectedLeagues.size === 0) return true;
+
+    const leagueName = normalizeName(row?.tournament_name_en || row?.tournament_name);
+    return selectedLeagues.has(leagueName);
+  });
+}
+
 function getMoscowDate(daysOffset = 0, now = new Date()) {
   const mskStr = now.toLocaleString('en-CA', {
     timeZone: 'Europe/Moscow',
@@ -50,7 +89,7 @@ function buildSlotMap(rows = []) {
   return slots;
 }
 
-async function getDailyPicksByDateRange(pg, { startDate, endDate }) {
+async function getDailyPicksByDateRange(pg, { startDate, endDate, favoriteSports = [] }) {
   const rows = await pg.connection(
     `WITH ranked AS (
       SELECT
@@ -96,13 +135,13 @@ async function getDailyPicksByDateRange(pg, { startDate, endDate }) {
     [startDate, endDate],
   );
 
-  return buildSlotMap(rows);
+  return buildSlotMap(filterRowsByFavoriteLeagues(rows, favoriteSports));
 }
 
-async function getDailyPicksFeed(pg, { now = new Date() } = {}) {
+async function getDailyPicksFeed(pg, { now = new Date(), favoriteSports = [] } = {}) {
   const todayDate = getMoscowDate(0, now);
   const tomorrowDate = getMoscowDate(1, now);
-  const slots = await getDailyPicksByDateRange(pg, { startDate: todayDate, endDate: tomorrowDate });
+  const slots = await getDailyPicksByDateRange(pg, { startDate: todayDate, endDate: tomorrowDate, favoriteSports });
 
   return {
     today_date: todayDate,
@@ -114,6 +153,8 @@ async function getDailyPicksFeed(pg, { now = new Date() } = {}) {
 }
 
 module.exports = {
+  buildFavoriteLeagueMap,
+  filterRowsByFavoriteLeagues,
   getMoscowDate,
   buildSlotMap,
   getDailyPicksByDateRange,

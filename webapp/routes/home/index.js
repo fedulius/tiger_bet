@@ -1,6 +1,7 @@
 const SSTATS_BASE = 'https://api.sstats.net';
 const { resolveLeague, resolveRound, resolveTeamName, resolveTeamCode } = require('../../services/locale');
 const { getDailyPicksFeed } = require('../../services/dailyPickReadService');
+const { getFavoritesByProfile } = require('../../services/favoritesStore');
 
 // ── Cache ──────────────────────────────────────────────────
 // In-memory cache, shared across ALL users.
@@ -140,9 +141,40 @@ async function fetchDay(dayType, leagueIds, dateStr, ended) {
   return grouped;
 }
 
+async function loadFavoriteSports(fastify, userId, profile) {
+  const rows = await fastify.pg.connection(`
+    SELECT s.sport_id, s.sport_name, s.sport_url
+    FROM public.user_sport fs
+    JOIN public.sport s ON s.sport_id = fs.sport_id
+    WHERE fs.user_id = $1
+    ORDER BY fs.sport_id
+  `, [userId]);
+
+  const stored = getFavoritesByProfile(profile);
+  const settingsMap = new Map((stored.sport_settings || []).map((item) => [String(item.name || '').trim(), item]));
+
+  return rows.map((row) => {
+    const sportName = String(row.sport_name || row.sport_url || '').trim();
+    const existing = settingsMap.get(sportName);
+
+    return {
+      ...row,
+      leagues: Array.isArray(existing?.leagues) ? existing.leagues : [],
+    };
+  });
+}
+
 // ── Route ──────────────────────────────────────────────────
 async function homeRoutes(fastify) {
-  fastify.get('/daily-picks', async () => getDailyPicksFeed(fastify.pg));
+  fastify.get('/daily-picks', async (request) => {
+    const userId = Number(request.user?.userId);
+    const profile = String(request.user?.profile || '');
+    const favoriteSports = Number.isFinite(userId)
+      ? await loadFavoriteSports(fastify, userId, profile)
+      : [];
+
+    return getDailyPicksFeed(fastify.pg, { favoriteSports });
+  });
 
   fastify.get('/', async (request) => {
     const userId = Number(request.user?.userId);

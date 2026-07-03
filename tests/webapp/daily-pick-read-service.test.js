@@ -2,11 +2,42 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
+  buildFavoriteLeagueMap,
+  filterRowsByFavoriteLeagues,
   getMoscowDate,
   buildSlotMap,
   getDailyPicksFeed,
 } = require('../../webapp/services/dailyPickReadService');
 const { createFakePg } = require('./testHelpers');
+
+test('buildFavoriteLeagueMap: empty leagues mean all leagues for that sport', () => {
+  const map = buildFavoriteLeagueMap([
+    { sport_name: 'Футбол', leagues: ['Premier League'] },
+    { sport_name: 'Теннис', leagues: [] },
+  ]);
+
+  assert.deepEqual([...map.get('футбол')], ['premier league']);
+  assert.equal(map.get('теннис').size, 0);
+});
+
+test('filterRowsByFavoriteLeagues: keeps only rows from selected leagues and selected sports', () => {
+  const rows = [
+    { sport_name: 'Футбол', tournament_name_en: 'Premier League' },
+    { sport_name: 'Футбол', tournament_name_en: 'Ykkosliiga' },
+    { sport_name: 'Теннис', tournament_name_en: 'ATP' },
+    { sport_name: 'Хоккей', tournament_name_en: 'NHL' },
+  ];
+
+  const filtered = filterRowsByFavoriteLeagues(rows, [
+    { sport_name: 'Футбол', leagues: ['Premier League'] },
+    { sport_name: 'Теннис', leagues: [] },
+  ]);
+
+  assert.deepEqual(filtered, [
+    { sport_name: 'Футбол', tournament_name_en: 'Premier League' },
+    { sport_name: 'Теннис', tournament_name_en: 'ATP' },
+  ]);
+});
 
 test('buildSlotMap: formats today/tomorrow cards and keeps first row per slot_date', () => {
   const rows = [
@@ -134,7 +165,10 @@ test('getDailyPicksFeed: returns today/tomorrow slots and latest updated_at', as
     ],
   });
 
-  const feed = await getDailyPicksFeed(pg, { now: new Date('2026-07-03T12:00:00.000Z') });
+  const feed = await getDailyPicksFeed(pg, {
+    now: new Date('2026-07-03T12:00:00.000Z'),
+    favoriteSports: [{ sport_name: 'Футбол', leagues: [] }],
+  });
 
   assert.equal(feed.today_date, '2026-07-03');
   assert.equal(feed.tomorrow_date, '2026-07-04');
