@@ -109,6 +109,31 @@ test('normalizeCandidate: team names fallback to flat home_team/away_team fields
   assert.equal(c.away_team, 'Club Y');
 });
 
+test('normalizeCandidate: supports live stavka shape with matchDate, teams.home/away, and odds.value objects', () => {
+  const c = normalizeCandidate({
+    id: 'ts_live_1',
+    slug: '03-07-2026-ktp-jippo',
+    matchDate: '2026-07-03T15:30:00+00:00',
+    sportSlug: 'soccer',
+    league: { id: '55', slug: 'finland-ykkonen', name: 'Йккослиига' },
+    teams: {
+      home: { name: 'КТП' },
+      away: { name: 'Йиппо' },
+    },
+    odds: {
+      one_x_two: {
+        w1: { value: 1.83 },
+        x: { value: 3.44 },
+        w2: { value: 3.98 },
+      },
+    },
+  });
+  assert.equal(c.starts_at, '2026-07-03T15:30:00.000Z');
+  assert.equal(c.home_team, 'КТП');
+  assert.equal(c.away_team, 'Йиппо');
+  assert.deepEqual(c.odds, { home: 1.83, draw: 3.44, away: 3.98 });
+});
+
 test('normalizeCandidate: league_id, league_slug, league_label from league object', () => {
   const c = normalizeCandidate(makeRawMatch());
   assert.equal(c.league_id, 5);

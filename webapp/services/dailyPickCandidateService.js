@@ -27,6 +27,14 @@ function extractLeague(match) {
   };
 }
 
+function readOddValue(value) {
+  if (value == null) return null;
+  if (typeof value === 'number') return Number(value);
+  if (typeof value === 'object' && value.value != null) return Number(value.value);
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
 function extractOdds(match) {
   const raw = match.odds;
   if (!raw) return { home: null, draw: null, away: null };
@@ -34,16 +42,16 @@ function extractOdds(match) {
   if (raw.one_x_two) {
     const o = raw.one_x_two;
     return {
-      home: o.w1 != null ? Number(o.w1) : null,
-      draw: o.x  != null ? Number(o.x)  : null,
-      away: o.w2 != null ? Number(o.w2) : null,
+      home: readOddValue(o.w1),
+      draw: readOddValue(o.x),
+      away: readOddValue(o.w2),
     };
   }
   // Fallback: already-normalized shape (home/draw/away)
   return {
-    home: raw.home != null ? Number(raw.home) : null,
-    draw: raw.draw != null ? Number(raw.draw) : null,
-    away: raw.away != null ? Number(raw.away) : null,
+    home: readOddValue(raw.home),
+    draw: readOddValue(raw.draw),
+    away: readOddValue(raw.away),
   };
 }
 
@@ -59,14 +67,20 @@ function normalizeCandidate(match) {
   const rawId = match.id ?? match.match_id;
   const id = String(rawId);
 
-  const startsAtRaw = match.starts_at || match.startsAt || '';
+  const startsAtRaw = match.starts_at || match.startsAt || match.matchDate || '';
   const startsAtTs = Date.parse(startsAtRaw);
   const starts_at = Number.isFinite(startsAtTs) ? new Date(startsAtTs).toISOString() : '';
 
   const { league_id, league_slug, league_label, external_league_id } = extractLeague(match);
 
-  const home_team = (match.homeTeam && match.homeTeam.name) || match.home_team || '';
-  const away_team = (match.awayTeam && match.awayTeam.name) || match.away_team || '';
+  const home_team = (match.homeTeam && match.homeTeam.name)
+    || (match.teams && match.teams.home && match.teams.home.name)
+    || match.home_team
+    || '';
+  const away_team = (match.awayTeam && match.awayTeam.name)
+    || (match.teams && match.teams.away && match.teams.away.name)
+    || match.away_team
+    || '';
 
   const odds = extractOdds(match);
   const sport_slug = match.sportSlug || match.sport_slug || '';
