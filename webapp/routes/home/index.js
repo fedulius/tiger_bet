@@ -142,7 +142,7 @@ async function fetchDay(dayType, leagueIds, dateStr, ended) {
 }
 
 async function loadFavoriteSports(fastify, userId, profile) {
-  const rows = await fastify.pg.connection(`
+  let rows = await fastify.pg.connection(`
     SELECT s.sport_id, s.sport_name, s.sport_url
     FROM public.user_sport fs
     JOIN public.sport s ON s.sport_id = fs.sport_id
@@ -151,7 +151,17 @@ async function loadFavoriteSports(fastify, userId, profile) {
   `, [userId]);
 
   const stored = getFavoritesByProfile(profile);
-  const settingsMap = new Map((stored.sport_settings || []).map((item) => [String(item.name || '').trim(), item]));
+  const storedSettings = stored.sport_settings || [];
+  const settingsMap = new Map(storedSettings.map((item) => [String(item.name || '').trim(), item]));
+
+  if (rows.length === 0 && storedSettings.length > 0) {
+    const allSports = await fastify.pg.connection(`
+      SELECT sport_id, sport_name, sport_url
+      FROM public.sport
+      ORDER BY sport_id
+    `);
+    rows = allSports.filter((row) => settingsMap.has(String(row.sport_name || row.sport_url || '').trim()));
+  }
 
   return rows.map((row) => {
     const sportName = String(row.sport_name || row.sport_url || '').trim();

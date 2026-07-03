@@ -32,6 +32,9 @@ test('GET /home/daily-picks returns today/tomorrow picks from DB-backed feed', a
   const fakePg = createFakePg({
     handler(query) {
       if (/FROM public\.user_sport fs\s+JOIN public\.sport s/i.test(query)) {
+        return [];
+      }
+      if (/SELECT sport_id, sport_name, sport_url\s+FROM public\.sport/i.test(query)) {
         return [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' }];
       }
       return [
@@ -101,7 +104,8 @@ test('GET /home/daily-picks returns today/tomorrow picks from DB-backed feed', a
     assert.equal(payload.tomorrow?.match_slug, 'gamma-delta');
     assert.equal(payload.updated_at, '2026-07-03T11:10:00.000Z');
     assert.match(fakePg.calls[0].query, /user_sport/);
-    assert.match(fakePg.calls[1].query, /match_analysis/);
+    assert.match(fakePg.calls[1].query, /FROM public\.sport/);
+    assert.match(fakePg.calls[2].query, /match_analysis/);
   } finally {
     await app.close();
     cleanup();

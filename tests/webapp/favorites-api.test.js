@@ -106,6 +106,68 @@ test('GET /favorites returns DB-backed favorites with per-sport league settings'
   }
 });
 
+test('GET /favorites falls back to stored favorites when user_sport is empty', async () => {
+  const cleanup = withTempFavoritesFile();
+  fs.writeFileSync(process.env.WEBAPP_FAVORITES_FILE, JSON.stringify({
+    'telegram:777': {
+      sport_settings: [
+        { name: 'Футбол', leagues: ['World Cup'] },
+        { name: 'Хоккей', leagues: [] },
+      ],
+    },
+  }, null, 2));
+
+  const fakePg = createFakePg({
+    handler(query) {
+      if (/FROM public\.user_sport fs/i.test(query)) {
+        return [];
+      }
+      if (/FROM public\.sport/i.test(query)) {
+        return [
+          { sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' },
+          { sport_id: 2, sport_name: 'Хоккей', sport_url: 'ice-hockey' },
+          { sport_id: 3, sport_name: 'Теннис', sport_url: 'tennis' },
+        ];
+      }
+      return [];
+    },
+  });
+
+  const app = buildTestApp(buildApp, { pg: fakePg });
+  await app.ready();
+
+  try {
+    const response = await app.inject({
+      headers: makeAuthHeaders(app, { userId: 77, telegram_user_id: 777, profile: 'telegram:777' }),
+      method: 'GET',
+      url: '/favorites',
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json().sports, [
+      {
+        name: 'Футбол',
+        sport_url: 'soccer',
+        leagues: ['World Cup'],
+        all_leagues: false,
+        available_leagues: ['Premier League', 'La Liga', 'Serie A', 'Bundesliga', 'Ligue 1', 'Champions League', 'World Cup', 'FIFA Club World Cup'],
+        leagues_summary: 'World Cup',
+      },
+      {
+        name: 'Хоккей',
+        sport_url: 'ice-hockey',
+        leagues: [],
+        all_leagues: true,
+        available_leagues: ['KHL', 'NHL', 'World Championship'],
+        leagues_summary: 'Все лиги',
+      },
+    ]);
+  } finally {
+    await app.close();
+    cleanup();
+  }
+});
+
 test('PUT /favorites replaces user favorites in DB and stores per-sport leagues', async () => {
   const cleanup = withTempFavoritesFile();
   fs.writeFileSync(process.env.WEBAPP_FAVORITES_FILE, JSON.stringify({

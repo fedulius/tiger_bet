@@ -28,9 +28,27 @@ async function loadResolvedFavoriteSports(fastify, userId, profile) {
     ORDER BY fs.sport_id
   `, [userId]);
   const stored = getFavoritesByProfile(profile);
-  const sportSettingsMap = new Map((stored.sport_settings || []).map((item) => [item.name, item]));
+  const sportSettings = stored.sport_settings || [];
+  const sportSettingsMap = new Map(sportSettings.map((item) => [item.name, item]));
 
-  return rows.map((row) => {
+  let resolvedRows = rows;
+  if (resolvedRows.length === 0 && sportSettings.length > 0) {
+    const allSports = await fastify.pg.connection(`
+      SELECT sport_id, sport_name, sport_url
+      FROM public.sport
+      ORDER BY sport_id
+    `);
+
+    resolvedRows = allSports.filter((row) => {
+      const rowKeys = buildSportLookupKeys(normalizeSportOutput(row));
+      return sportSettings.some((item) => {
+        const wantedKeys = buildSportLookupKeys(item?.name);
+        return wantedKeys.some((key) => rowKeys.includes(key));
+      });
+    });
+  }
+
+  return resolvedRows.map((row) => {
     const resolvedName = normalizeSportOutput(row);
     const existing = sportSettingsMap.get(resolvedName);
 
@@ -62,7 +80,7 @@ async function favoritesRoutes(fastify) {
   fastify.get('/', async (request) => {
     const userId = Number(request.user?.userId);
     const profile = String(request.user?.profile || '');
-    const rows = await fastify.pg.connection(`
+    let rows = await fastify.pg.connection(`
       SELECT s.sport_name, s.sport_url
       FROM public.user_sport fs
       JOIN public.sport s ON s.sport_id = fs.sport_id
@@ -76,17 +94,27 @@ async function favoritesRoutes(fastify) {
     `);
 
     const stored = getFavoritesByProfile(profile);
-    const sportSettingsMap = new Map((stored.sport_settings || []).map((item) => [item.name, item]));
+    const sportSettings = stored.sport_settings || [];
+    const sportSettingsMap = new Map(sportSettings.map((item) => [item.name, item]));
+    if (rows.length === 0 && sportSettings.length > 0) {
+      rows = allSports.filter((row) => {
+        const rowKeys = buildSportLookupKeys(normalizeSportOutput(row));
+        return sportSettings.some((item) => {
+          const wantedKeys = buildSportLookupKeys(item?.name);
+          return wantedKeys.some((key) => rowKeys.includes(key));
+        });
+      });
+    }
     const sportRows = rows
       .map((row) => ({ name: normalizeSportOutput(row), sport_url: String(row.sport_url || '').trim() }))
       .filter((item) => item.name);
-    const sportSettings = sportRows.map(({ name, sport_url }) => {
+    const sportSettingsResponse = sportRows.map(({ name, sport_url }) => {
       const existing = sportSettingsMap.get(name);
       return buildResponseSportSetting({ ...(existing || { name, leagues: [] }), sport_url });
     });
 
     return {
-      sports: sportSettings,
+      sports: sportSettingsResponse,
       profile,
       available_sports: allSports
         .map((row) => ({ sport_name: normalizeSportOutput(row), sport_url: String(row.sport_url || '').trim() }))

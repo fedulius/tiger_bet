@@ -95,10 +95,19 @@ test('filterItemsByFavoriteLeagues keeps sport+league pair strict', () => {
 });
 
 test('GET /recommendations returns favorite-based items when user has favorite sports', async () => {
-  const cleanup = withTempFavoritesFile();
+  const cleanup = withTempFavoritesFile({
+    'telegram:777': {
+      sport_settings: [
+        { name: 'Футбол', leagues: ['World Cup'] },
+      ],
+    },
+  });
   const fakePg = createFakePg({
     handler(query) {
       if (/FROM public\.user_sport fs/i.test(query)) {
+        return [];
+      }
+      if (/SELECT sport_id, sport_name, sport_url\s+FROM public\.sport/i.test(query)) {
         return [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' }];
       }
       return [];
