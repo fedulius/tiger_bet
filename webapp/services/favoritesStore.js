@@ -80,10 +80,58 @@ function saveGuestFavorites(input) {
   return saveFavoritesByProfile(DEFAULT_PROFILE, input);
 }
 
+function normalizeSportName(row = {}) {
+  return String(row.sport_name || row.sport_url || '').trim();
+}
+
+async function loadResolvedFavoriteSports(pg, userId) {
+  const rows = await pg.connection(`
+    SELECT
+      s.sport_id,
+      s.sport_name,
+      s.sport_url,
+      t.tournament_id,
+      t.tournament_name,
+      t.tournament_name_en
+    FROM public.user_sport us
+    JOIN public.sport s ON s.sport_id = us.sport_id
+    LEFT JOIN public.user_tournament ut ON ut.user_id = us.user_id
+    LEFT JOIN public.tournament t
+      ON t.tournament_id = ut.tournament_id
+     AND t.sport_id = us.sport_id
+    WHERE us.user_id = $1
+    ORDER BY us.sport_id, t.tournament_name_en, t.tournament_name
+  `, [userId]);
+
+  const bySportId = new Map();
+  for (const row of rows) {
+    const sportId = Number(row.sport_id);
+    if (!Number.isFinite(sportId)) continue;
+
+    if (!bySportId.has(sportId)) {
+      bySportId.set(sportId, {
+        sport_id: sportId,
+        sport_name: normalizeSportName(row),
+        sport_url: String(row.sport_url || '').trim(),
+        leagues: [],
+      });
+    }
+
+    const entry = bySportId.get(sportId);
+    const league = String(row.tournament_name_en || row.tournament_name || '').trim();
+    if (league && !entry.leagues.includes(league)) {
+      entry.leagues.push(league);
+    }
+  }
+
+  return [...bySportId.values()];
+}
+
 module.exports = {
   getFavoritesByProfile,
   getGuestFavorites,
   normalizeSportsSettings,
   saveFavoritesByProfile,
   saveGuestFavorites,
+  loadResolvedFavoriteSports,
 };

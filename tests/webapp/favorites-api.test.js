@@ -17,10 +17,10 @@ function makeFakeRedis() {
 test('GET /favorites returns DB-backed favorites', async () => {
   const fakePg = createFakePg({
     handler(query) {
-      if (/FROM public\.user_sport fs/i.test(query)) {
+      if (/FROM public\.user_sport us/i.test(query)) {
         return [
-          { sport_name: 'Футбол', sport_url: 'soccer' },
-          { sport_name: 'Теннис', sport_url: 'tennis' },
+          { sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer', tournament_id: null, tournament_name: null, tournament_name_en: null },
+          { sport_id: 3, sport_name: 'Теннис', sport_url: 'tennis', tournament_id: null, tournament_name: null, tournament_name_en: null },
         ];
       }
       if (/FROM public\.sport/i.test(query)) {
@@ -82,21 +82,47 @@ test('GET /favorites returns DB-backed favorites', async () => {
   }
 });
 
-test('PUT /favorites replaces user favorite sports in DB without file persistence', async () => {
+test('PUT /favorites replaces user favorite sports in DB and persists selected leagues in user_tournament', async () => {
   const fakeRedis = makeFakeRedis();
+  let phase = 'before';
   const fakePg = createFakePg({
     handler(query, params) {
-      if (/FROM public\.user_sport fs\s+JOIN public\.sport s/i.test(query)) {
+      if (/FROM public\.user_sport us/i.test(query)) {
         assert.deepEqual(params, [55]);
-        return [
-          { sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' },
-        ];
+        return phase === 'before'
+          ? [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer', tournament_id: null, tournament_name: null, tournament_name_en: null }]
+          : [
+              { sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer', tournament_id: 10, tournament_name: 'АПЛ', tournament_name_en: 'Premier League' },
+              { sport_id: 3, sport_name: 'Теннис', sport_url: 'tennis', tournament_id: null, tournament_name: null, tournament_name_en: null },
+            ];
       }
-      if (/SELECT sport_id, sport_name, sport_url\s+FROM public\.sport/i.test(query)) {
+      if (/SELECT\s+sport_id,\s+sport_name,\s+sport_url\s+FROM public\.sport/i.test(query)) {
         return [
           { sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' },
           { sport_id: 3, sport_name: 'Теннис', sport_url: 'tennis' },
         ];
+      }
+      if (/SELECT\s+tournament_id,\s+sport_id,\s+tournament_name,\s+tournament_name_en\s+FROM public\.tournament/i.test(query)) {
+        return [
+          { tournament_id: 10, sport_id: 1, tournament_name: 'АПЛ', tournament_name_en: 'Premier League' },
+          { tournament_id: 11, sport_id: 1, tournament_name: 'Ла Лига', tournament_name_en: 'La Liga' },
+          { tournament_id: 30, sport_id: 3, tournament_name: 'ATP', tournament_name_en: 'ATP' },
+        ];
+      }
+      if (/DELETE FROM public\.user_tournament/i.test(query)) {
+        assert.deepEqual(params, [55]);
+        return [];
+      }
+      if (/DELETE FROM public\.user_sport/i.test(query)) {
+        assert.deepEqual(params, [55]);
+        return [];
+      }
+      if (/INSERT INTO public\.user_sport/i.test(query)) {
+        return [];
+      }
+      if (/INSERT INTO public\.user_tournament/i.test(query)) {
+        phase = 'after';
+        return [];
       }
       return [];
     },
@@ -141,16 +167,11 @@ test('PUT /favorites replaces user favorite sports in DB without file persistenc
       profile: 'telegram:777',
     });
 
-    assert.equal(fakePg.calls.length, 5);
-    assert.match(fakePg.calls[0].query, /FROM public\.user_sport fs\s+JOIN public\.sport s/i);
-    assert.deepEqual(fakePg.calls[0].params, [55]);
-    assert.match(fakePg.calls[1].query, /SELECT sport_id, sport_name, sport_url\s+FROM public\.sport/i);
-    assert.match(fakePg.calls[2].query, /DELETE FROM public\.user_sport/i);
-    assert.deepEqual(fakePg.calls[2].params, [55]);
-    assert.match(fakePg.calls[3].query, /INSERT INTO public\.user_sport/i);
-    assert.deepEqual(fakePg.calls[3].params, [55, 1]);
-    assert.match(fakePg.calls[4].query, /INSERT INTO public\.user_sport/i);
-    assert.deepEqual(fakePg.calls[4].params, [55, 3]);
+    assert.ok(fakePg.calls.some((call) => /DELETE FROM public\.user_tournament/i.test(call.query)));
+    assert.ok(fakePg.calls.some((call) => /DELETE FROM public\.user_sport/i.test(call.query)));
+    assert.ok(fakePg.calls.some((call) => /INSERT INTO public\.user_sport/i.test(call.query) && JSON.stringify(call.params) === JSON.stringify([55, 1])));
+    assert.ok(fakePg.calls.some((call) => /INSERT INTO public\.user_sport/i.test(call.query) && JSON.stringify(call.params) === JSON.stringify([55, 3])));
+    assert.ok(fakePg.calls.some((call) => /INSERT INTO public\.user_tournament/i.test(call.query) && JSON.stringify(call.params) === JSON.stringify([55, 10])));
     assert.deepEqual(fakeRedis.deletedKeys.sort(), [
       'recommendations:1:',
       'recommendations:1::current_version',

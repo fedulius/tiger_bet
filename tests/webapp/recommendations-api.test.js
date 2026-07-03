@@ -97,8 +97,8 @@ test('filterItemsByFavoriteLeagues keeps sport+league pair strict', () => {
 test('GET /recommendations returns DB-backed favorite-sport items when user has favorite sports', async () => {
   const fakePg = createFakePg({
     handler(query) {
-      if (/FROM public\.user_sport fs/i.test(query)) {
-        return [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' }];
+      if (/FROM public\.user_sport us/i.test(query)) {
+        return [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer', tournament_id: 16, tournament_name: 'Чемпионат мира', tournament_name_en: 'World Cup' }];
       }
       return [];
     },
@@ -138,8 +138,8 @@ test('GET /recommendations does not inject fallback placeholder items for favori
 
   const fakePg = createFakePg({
     handler(query) {
-      if (/FROM public\.user_sport fs/i.test(query)) {
-        return [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' }];
+      if (/FROM public\.user_sport us/i.test(query)) {
+        return [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer', tournament_id: 16, tournament_name: 'Чемпионат мира', tournament_name_en: 'World Cup' }];
       }
       return [];
     },
@@ -167,18 +167,12 @@ test('GET /recommendations does not inject fallback placeholder items for favori
 });
 
 test('GET /recommendations does not fall back to football when user favorites have no matching items', async () => {
-  const cleanup = withTempFavoritesFile({
-    'telegram:778': {
-      sport_settings: [
-        { name: 'Теннис', leagues: ['ATP'] },
-      ],
-    },
-  });
+  const cleanup = withTempFavoritesFile();
 
   const fakePg = createFakePg({
     handler(query) {
-      if (/FROM public\.user_sport fs/i.test(query)) {
-        return [{ sport_id: 2, sport_name: 'Теннис', sport_url: 'tennis' }];
+      if (/FROM public\.user_sport us/i.test(query)) {
+        return [{ sport_id: 2, sport_name: 'Теннис', sport_url: 'tennis', tournament_id: 30, tournament_name: 'ATP', tournament_name_en: 'ATP' }];
       }
       return [];
     },
@@ -356,33 +350,29 @@ test('GET /recommendations returns explicit stale-version response when requeste
 
 
 test('GET /recommendations reflects updated favorites immediately after PUT /favorites', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tiger-bet-rec-sequence-'));
-  const filePath = path.join(dir, 'favorites.json');
-  process.env.WEBAPP_FAVORITES_FILE = filePath;
-  fs.writeFileSync(filePath, JSON.stringify({
-    'telegram:799': {
-      sport_settings: [{ name: 'Футбол', leagues: [] }],
-    },
-  }, null, 2));
-
-  const cleanup = () => {
-    delete process.env.WEBAPP_FAVORITES_FILE;
-    fs.rmSync(dir, { force: true, recursive: true });
-  };
+  const cleanup = withTempFavoritesFile();
 
   const fakeRedis = { async del() {} };
   let sportsDeleted = false;
   const fakePg = createFakePg({
     handler(query) {
+      if (/DELETE FROM public\.user_tournament/i.test(query)) {
+        return [];
+      }
       if (/DELETE FROM public\.user_sport/i.test(query)) {
         sportsDeleted = true;
         return [];
       }
-      if (/FROM public\.user_sport fs/i.test(query)) {
-        return sportsDeleted ? [] : [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' }];
+      if (/FROM public\.user_sport us/i.test(query)) {
+        return sportsDeleted
+          ? []
+          : [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer', tournament_id: null, tournament_name: null, tournament_name_en: null }];
       }
       if (/FROM public\.sport/i.test(query)) {
         return [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' }];
+      }
+      if (/FROM public\.tournament/i.test(query)) {
+        return [];
       }
       return [];
     },

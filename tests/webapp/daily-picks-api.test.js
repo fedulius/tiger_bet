@@ -9,8 +9,8 @@ const { buildTestApp, createFakePg, makeAuthHeaders } = require('./testHelpers')
 test('GET /home/daily-picks returns today/tomorrow picks from DB-backed feed', async () => {
   const fakePg = createFakePg({
     handler(query) {
-      if (/FROM public\.user_sport fs\s+JOIN public\.sport s/i.test(query)) {
-        return [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' }];
+      if (/FROM public\.user_sport us/i.test(query)) {
+        return [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer', tournament_id: 16, tournament_name: 'Чемпионат мира', tournament_name_en: 'World Cup' }];
       }
       return [
         {
@@ -21,8 +21,8 @@ test('GET /home/daily-picks returns today/tomorrow picks from DB-backed feed', a
           home_team: 'Alpha FC',
           away_team: 'Beta FC',
           sport_name: 'Футбол',
-          tournament_name: 'Лига 1',
-          tournament_name_en: 'Ligue 1',
+          tournament_name: 'Чемпионат мира',
+          tournament_name_en: 'World Cup',
           match_start_at: '2026-07-03T15:00:00.000Z',
           analysis_status_name: 'ready',
           analysis_headline: 'Сегодняшний пик',
@@ -43,8 +43,8 @@ test('GET /home/daily-picks returns today/tomorrow picks from DB-backed feed', a
           home_team: 'Gamma FC',
           away_team: 'Delta FC',
           sport_name: 'Футбол',
-          tournament_name: 'АПЛ',
-          tournament_name_en: 'Premier League',
+          tournament_name: 'Чемпионат мира',
+          tournament_name_en: 'World Cup',
           match_start_at: '2026-07-04T18:30:00.000Z',
           analysis_status_name: 'ready',
           analysis_headline: 'Завтрашний пик',
@@ -85,11 +85,11 @@ test('GET /home/daily-picks returns today/tomorrow picks from DB-backed feed', a
   }
 });
 
-test('GET /home/daily-picks does not filter by deleted file-based league favorites', async () => {
+test('GET /home/daily-picks filters to selected league from user_tournament', async () => {
   const fakePg = createFakePg({
     handler(query) {
-      if (/FROM public\.user_sport fs\s+JOIN public\.sport s/i.test(query)) {
-        return [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' }];
+      if (/FROM public\.user_sport us/i.test(query)) {
+        return [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer', tournament_id: 16, tournament_name: 'Чемпионат мира', tournament_name_en: 'World Cup' }];
       }
       return [
         {
@@ -105,7 +105,7 @@ test('GET /home/daily-picks does not filter by deleted file-based league favorit
           match_start_at: '2026-07-03T15:00:00.000Z',
           analysis_status_name: 'ready',
           analysis_headline: 'Финский пик',
-          analysis_brief: 'Теперь не режется по JSON',
+          analysis_brief: 'Не должен пройти',
           analysis_risk_note: '',
           recommended_bets: [],
           source_payload: { match_slug: 'alpha-beta' },
@@ -122,11 +122,11 @@ test('GET /home/daily-picks does not filter by deleted file-based league favorit
           home_team: 'Gamma FC',
           away_team: 'Delta FC',
           sport_name: 'Футбол',
-          tournament_name: 'АПЛ',
-          tournament_name_en: 'Premier League',
+          tournament_name: 'Чемпионат мира',
+          tournament_name_en: 'World Cup',
           match_start_at: '2026-07-04T18:30:00.000Z',
           analysis_status_name: 'ready',
-          analysis_headline: 'Английский пик',
+          analysis_headline: 'Пик ЧМ',
           analysis_brief: 'Должен пройти',
           analysis_risk_note: '',
           recommended_bets: [],
@@ -152,8 +152,8 @@ test('GET /home/daily-picks does not filter by deleted file-based league favorit
 
     assert.equal(response.statusCode, 200);
     const payload = response.json();
-    assert.equal(payload.today?.headline, 'Финский пик');
-    assert.equal(payload.tomorrow?.headline, 'Английский пик');
+    assert.equal(payload.today, null);
+    assert.equal(payload.tomorrow?.headline, 'Пик ЧМ');
   } finally {
     await app.close();
   }
