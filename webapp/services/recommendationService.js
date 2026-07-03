@@ -281,7 +281,10 @@ function filterItemsByFavoriteLeagues(items = [], favoriteSports = []) {
 
   return items.filter((item) => {
     const selectedLeagues = leagueMap.get(Number(item?.sport_id));
-    if (!selectedLeagues || selectedLeagues.size === 0) {
+    if (!selectedLeagues) {
+      return false;
+    }
+    if (selectedLeagues.size === 0) {
       return true;
     }
 
@@ -652,59 +655,29 @@ async function loadRecommendationsFromApi({ apiLoader, popularBetsLoader, riskBe
   let topMatches;
 
   if (hasFavorites) {
-    const favSportIds = new Set(favoriteSports.map((s) => Number(s?.sport_id)).filter(Number.isFinite));
     const allUpcoming = allMatches.filter(isEligibleMatch);
 
-    const favoriteMatches = [];
-    const nonFavoriteMatches = [];
-    for (const m of allUpcoming) {
-      if (favSportIds.has(resolveSport(m.sportSlug).sport_id)) favoriteMatches.push(m);
-      else nonFavoriteMatches.push(m);
-    }
+    const candidateItems = allUpcoming.map((m) => {
+      const sportInfo = resolveSport(m.sportSlug);
+      const leagueName = m.league ? (m.league.name || '') : '';
+      const countryName = (m.league && m.league.country) ? (m.league.country.name || '') : '';
 
-    favoriteMatches.sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate));
-    const favSelected = favoriteMatches.slice(0, limit);
+      return {
+        rawMatch: m,
+        sport_id: sportInfo.sport_id,
+        sport_name: sportInfo.sport_name,
+        league_name: leagueName,
+        league_display: countryName ? (countryName + ': ' + leagueName) : leagueName,
+        league: countryName ? (countryName + ': ' + leagueName) : leagueName,
+        starts_at: new Date(m.matchDate).toISOString(),
+      };
+    });
 
-    if (favSelected.length < limit) {
-      const need = limit - favSelected.length;
-      const seen = new Set(favSelected.map((m) => m.id || m.slug).filter(Boolean));
+    const favoriteCandidates = filterItemsByFavoriteLeagues(candidateItems, favoriteSports)
+      .sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at))
+      .slice(0, limit);
 
-      const bySport = new Map();
-      for (const m of nonFavoriteMatches) {
-        const sid = resolveSport(m.sportSlug).sport_id;
-        if (!bySport.has(sid)) bySport.set(sid, []);
-        bySport.get(sid).push(m);
-      }
-      for (const g of bySport.values()) {
-        g.sort((a, b) => new Date(a.matchDate) - new Date(b.matchDate));
-      }
-
-      const fill = [];
-      const ptrs = new Map(FALLBACK_SPORT_PRIORITY.map((sid) => [sid, 0]));
-      while (fill.length < need) {
-        let addedThisRound = false;
-        for (const sid of FALLBACK_SPORT_PRIORITY) {
-          if (fill.length >= need) break;
-          const group = bySport.get(sid) || [];
-          const ptr = ptrs.get(sid) ?? 0;
-          if (ptr < group.length) {
-            ptrs.set(sid, ptr + 1);
-            const m = group[ptr];
-            const key = m.id || m.slug;
-            if (!key || !seen.has(key)) {
-              fill.push(m);
-              if (key) seen.add(key);
-              addedThisRound = true;
-            }
-          }
-        }
-        if (!addedThisRound) break;
-      }
-
-      topMatches = [...favSelected, ...fill];
-    } else {
-      topMatches = favSelected;
-    }
+    topMatches = favoriteCandidates.map((item) => item.rawMatch);
   } else {
     const upcoming = allMatches.filter((m) => {
       if (!isEligibleMatch(m)) return false;

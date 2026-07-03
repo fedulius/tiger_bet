@@ -1,7 +1,7 @@
 'use strict';
 
 function normalizeName(value = '') {
-  return String(value || '').trim().toLowerCase();
+  return String(value || '').trim().toLowerCase().replace(/^.*?:\s*/, '');
 }
 
 function buildFavoriteLeagueMap(favoriteSports = []) {

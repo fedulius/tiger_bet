@@ -71,6 +71,29 @@ test('filterItemsByFavoriteLeagues matches World Cup aliases and ignores country
   assert.equal(filtered[0].match, 'Австралия — Египет');
 });
 
+test('filterItemsByFavoriteLeagues keeps sport+league pair strict', () => {
+  const items = [
+    {
+      sport_id: 1,
+      league: 'Мир: Чемпионат мира',
+      league_name: 'Чемпионат мира',
+      match: 'Футбол ЧМ',
+    },
+    {
+      sport_id: 2,
+      league: 'Мир: Чемпионат мира',
+      league_name: 'Чемпионат мира',
+      match: 'Хоккей ЧМ',
+    },
+  ];
+
+  const filtered = filterItemsByFavoriteLeagues(items, [
+    { sport_id: 1, leagues: ['World Cup'] },
+  ]);
+
+  assert.deepEqual(filtered.map((item) => item.match), ['Футбол ЧМ']);
+});
+
 test('GET /recommendations returns favorite-based items when user has favorite sports', async () => {
   const cleanup = withTempFavoritesFile();
   const fakePg = createFakePg({

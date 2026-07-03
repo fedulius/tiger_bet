@@ -89,38 +89,38 @@ test('loadLiveRecommendations returns empty when no matches', async () => {
 test('loadLiveRecommendations prefers favorite sport items and fills remaining from fallback priority', async () => {
   const now = Date.now();
   const matches = [
-    makeMatch({ id: 'm1', sportSlug: 'soccer', matchDate: new Date(now + 3600000).toISOString() }),
-    makeMatch({ id: 'm2', sportSlug: 'tennis', homeName: 'Player A', awayName: 'Player B', matchDate: new Date(now + 7200000).toISOString() }),
+    makeMatch({ id: 'm1', sportSlug: 'soccer', leagueName: 'World Cup', countryName: 'Мир', matchDate: new Date(now + 3600000).toISOString() }),
+    makeMatch({ id: 'm2', sportSlug: 'tennis', homeName: 'Player A', awayName: 'Player B', leagueName: 'ATP', countryName: '', matchDate: new Date(now + 7200000).toISOString() }),
   ];
   const items = await loadLiveRecommendations({
     apiLoader: mockApiLoader(matches),
     popularBetsLoader: mockPopularBetsLoader(defaultPopularBets),
     riskBetsSelector: selectRiskBets,
-    favoriteSports: [{ sport_id: 1, sport_name: 'Футбол' }],
+    favoriteSports: [{ sport_id: 1, sport_name: 'Футбол', leagues: ['World Cup'] }],
     limit: 6,
   });
   assert.ok(items.length >= 1, 'should have at least the favorite item');
   assert.equal(items[0].sportSlug, 'soccer', 'favorite sport item should come first');
-  assert.equal(items.length, 2, 'tennis fills as fallback when only 1 favorite item');
-  assert.equal(items[1].sportSlug, 'tennis', 'tennis is priority-2 fallback');
+  assert.equal(items.length, 1, 'non-matching sports must not fill selected sport+league pairs');
 });
 
 test('loadLiveRecommendations does not use fallback when favorites reach the candidate limit', async () => {
   const now = Date.now();
   const matches = [
-    makeMatch({ id: 'm1', sportSlug: 'soccer', matchDate: new Date(now + 1 * 3600000).toISOString() }),
-    makeMatch({ id: 'm2', sportSlug: 'soccer', homeName: 'Real', awayName: 'Barca', matchDate: new Date(now + 2 * 3600000).toISOString() }),
-    makeMatch({ id: 'm3', sportSlug: 'soccer', homeName: 'City', awayName: 'United', matchDate: new Date(now + 3 * 3600000).toISOString() }),
+    makeMatch({ id: 'm1', sportSlug: 'soccer', leagueName: 'World Cup', countryName: 'Мир', matchDate: new Date(now + 1 * 3600000).toISOString() }),
+    makeMatch({ id: 'm2', sportSlug: 'soccer', leagueName: 'World Cup', countryName: 'Мир', homeName: 'Real', awayName: 'Barca', matchDate: new Date(now + 2 * 3600000).toISOString() }),
+    makeMatch({ id: 'm3', sportSlug: 'soccer', leagueName: 'World Cup', countryName: 'Мир', homeName: 'City', awayName: 'United', matchDate: new Date(now + 3 * 3600000).toISOString() }),
     makeMatch({ id: 'm4', sportSlug: 'tennis', homeName: 'P1', awayName: 'P2', matchDate: new Date(now + 0.5 * 3600000).toISOString() }),
   ];
   const items = await loadLiveRecommendations({
     apiLoader: mockApiLoader(matches),
     popularBetsLoader: mockPopularBetsLoader(defaultPopularBets),
     riskBetsSelector: selectRiskBets,
-    favoriteSports: [{ sport_id: 1, sport_name: 'Футбол' }],
+    favoriteSports: [{ sport_id: 1, sport_name: 'Футбол', leagues: ['World Cup'] }],
     limit: 3,
   });
   assert.ok(items.every((i) => i.sportSlug === 'soccer'), 'all items should be from favorite sport when limit is reached');
+  assert.ok(items.every((i) => i.league_name === 'World Cup'), 'all items should be from selected league');
   assert.ok(!items.some((i) => i.sportSlug === 'tennis'), 'no fallback items when favorites fill the limit');
 });
 
@@ -134,15 +134,13 @@ test('loadLiveRecommendations fills from fallback when favorites produce 0 items
     apiLoader: mockApiLoader(matches),
     popularBetsLoader: mockPopularBetsLoader(defaultPopularBets),
     riskBetsSelector: selectRiskBets,
-    favoriteSports: [{ sport_id: 1, sport_name: 'Футбол' }],
+    favoriteSports: [{ sport_id: 1, sport_name: 'Футбол', leagues: ['World Cup'] }],
     limit: 6,
   });
-  assert.ok(items.length >= 1, 'should have fallback items when favorites produce 0 items');
-  const slugs = items.map((i) => i.sportSlug);
-  assert.ok(slugs.includes('tennis') || slugs.includes('dota2'), 'fallback items should be from priority sports');
+  assert.deepEqual(items, [], 'should not fill from other sports when selected sport+league has no matches');
 });
 
-test('loadLiveRecommendations fallback fill respects sport priority order', async () => {
+test('loadLiveRecommendations keeps only favorite sport items when favorite sport has all leagues', async () => {
   const now = Date.now();
   const matches = [
     makeMatch({ id: 'm-soccer', sportSlug: 'soccer', matchDate: new Date(now + 1 * 3600000).toISOString() }),
@@ -156,11 +154,8 @@ test('loadLiveRecommendations fallback fill respects sport priority order', asyn
     favoriteSports: [{ sport_id: 1, sport_name: 'Футбол' }],
     limit: 6,
   });
-  assert.equal(items.length, 3, 'should return all 3 items');
-  assert.equal(items[0].sportSlug, 'soccer', 'soccer comes first as favorite');
-  // tennis is priority 2, csgo is priority 4; tennis must appear before csgo in selection order
-  const fillSlugs = items.slice(1).map((i) => i.sportSlug);
-  assert.ok(fillSlugs.indexOf('tennis') < fillSlugs.indexOf('csgo'), 'tennis (priority 2) appears before csgo (priority 4)');
+  assert.equal(items.length, 1, 'should keep only favorite sport items');
+  assert.equal(items[0].sportSlug, 'soccer', 'soccer remains as the only favorite sport item');
 });
 
 test('FALLBACK_SPORT_PRIORITY has required order: soccer, tennis, dota2, csgo, ice-hockey, american-football, snooker', () => {
@@ -170,7 +165,7 @@ test('FALLBACK_SPORT_PRIORITY has required order: soccer, tennis, dota2, csgo, i
   assert.deepEqual(FALLBACK_SPORT_PRIORITY, expectedIds, 'fallback priority must match the specified order');
 });
 
-test('getRecommendations fills from fallback priority when favorites produce fewer than 3 live items', async () => {
+test('getRecommendations keeps only favorite sport items when favorites produce fewer than 3 live items', async () => {
   const now = Date.now();
   const matches = [
     makeMatch({ id: 'fav-1', sportSlug: 'soccer', matchDate: new Date(now + 1 * 3600000).toISOString() }),
@@ -188,13 +183,11 @@ test('getRecommendations fills from fallback priority when favorites produce few
   });
 
   assert.ok(result.items, 'should have items');
-  assert.equal(result.items.length, 3, 'should return 3 items (1 favorite + 2 fallback)');
+  assert.equal(result.items.length, 1, 'should keep only favorite sport items');
   assert.equal(result.source, 'favorites', 'source should remain favorites when user has favorite sports');
 
   const slugs = result.items.map((i) => i.sportSlug);
-  assert.ok(slugs.includes('soccer'), 'should include favorite soccer item');
-  assert.ok(slugs.includes('tennis'), 'should include fallback tennis item');
-  assert.ok(slugs.includes('dota2'), 'should include fallback dota2 item');
+  assert.deepEqual(slugs, ['soccer']);
 
   const starts = result.items.map((i) => i.starts_at);
   const sortedStarts = [...starts].sort((a, b) => new Date(a) - new Date(b));

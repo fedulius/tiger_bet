@@ -39,6 +39,21 @@ test('filterRowsByFavoriteLeagues: keeps only rows from selected leagues and sel
   ]);
 });
 
+test('filterRowsByFavoriteLeagues: same league name in another sport does not match', () => {
+  const rows = [
+    { sport_name: 'Футбол', tournament_name_en: 'World Cup' },
+    { sport_name: 'Хоккей', tournament_name_en: 'World Cup' },
+  ];
+
+  const filtered = filterRowsByFavoriteLeagues(rows, [
+    { sport_name: 'Футбол', leagues: ['World Cup'] },
+  ]);
+
+  assert.deepEqual(filtered, [
+    { sport_name: 'Футбол', tournament_name_en: 'World Cup' },
+  ]);
+});
+
 test('buildSlotMap: formats today/tomorrow cards and keeps first row per slot_date', () => {
   const rows = [
     {
