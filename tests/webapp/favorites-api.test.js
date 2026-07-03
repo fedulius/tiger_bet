@@ -1,21 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
 
 const { buildApp } = require('../../server/app');
 const { buildTestApp, createFakePg, makeAuthHeaders } = require('./testHelpers');
-
-function withTempFavoritesFile() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tiger-bet-favorites-'));
-  const filePath = path.join(dir, 'favorites.json');
-  process.env.WEBAPP_FAVORITES_FILE = filePath;
-  return () => {
-    delete process.env.WEBAPP_FAVORITES_FILE;
-    fs.rmSync(dir, { force: true, recursive: true });
-  };
-}
 
 function makeFakeRedis() {
   const deletedKeys = [];
@@ -27,17 +14,7 @@ function makeFakeRedis() {
   };
 }
 
-test('GET /favorites returns DB-backed favorites with per-sport league settings', async () => {
-  const cleanup = withTempFavoritesFile();
-  fs.writeFileSync(process.env.WEBAPP_FAVORITES_FILE, JSON.stringify({
-    'telegram:777': {
-      sport_settings: [
-        { name: 'Футбол', leagues: ['Premier League'] },
-        { name: 'Теннис', leagues: [] },
-      ],
-    },
-  }, null, 2));
-
+test('GET /favorites returns DB-backed favorites', async () => {
   const fakePg = createFakePg({
     handler(query) {
       if (/FROM public\.user_sport fs/i.test(query)) {
@@ -74,10 +51,10 @@ test('GET /favorites returns DB-backed favorites with per-sport league settings'
         {
           name: 'Футбол',
           sport_url: 'soccer',
-          leagues: ['Premier League'],
-          all_leagues: false,
+          leagues: [],
+          all_leagues: true,
           available_leagues: ['Premier League', 'La Liga', 'Serie A', 'Bundesliga', 'Ligue 1', 'Champions League', 'World Cup', 'FIFA Club World Cup'],
-          leagues_summary: 'Premier League',
+          leagues_summary: 'Все лиги',
         },
         {
           name: 'Теннис',
@@ -102,81 +79,10 @@ test('GET /favorites returns DB-backed favorites with per-sport league settings'
     });
   } finally {
     await app.close();
-    cleanup();
   }
 });
 
-test('GET /favorites falls back to stored favorites when user_sport is empty', async () => {
-  const cleanup = withTempFavoritesFile();
-  fs.writeFileSync(process.env.WEBAPP_FAVORITES_FILE, JSON.stringify({
-    'telegram:777': {
-      sport_settings: [
-        { name: 'Футбол', leagues: ['World Cup'] },
-        { name: 'Хоккей', leagues: [] },
-      ],
-    },
-  }, null, 2));
-
-  const fakePg = createFakePg({
-    handler(query) {
-      if (/FROM public\.user_sport fs/i.test(query)) {
-        return [];
-      }
-      if (/FROM public\.sport/i.test(query)) {
-        return [
-          { sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' },
-          { sport_id: 2, sport_name: 'Хоккей', sport_url: 'ice-hockey' },
-          { sport_id: 3, sport_name: 'Теннис', sport_url: 'tennis' },
-        ];
-      }
-      return [];
-    },
-  });
-
-  const app = buildTestApp(buildApp, { pg: fakePg });
-  await app.ready();
-
-  try {
-    const response = await app.inject({
-      headers: makeAuthHeaders(app, { userId: 77, telegram_user_id: 777, profile: 'telegram:777' }),
-      method: 'GET',
-      url: '/favorites',
-    });
-
-    assert.equal(response.statusCode, 200);
-    assert.deepEqual(response.json().sports, [
-      {
-        name: 'Футбол',
-        sport_url: 'soccer',
-        leagues: ['World Cup'],
-        all_leagues: false,
-        available_leagues: ['Premier League', 'La Liga', 'Serie A', 'Bundesliga', 'Ligue 1', 'Champions League', 'World Cup', 'FIFA Club World Cup'],
-        leagues_summary: 'World Cup',
-      },
-      {
-        name: 'Хоккей',
-        sport_url: 'ice-hockey',
-        leagues: [],
-        all_leagues: true,
-        available_leagues: ['KHL', 'NHL', 'World Championship'],
-        leagues_summary: 'Все лиги',
-      },
-    ]);
-  } finally {
-    await app.close();
-    cleanup();
-  }
-});
-
-test('PUT /favorites replaces user favorites in DB and stores per-sport leagues', async () => {
-  const cleanup = withTempFavoritesFile();
-  fs.writeFileSync(process.env.WEBAPP_FAVORITES_FILE, JSON.stringify({
-    'telegram:777': {
-      sport_settings: [
-        { name: 'Футбол', leagues: ['La Liga'] },
-      ],
-    },
-  }, null, 2));
+test('PUT /favorites replaces user favorite sports in DB without file persistence', async () => {
   const fakeRedis = makeFakeRedis();
   const fakePg = createFakePg({
     handler(query, params) {
@@ -238,34 +144,25 @@ test('PUT /favorites replaces user favorites in DB and stores per-sport leagues'
     assert.equal(fakePg.calls.length, 5);
     assert.match(fakePg.calls[0].query, /FROM public\.user_sport fs\s+JOIN public\.sport s/i);
     assert.deepEqual(fakePg.calls[0].params, [55]);
+    assert.match(fakePg.calls[1].query, /SELECT sport_id, sport_name, sport_url\s+FROM public\.sport/i);
     assert.match(fakePg.calls[2].query, /DELETE FROM public\.user_sport/i);
     assert.deepEqual(fakePg.calls[2].params, [55]);
     assert.match(fakePg.calls[3].query, /INSERT INTO public\.user_sport/i);
     assert.deepEqual(fakePg.calls[3].params, [55, 1]);
     assert.match(fakePg.calls[4].query, /INSERT INTO public\.user_sport/i);
     assert.deepEqual(fakePg.calls[4].params, [55, 3]);
-
-    const persisted = JSON.parse(fs.readFileSync(process.env.WEBAPP_FAVORITES_FILE, 'utf-8'));
-    assert.deepEqual(persisted['telegram:777'], {
-      sport_settings: [
-        { name: 'Футбол', leagues: ['Premier League'] },
-        { name: 'Теннис', leagues: [] },
-      ],
-    });
     assert.deepEqual(fakeRedis.deletedKeys.sort(), [
-      'recommendations:1:La Liga',
-      'recommendations:1:La Liga:current_version',
+      'recommendations:1:',
+      'recommendations:1::current_version',
       'recommendations:1:Premier League|3:',
       'recommendations:1:Premier League|3::current_version',
     ]);
   } finally {
     await app.close();
-    cleanup();
   }
 });
 
 test('PUT /favorites validates sports array payload', async () => {
-  const cleanup = withTempFavoritesFile();
   const app = buildTestApp(buildApp);
   await app.ready();
 
@@ -283,7 +180,6 @@ test('PUT /favorites validates sports array payload', async () => {
     assert.match(response.json().error, /sports must be an array/i);
   } finally {
     await app.close();
-    cleanup();
   }
 });
 

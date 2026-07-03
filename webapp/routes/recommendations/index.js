@@ -1,10 +1,9 @@
 const { getRecommendations } = require('../../services/recommendationService');
-const { getFavoritesByProfile } = require('../../services/favoritesStore');
 const { fetchAllMatches, fetchPopularBets, selectRiskBets } = require('../../../lib/stavkaApi');
 const { getCurrentBriefsByMatchIds, getCurrentBriefsByMatchSlugs, mapCurrentRowToApiBrief } = require('../../services/aiBriefStore');
 
-async function loadFavoriteSports(fastify, userId, profile) {
-  let rows = await fastify.pg.connection(`
+async function loadFavoriteSports(fastify, userId) {
+  const rows = await fastify.pg.connection(`
     SELECT s.sport_id, s.sport_name, s.sport_url
     FROM public.user_sport fs
     JOIN public.sport s ON s.sport_id = fs.sport_id
@@ -12,28 +11,10 @@ async function loadFavoriteSports(fastify, userId, profile) {
     ORDER BY fs.sport_id
   `, [userId]);
 
-  const stored = getFavoritesByProfile(profile);
-  const storedSettings = stored.sport_settings || [];
-  const settingsMap = new Map(storedSettings.map((item) => [String(item.name || '').trim(), item]));
-
-  if (rows.length === 0 && storedSettings.length > 0) {
-    const allSports = await fastify.pg.connection(`
-      SELECT sport_id, sport_name, sport_url
-      FROM public.sport
-      ORDER BY sport_id
-    `);
-    rows = allSports.filter((row) => settingsMap.has(String(row.sport_name || row.sport_url || '').trim()));
-  }
-
-  return rows.map((row) => {
-    const sportName = String(row.sport_name || row.sport_url || '').trim();
-    const existing = settingsMap.get(sportName);
-
-    return {
-      ...row,
-      leagues: Array.isArray(existing?.leagues) ? existing.leagues : [],
-    };
-  });
+  return rows.map((row) => ({
+    ...row,
+    leagues: [],
+  }));
 }
 
 function isSyntheticMatchId(id) {
@@ -173,8 +154,7 @@ async function enrichWithAiBriefs(pg, log, result) {
 async function recommendationsRoutes(fastify) {
   fastify.get('/', async (request, reply) => {
     const userId = Number(request.user?.userId);
-    const profile = String(request.user?.profile || '');
-    const favoriteSports = await loadFavoriteSports(fastify, userId, profile);
+    const favoriteSports = await loadFavoriteSports(fastify, userId);
     const recommendationsVersion = String(request.query?.recommendations_version || '').trim();
     const result = await getRecommendations({
       favoriteSports,

@@ -1,40 +1,15 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
 
 process.env.NODE_ENV = 'test';
 
 const { buildApp } = require('../../server/app');
 const { buildTestApp, createFakePg, makeAuthHeaders } = require('./testHelpers');
 
-function withTempFavoritesFile(payload) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tiger-bet-daily-picks-'));
-  const filePath = path.join(dir, 'favorites.json');
-  process.env.WEBAPP_FAVORITES_FILE = filePath;
-  fs.writeFileSync(filePath, JSON.stringify(payload || {}, null, 2));
-  return () => {
-    delete process.env.WEBAPP_FAVORITES_FILE;
-    fs.rmSync(dir, { force: true, recursive: true });
-  };
-}
-
 test('GET /home/daily-picks returns today/tomorrow picks from DB-backed feed', async () => {
-  const cleanup = withTempFavoritesFile({
-    'telegram:777': {
-      sport_settings: [
-        { name: 'Футбол', leagues: [] },
-      ],
-    },
-  });
-
   const fakePg = createFakePg({
     handler(query) {
       if (/FROM public\.user_sport fs\s+JOIN public\.sport s/i.test(query)) {
-        return [];
-      }
-      if (/SELECT sport_id, sport_name, sport_url\s+FROM public\.sport/i.test(query)) {
         return [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' }];
       }
       return [
@@ -104,23 +79,13 @@ test('GET /home/daily-picks returns today/tomorrow picks from DB-backed feed', a
     assert.equal(payload.tomorrow?.match_slug, 'gamma-delta');
     assert.equal(payload.updated_at, '2026-07-03T11:10:00.000Z');
     assert.match(fakePg.calls[0].query, /user_sport/);
-    assert.match(fakePg.calls[1].query, /FROM public\.sport/);
-    assert.match(fakePg.calls[2].query, /match_analysis/);
+    assert.match(fakePg.calls[1].query, /match_analysis/);
   } finally {
     await app.close();
-    cleanup();
   }
 });
 
-test('GET /home/daily-picks filters out picks outside favorite leagues', async () => {
-  const cleanup = withTempFavoritesFile({
-    'telegram:777': {
-      sport_settings: [
-        { name: 'Футбол', leagues: ['Premier League'] },
-      ],
-    },
-  });
-
+test('GET /home/daily-picks does not filter by deleted file-based league favorites', async () => {
   const fakePg = createFakePg({
     handler(query) {
       if (/FROM public\.user_sport fs\s+JOIN public\.sport s/i.test(query)) {
@@ -140,7 +105,7 @@ test('GET /home/daily-picks filters out picks outside favorite leagues', async (
           match_start_at: '2026-07-03T15:00:00.000Z',
           analysis_status_name: 'ready',
           analysis_headline: 'Финский пик',
-          analysis_brief: 'Не должен пройти',
+          analysis_brief: 'Теперь не режется по JSON',
           analysis_risk_note: '',
           recommended_bets: [],
           source_payload: { match_slug: 'alpha-beta' },
@@ -187,11 +152,10 @@ test('GET /home/daily-picks filters out picks outside favorite leagues', async (
 
     assert.equal(response.statusCode, 200);
     const payload = response.json();
-    assert.equal(payload.today, null);
+    assert.equal(payload.today?.headline, 'Финский пик');
     assert.equal(payload.tomorrow?.headline, 'Английский пик');
   } finally {
     await app.close();
-    cleanup();
   }
 });
 

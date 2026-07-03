@@ -94,20 +94,10 @@ test('filterItemsByFavoriteLeagues keeps sport+league pair strict', () => {
   assert.deepEqual(filtered.map((item) => item.match), ['Футбол ЧМ']);
 });
 
-test('GET /recommendations returns favorite-based items when user has favorite sports', async () => {
-  const cleanup = withTempFavoritesFile({
-    'telegram:777': {
-      sport_settings: [
-        { name: 'Футбол', leagues: ['World Cup'] },
-      ],
-    },
-  });
+test('GET /recommendations returns DB-backed favorite-sport items when user has favorite sports', async () => {
   const fakePg = createFakePg({
     handler(query) {
       if (/FROM public\.user_sport fs/i.test(query)) {
-        return [];
-      }
-      if (/SELECT sport_id, sport_name, sport_url\s+FROM public\.sport/i.test(query)) {
         return [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' }];
       }
       return [];
@@ -134,7 +124,6 @@ test('GET /recommendations returns favorite-based items when user has favorite s
     }
   } finally {
     await app.close();
-    cleanup();
   }
 });
 
