@@ -214,7 +214,47 @@ function selectUpcomingItems(items = [], { now = Date.now(), limit = null } = {}
 }
 
 function normalizeLeagueName(value = '') {
-  return String(value || '').trim().toLowerCase();
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^.*?:\s*/, '');
+}
+
+function expandLeagueAliases(value = '') {
+  const normalized = normalizeLeagueName(value);
+  if (!normalized) return [];
+
+  const variants = new Set([normalized]);
+  const aliasMap = new Map([
+    ['world cup', ['чемпионат мира']],
+    ['чемпионат мира', ['world cup', 'world championship']],
+    ['world championship', ['чемпионат мира']],
+    ['fifa club world cup', ['клубный чемпионат мира']],
+    ['клубный чемпионат мира', ['fifa club world cup']],
+    ['uefa champions league', ['champions league', 'лига чемпионов уефа']],
+    ['champions league', ['uefa champions league', 'лига чемпионов уефа']],
+  ]);
+
+  const aliases = aliasMap.get(normalized) || [];
+  for (const alias of aliases) {
+    const clean = normalizeLeagueName(alias);
+    if (clean) variants.add(clean);
+  }
+
+  return [...variants];
+}
+
+function collectItemLeagueNames(item = {}) {
+  const names = new Set();
+  const candidates = [item?.league, item?.league_name, item?.league_name_en, item?.league_display];
+
+  for (const candidate of candidates) {
+    for (const variant of expandLeagueAliases(candidate)) {
+      names.add(variant);
+    }
+  }
+
+  return names;
 }
 
 function buildFavoriteLeagueMap(favoriteSports = []) {
@@ -227,7 +267,7 @@ function buildFavoriteLeagueMap(favoriteSports = []) {
     }
 
     const leagues = Array.isArray(sport?.leagues)
-      ? sport.leagues.map(normalizeLeagueName).filter(Boolean)
+      ? sport.leagues.flatMap(expandLeagueAliases).filter(Boolean)
       : [];
 
     entries.set(sportId, new Set(leagues));
@@ -245,7 +285,12 @@ function filterItemsByFavoriteLeagues(items = [], favoriteSports = []) {
       return true;
     }
 
-    return selectedLeagues.has(normalizeLeagueName(item?.league));
+    const itemLeagueNames = collectItemLeagueNames(item);
+    for (const name of itemLeagueNames) {
+      if (selectedLeagues.has(name)) return true;
+    }
+
+    return false;
   });
 }
 
@@ -707,6 +752,8 @@ async function loadRecommendationsFromApi({ apiLoader, popularBetsLoader, riskBe
         sport_name: sportInfo.sport_name,
         sportSlug: m.sportSlug,
         match: homeName + ' — ' + awayName,
+        league_name: leagueName,
+        league_display: countryName ? (countryName + ': ' + leagueName) : leagueName,
         league: countryName ? (countryName + ': ' + leagueName) : leagueName,
         starts_at: new Date(m.matchDate).toISOString(),
         main_thought: bets[0] ? bets[0].forecast : 'Прогноз',
@@ -963,6 +1010,7 @@ module.exports = {
   FALLBACK_SPORT_PRIORITY,
   FALLBACK_TOP_MATCHES,
   betConfidenceFromSocialProof,
+  filterItemsByFavoriteLeagues,
   getRecommendations,
   invalidateRecommendationsCache,
   loadLiveRecommendations,

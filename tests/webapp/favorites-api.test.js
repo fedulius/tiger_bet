@@ -76,7 +76,7 @@ test('GET /favorites returns DB-backed favorites with per-sport league settings'
           sport_url: 'soccer',
           leagues: ['Premier League'],
           all_leagues: false,
-          available_leagues: ['Premier League', 'La Liga', 'Serie A', 'Bundesliga', 'Ligue 1', 'Champions League'],
+          available_leagues: ['Premier League', 'La Liga', 'Serie A', 'Bundesliga', 'Ligue 1', 'Champions League', 'World Cup', 'FIFA Club World Cup'],
           leagues_summary: 'Premier League',
         },
         {
@@ -95,7 +95,7 @@ test('GET /favorites returns DB-backed favorites with per-sport league settings'
         { sport_name: 'Теннис', sport_url: 'tennis' },
       ],
       leagues_catalog: {
-        'Футбол': ['Premier League', 'La Liga', 'Serie A', 'Bundesliga', 'Ligue 1', 'Champions League'],
+        'Футбол': ['Premier League', 'La Liga', 'Serie A', 'Bundesliga', 'Ligue 1', 'Champions League', 'World Cup', 'FIFA Club World Cup'],
         'Хоккей': ['KHL', 'NHL', 'World Championship'],
         'Теннис': ['ATP', 'WTA', 'Challenger'],
       },
@@ -158,7 +158,7 @@ test('PUT /favorites replaces user favorites in DB and stores per-sport leagues'
           sport_url: 'soccer',
           leagues: ['Premier League'],
           all_leagues: false,
-          available_leagues: ['Premier League', 'La Liga', 'Serie A', 'Bundesliga', 'Ligue 1', 'Champions League'],
+          available_leagues: ['Premier League', 'La Liga', 'Serie A', 'Bundesliga', 'Ligue 1', 'Champions League', 'World Cup', 'FIFA Club World Cup'],
           leagues_summary: 'Premier League',
         },
         {

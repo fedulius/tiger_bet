@@ -8,6 +8,7 @@ process.env.NODE_ENV = 'test';
 
 const { buildApp } = require('../../server/app');
 const { buildTestApp, createFakePg, makeAuthHeaders } = require('./testHelpers');
+const { filterItemsByFavoriteLeagues } = require('../../webapp/services/recommendationService');
 
 function withTempFavoritesFile(contents = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tiger-bet-recommendations-'));
@@ -45,6 +46,30 @@ function makeFakeRedis({ store = {} } = {}) {
     },
   };
 }
+
+test('filterItemsByFavoriteLeagues matches World Cup aliases and ignores country prefix', () => {
+  const items = [
+    {
+      sport_id: 1,
+      league: 'Мир: Чемпионат мира',
+      league_name: 'Чемпионат мира',
+      match: 'Австралия — Египет',
+    },
+    {
+      sport_id: 1,
+      league: 'Эстония: Премиум Лига',
+      league_name: 'Премиум Лига',
+      match: 'Нымме Юнайтед — Нымме Калью',
+    },
+  ];
+
+  const filtered = filterItemsByFavoriteLeagues(items, [
+    { sport_id: 1, leagues: ['World Cup'] },
+  ]);
+
+  assert.equal(filtered.length, 1);
+  assert.equal(filtered[0].match, 'Австралия — Египет');
+});
 
 test('GET /recommendations returns favorite-based items when user has favorite sports', async () => {
   const cleanup = withTempFavoritesFile();

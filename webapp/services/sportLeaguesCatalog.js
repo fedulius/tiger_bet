@@ -1,5 +1,5 @@
 const SPORT_LEAGUES_CATALOG = {
-  football: ['Premier League', 'La Liga', 'Serie A', 'Bundesliga', 'Ligue 1', 'Champions League'],
+  football: ['Premier League', 'La Liga', 'Serie A', 'Bundesliga', 'Ligue 1', 'Champions League', 'World Cup', 'FIFA Club World Cup'],
   hockey: ['KHL', 'NHL', 'World Championship'],
   tennis: ['ATP', 'WTA', 'Challenger'],
   basketball: ['NBA', 'EuroLeague', 'VTB United League'],
