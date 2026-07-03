@@ -90,6 +90,10 @@ export function getHomeMatches() {
   return getJson('/home');
 }
 
+export function getDailyPicks() {
+  return getJson('/home/daily-picks');
+}
+
 export async function fetchJSON(url, options = {}) {
   const hasBody = options.body != null;
   const headers = buildHeaders({

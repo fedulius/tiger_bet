@@ -39,6 +39,9 @@ function makeGenResult(overrides = {}) {
       headline: 'El Clásico preview',
       brief: 'Real Madrid are heavy favourites.',
       risk_note: 'High odds variance.',
+      recommended_bets: [
+        { type: 'one_x_two', outcome: 'w1', label: 'Real Madrid win', rate: 1.65, reason: 'Strong home record.' },
+      ],
     },
     model_name: 'gpt-4o-mini',
     prompt_version: 'ai-brief-v1',
@@ -104,9 +107,13 @@ describe('analyzeMatches — happy path', () => {
     assert.equal(snap.status, 'ready');
     assert.equal(snap.source_mode, 'full');
     assert.equal(snap.source_hash, 'abc123');
+    assert.deepEqual(snap.source_payload, makeSourcePayload());
     assert.equal(snap.headline, 'El Clásico preview');
     assert.equal(snap.brief, 'Real Madrid are heavy favourites.');
     assert.equal(snap.risk_note, 'High odds variance.');
+    assert.ok(Array.isArray(snap.recommended_bets), 'recommended_bets should be an array');
+    assert.equal(snap.recommended_bets.length, 1);
+    assert.equal(snap.recommended_bets[0].outcome, 'w1');
     assert.ok(snap.generated_at);
   });
 });

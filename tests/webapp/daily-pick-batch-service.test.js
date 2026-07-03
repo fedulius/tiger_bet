@@ -4,6 +4,23 @@ const assert = require('node:assert/strict');
 const { runDailyPickBatch } = require('../../webapp/services/dailyPickBatchService');
 const { createMemoryStore } = require('../../webapp/services/dailyPickStore');
 
+function createFakePg({ systemId = 1, sportId = 10, tournamentId = 100, sourceId = 'src-1' } = {}) {
+  const calls = [];
+  return {
+    calls,
+    async connection(sql, params) {
+      calls.push({ sql, params });
+      if (/external\.system/.test(sql)) return systemId != null ? [{ system_id: systemId }] : [];
+      if (/public\.sport/.test(sql)) return sportId != null ? [{ sport_id: sportId }] : [];
+      if (/public_tournament/.test(sql)) return tournamentId != null ? [{ tournament_id: tournamentId }] : [];
+      if (/match_create/.test(sql)) return [{ id: 'db-match-1' }];
+      if (/match_source_create/.test(sql)) return sourceId != null ? [{ id: sourceId }] : [];
+      if (/match_analysis_create/.test(sql)) return [{ id: 'db-analysis-1' }];
+      return [];
+    },
+  };
+}
+
 const TODAY = '2026-07-02';
 const TOMORROW = '2026-07-03';
 
@@ -329,4 +346,154 @@ test('default analysis path: batch uses analyzeMatches when analysisLoader is om
   assert.equal(store.calls.upsertMatchSnapshot.length, 1);
   assert.equal(store.calls.upsertMatchSnapshot[0].status, 'ready');
   assert.equal(store.calls.upsertMatchSnapshot[0].headline, 'Daily pick headline');
+  assert.deepEqual(store.calls.upsertMatchSnapshot[0].source_payload, {
+    match_id: 'm-default',
+    match_slug: 'team-a-vs-team-b',
+    source_mode: 'full',
+    source_hash: 'hash-default',
+  });
+});
+
+// --- DB persistence via default analysis path ---
+
+test('pg happy path: default analysis path persists to DB when sourceBuilder/generator are used', async () => {
+  const store = trackingStore(createMemoryStore());
+  const pg = createFakePg();
+  const users = [{ id: 1 }];
+
+  const candidate = {
+    ...makeCandidate({ id: 'db-default-m1', date: TODAY }),
+    match_slug: 'db-default-m1',
+    sport_slug: 'soccer',
+    external_league_id: '42',
+  };
+
+  const candidateLoader = async ({ targetDate }) => targetDate === TODAY ? [candidate] : [];
+  const sourceBuilder = async (match) => ({
+    match_id: match.match_id,
+    match_slug: match.match_slug,
+    source_mode: 'full',
+    source_hash: 'hash-default-db',
+  });
+  const generator = async () => ({
+    status: 'ready',
+    output: {
+      headline: 'DB default headline',
+      brief: 'DB default brief',
+      risk_note: 'DB default risk',
+      recommended_bets: [],
+    },
+    model_name: 'test-model',
+    prompt_version: 'daily-pick-v1',
+  });
+
+  const summary = await runDailyPickBatch({
+    store,
+    pg,
+    users,
+    todayDate: TODAY,
+    tomorrowDate: TOMORROW,
+    candidateLoader,
+    sourceBuilder,
+    generator,
+    modelName: 'test-model',
+    promptVersion: 'daily-pick-v1',
+  });
+
+  assert.equal(summary.snapshots_created, 1);
+  const sqlCalls = pg.calls.map(c => c.sql);
+  assert.ok(sqlCalls.some(s => /match_create/.test(s)), 'should call match_create');
+  assert.ok(sqlCalls.some(s => /match_source_create/.test(s)), 'should call match_source_create');
+  assert.ok(sqlCalls.some(s => /match_analysis_create/.test(s)), 'should call match_analysis_create');
+});
+
+// --- DB persistence: happy path ---
+
+test('pg happy path: persistBundleSnapshot and persistAnalysisSnapshot called when pg + source_payload present', async () => {
+  const store = trackingStore(createMemoryStore());
+  const pg = createFakePg();
+  const users = [{ id: 1 }];
+
+  const candidate = {
+    ...makeCandidate({ id: 'db-m1', date: TODAY }),
+    sport_slug: 'football',
+    external_league_id: '42',
+  };
+
+  const candidateLoader = async ({ targetDate }) => targetDate === TODAY ? [candidate] : [];
+  const sourcePayload = { source_mode: 'full', source_hash: 'hash-db-1' };
+  const analysisLoader = async ({ uniqueMatchIds }) =>
+    uniqueMatchIds.map(id => ({ match_id: id, status: 'ready', source_payload: sourcePayload }));
+
+  const summary = await runDailyPickBatch({
+    store, users, todayDate: TODAY, tomorrowDate: TOMORROW, candidateLoader, analysisLoader, pg,
+  });
+
+  assert.equal(summary.snapshots_created, 1);
+  assert.equal(store.calls.upsertMatchSnapshot.length, 1);
+
+  const sqlCalls = pg.calls.map(c => c.sql);
+  assert.ok(sqlCalls.some(s => /external\.system/.test(s)), 'should resolve systemId');
+  assert.ok(sqlCalls.some(s => /public\.sport/.test(s)), 'should resolve sportId');
+  assert.ok(sqlCalls.some(s => /public_tournament/.test(s)), 'should resolve tournamentId');
+  assert.ok(sqlCalls.some(s => /match_create/.test(s)), 'should call match_create');
+  assert.ok(sqlCalls.some(s => /match_source_create/.test(s)), 'should call match_source_create');
+  assert.ok(sqlCalls.some(s => /match_analysis_create/.test(s)), 'should call match_analysis_create');
+});
+
+// --- DB persistence: skip when systemId unresolved ---
+
+test('pg skip: DB persistence skipped when systemId resolves null', async () => {
+  const store = trackingStore(createMemoryStore());
+  const pg = createFakePg({ systemId: null });
+  const users = [{ id: 1 }];
+
+  const candidate = {
+    ...makeCandidate({ id: 'db-m2', date: TODAY }),
+    sport_slug: 'football',
+    external_league_id: '42',
+  };
+
+  const candidateLoader = async ({ targetDate }) => targetDate === TODAY ? [candidate] : [];
+  const sourcePayload = { source_mode: 'full', source_hash: 'hash-db-2' };
+  const analysisLoader = async ({ uniqueMatchIds }) =>
+    uniqueMatchIds.map(id => ({ match_id: id, status: 'ready', source_payload: sourcePayload }));
+
+  const summary = await runDailyPickBatch({
+    store, users, todayDate: TODAY, tomorrowDate: TOMORROW, candidateLoader, analysisLoader, pg,
+  });
+
+  assert.equal(summary.snapshots_created, 1, 'in-memory snapshot still created');
+  assert.equal(store.calls.upsertMatchSnapshot.length, 1);
+
+  const sqlCalls = pg.calls.map(c => c.sql);
+  assert.ok(sqlCalls.some(s => /external\.system/.test(s)), 'should try to resolve systemId');
+  assert.ok(!sqlCalls.some(s => /match_create/.test(s)), 'should NOT call match_create when systemId missing');
+  assert.ok(!sqlCalls.some(s => /match_analysis_create/.test(s)), 'should NOT call match_analysis_create when systemId missing');
+});
+
+// --- DB persistence: skip when source_payload missing ---
+
+test('pg skip: DB persistence skipped when source_payload absent from snapshot', async () => {
+  const store = trackingStore(createMemoryStore());
+  const pg = createFakePg();
+  const users = [{ id: 1 }];
+
+  const candidate = {
+    ...makeCandidate({ id: 'db-m3', date: TODAY }),
+    sport_slug: 'football',
+    external_league_id: '42',
+  };
+
+  const candidateLoader = async ({ targetDate }) => targetDate === TODAY ? [candidate] : [];
+  // No source_payload on snapshot
+  const analysisLoader = async ({ uniqueMatchIds }) =>
+    uniqueMatchIds.map(id => ({ match_id: id, status: 'ready' }));
+
+  const summary = await runDailyPickBatch({
+    store, users, todayDate: TODAY, tomorrowDate: TOMORROW, candidateLoader, analysisLoader, pg,
+  });
+
+  assert.equal(summary.snapshots_created, 1, 'in-memory snapshot still created');
+  assert.equal(pg.calls.length, 0, 'pg should not be called when source_payload is absent');
 });

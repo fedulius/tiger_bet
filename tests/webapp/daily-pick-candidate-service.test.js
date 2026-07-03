@@ -114,6 +114,17 @@ test('normalizeCandidate: league_id, league_slug, league_label from league objec
   assert.equal(c.league_id, 5);
   assert.equal(c.league_slug, 'premier-league');
   assert.equal(c.league_label, 'Premier League');
+  assert.equal(c.external_league_id, '5');
+});
+
+
+test('normalizeCandidate: preserves string external league id while numeric league_id stays null', () => {
+  const c = normalizeCandidate(makeRawMatch({
+    league: { id: 'ps-4842-cct-south-america-series-3', name: 'CCT South America Series 3', slug: 'cct-south-america-series-3-' },
+  }));
+  assert.equal(c.league_id, null);
+  assert.equal(c.external_league_id, 'ps-4842-cct-south-america-series-3');
+  assert.equal(c.league_slug, 'cct-south-america-series-3-');
 });
 
 test('normalizeCandidate: league_label from string league, ids null', () => {

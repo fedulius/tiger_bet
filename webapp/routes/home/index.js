@@ -1,5 +1,6 @@
 const SSTATS_BASE = 'https://api.sstats.net';
 const { resolveLeague, resolveRound, resolveTeamName, resolveTeamCode } = require('../../services/locale');
+const { getDailyPicksFeed } = require('../../services/dailyPickReadService');
 
 // ── Cache ──────────────────────────────────────────────────
 // In-memory cache, shared across ALL users.
@@ -141,6 +142,8 @@ async function fetchDay(dayType, leagueIds, dateStr, ended) {
 
 // ── Route ──────────────────────────────────────────────────
 async function homeRoutes(fastify) {
+  fastify.get('/daily-picks', async () => getDailyPicksFeed(fastify.pg));
+
   fastify.get('/', async (request) => {
     const userId = Number(request.user?.userId);
     if (!Number.isFinite(userId)) {

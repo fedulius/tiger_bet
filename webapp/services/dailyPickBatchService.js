@@ -2,6 +2,8 @@
 
 const { buildUserSelections } = require('./dailyPickSelectionService');
 const { analyzeMatches } = require('./dailyPickAnalysisService');
+const { resolveDbContextForCandidate } = require('./dailyPickMappingService');
+const { persistBundleSnapshot, persistAnalysisSnapshot } = require('./dailyPickPersistenceService');
 
 function normalizeSnapshots(analysisResult) {
   return Array.isArray(analysisResult)
@@ -9,6 +11,17 @@ function normalizeSnapshots(analysisResult) {
     : analysisResult instanceof Map
       ? [...analysisResult.values()]
       : [];
+}
+
+function findCandidateForSnapshot(matchId, candidatesByUserId) {
+  const id = String(matchId);
+  for (const candidates of Object.values(candidatesByUserId)) {
+    if (!Array.isArray(candidates)) continue;
+    for (const c of candidates) {
+      if (String(c.match_id || c.id) === id) return c;
+    }
+  }
+  return null;
 }
 
 async function runDailyPickBatch({
@@ -22,6 +35,7 @@ async function runDailyPickBatch({
   generator,
   modelName,
   promptVersion,
+  pg,
 }) {
   // 1. Resolve users (array or async loader)
   const resolvedUsers = typeof users === 'function' ? await users() : users;
@@ -76,6 +90,24 @@ async function runDailyPickBatch({
 
     // 6. Persist new snapshots
     for (const snapshot of newSnapshots) {
+      if (pg && snapshot.source_payload) {
+        const candidate = findCandidateForSnapshot(snapshot.match_id, candidatesByUserId);
+        if (candidate) {
+          try {
+            const { systemId, sportId, tournamentId } = await resolveDbContextForCandidate(pg, { candidate });
+            if (systemId != null && sportId != null && tournamentId != null) {
+              const { sourceId } = await persistBundleSnapshot(pg, {
+                systemId, sportId, tournamentId, candidate, sourcePayload: snapshot.source_payload,
+              });
+              if (sourceId != null) {
+                await persistAnalysisSnapshot(pg, { matchSourceId: sourceId, snapshot });
+              }
+            }
+          } catch (_) {
+            // skip silently
+          }
+        }
+      }
       await store.upsertMatchSnapshot(snapshot);
       snapshots_created++;
     }

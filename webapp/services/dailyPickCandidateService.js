@@ -15,12 +15,15 @@ function toMoscowDateStr(startsAtRaw) {
 
 function extractLeague(match) {
   const league = match.league;
-  if (!league) return { league_id: null, league_slug: null, league_label: '' };
-  if (typeof league === 'string') return { league_id: null, league_slug: null, league_label: league };
+  if (!league) return { league_id: null, league_slug: null, league_label: '', external_league_id: null };
+  if (typeof league === 'string') return { league_id: null, league_slug: null, league_label: league, external_league_id: null };
+  const rawId = league.id;
+  const numericId = rawId != null ? Number(rawId) : null;
   return {
-    league_id: league.id != null ? Number(league.id) : null,
+    league_id: Number.isFinite(numericId) ? numericId : null,
     league_slug: league.slug || null,
     league_label: league.name || '',
+    external_league_id: rawId != null ? String(rawId) : null,
   };
 }
 
@@ -60,7 +63,7 @@ function normalizeCandidate(match) {
   const startsAtTs = Date.parse(startsAtRaw);
   const starts_at = Number.isFinite(startsAtTs) ? new Date(startsAtTs).toISOString() : '';
 
-  const { league_id, league_slug, league_label } = extractLeague(match);
+  const { league_id, league_slug, league_label, external_league_id } = extractLeague(match);
 
   const home_team = (match.homeTeam && match.homeTeam.name) || match.home_team || '';
   const away_team = (match.awayTeam && match.awayTeam.name) || match.away_team || '';
@@ -84,6 +87,7 @@ function normalizeCandidate(match) {
     league_id,
     league_slug,
     league_label,
+    external_league_id,
     home_team,
     away_team,
     odds,
