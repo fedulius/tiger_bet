@@ -1,8 +1,37 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, getRecommendations } from '../lib/api.js';
+import { auth, getDailyPicks, getRecommendations } from '../lib/api.js';
 import { formatMoscowDateTime } from '../lib/format.js';
 import { formatRelativeUpdatedAt } from '../lib/recommendations.js';
+
+function buildDailyPickItems(feed) {
+  const slots = [feed?.today, feed?.tomorrow].filter(Boolean);
+  return slots.map((slot, index) => {
+    const bets = Array.isArray(slot.recommended_bets) ? slot.recommended_bets.slice(0, 3) : [];
+    const primaryBet = slot.primary_bet || bets[0] || null;
+    return {
+      id: slot.id || `${slot.slot_date || index}:${slot.match_id || index}`,
+      match_id: slot.match_id,
+      match_slug: slot.match_slug,
+      match: slot.match,
+      sport_name: slot.sport_name,
+      league: slot.league,
+      starts_at: slot.starts_at,
+      bets: bets.map((bet) => ({
+        forecast: bet.forecast || bet.selection || bet.market || slot.headline || 'Прогноз',
+        coeff: bet.odds ?? bet.coeff ?? null,
+        risk_label: bet.risk_label || 'low',
+      })),
+      ai_brief: {
+        headline: slot.headline || (slot.slot_date === feed?.today_date ? 'Прогноз на сегодня' : 'Прогноз на завтра'),
+        brief: slot.brief || slot.risk_note || '',
+      },
+      _dailyPick: true,
+      _slotLabel: slot.slot_date,
+      _primaryForecast: primaryBet?.forecast || primaryBet?.selection || primaryBet?.market || '',
+    };
+  });
+}
 
 function RecCard({ rec, onClick }) {
   const bets = Array.isArray(rec.bets) ? rec.bets.slice(0, 3) : [];
@@ -58,6 +87,7 @@ function RecCard({ rec, onClick }) {
 export function RecommendationsPage() {
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
+  const [dailyPickItems, setDailyPickItems] = useState([]);
   const [updatedAt, setUpdatedAt] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -68,10 +98,14 @@ export function RecommendationsPage() {
     async function load() {
       try {
         await auth();
-        const data = await getRecommendations();
+        const [recommendations, dailyPicks] = await Promise.all([
+          getRecommendations(),
+          getDailyPicks(),
+        ]);
         if (!cancelled) {
-          setItems(data.items || []);
-          setUpdatedAt(data.updated_at || '');
+          setItems(recommendations.items || []);
+          setDailyPickItems(buildDailyPickItems(dailyPicks));
+          setUpdatedAt(dailyPicks?.updated_at || recommendations.updated_at || '');
           setLoading(false);
         }
       } catch (err) {
@@ -93,13 +127,15 @@ export function RecommendationsPage() {
     }
   };
 
+  const hasAnyItems = dailyPickItems.length > 0 || items.length > 0;
+
   return (
     <>
       <div className="page-header">
         <div>
           <div className="page-title">Прогнозы</div>
           <div className="page-subtitle">
-            {updatedAt ? formatRelativeUpdatedAt(updatedAt) : `Загружено ${items.length} матчей`}
+            {updatedAt ? formatRelativeUpdatedAt(updatedAt) : `Загружено ${items.length + dailyPickItems.length} прогнозов`}
           </div>
         </div>
       </div>
@@ -112,13 +148,35 @@ export function RecommendationsPage() {
         <div style={{ padding: '40px', textAlign: 'center', color: 'var(--red)' }}>{error}</div>
       )}
 
-      {!loading && !error && items.length === 0 && (
-        <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-2)' }}>Нет рекомендаций</div>
+      {!loading && !error && dailyPickItems.length > 0 && (
+        <div className="section-header" style={{ marginTop: 0 }}>
+          <div>
+            <div className="section-title">Daily picks</div>
+            <div className="section-subtitle">Прогнозы на сегодня и завтра</div>
+          </div>
+        </div>
       )}
 
-      {items.map((rec) => (
+      {!loading && !error && dailyPickItems.map((rec) => (
+        <RecCard key={rec.id} rec={rec} onClick={() => openMatch(rec)} />
+      ))}
+
+      {!loading && !error && items.length > 0 && (
+        <div className="section-header" style={{ marginTop: dailyPickItems.length > 0 ? 8 : 0 }}>
+          <div>
+            <div className="section-title">Лента рекомендаций</div>
+            <div className="section-subtitle">Общая подборка по матчам</div>
+          </div>
+        </div>
+      )}
+
+      {!loading && !error && items.map((rec) => (
         <RecCard key={rec.id || rec.match_slug} rec={rec} onClick={() => openMatch(rec)} />
       ))}
+
+      {!loading && !error && !hasAnyItems && (
+        <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-2)' }}>Нет прогнозов</div>
+      )}
     </>
   );
 }
