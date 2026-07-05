@@ -316,6 +316,7 @@ test('generateAiBrief: returns ready with normalized output on valid response', 
     headline: VALID_OUTPUT.headline,
     brief: VALID_OUTPUT.brief,
     risk_note: VALID_OUTPUT.risk_note,
+    recommended_bets: [],
   });
   assert.equal(result.model_name, 'gpt-4o-mini');
   assert.equal(result.prompt_version, 'v1');
@@ -601,5 +602,166 @@ test('normalizeAiBriefOutput: preserves non-empty risk_note', () => {
 
 test('normalizeAiBriefOutput: result has exactly the expected keys', () => {
   const result = normalizeAiBriefOutput(VALID_OUTPUT);
-  assert.deepEqual(Object.keys(result).sort(), ['brief', 'headline', 'risk_note']);
+  assert.deepEqual(Object.keys(result).sort(), ['brief', 'headline', 'recommended_bets', 'risk_note']);
+});
+
+// --- recommended_bets: validateAiBriefOutput ---
+
+test('validateAiBriefOutput: valid when recommended_bets is absent', () => {
+  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null });
+  assert.equal(result.valid, true);
+});
+
+test('validateAiBriefOutput: valid when recommended_bets is empty array', () => {
+  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: [] });
+  assert.equal(result.valid, true);
+});
+
+test('validateAiBriefOutput: valid when recommended_bets has a complete item', () => {
+  const bets = [{ type: 'one_x_two', outcome: 'w1', label: 'Победа хозяев', rate: 1.72, reason: 'Фаворит матча.' }];
+  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: bets });
+  assert.equal(result.valid, true);
+});
+
+test('validateAiBriefOutput: valid when recommended_bets item includes confidence', () => {
+  const bets = [{ type: 'total', outcome: 'over', label: 'Тотал больше 2.5', rate: 1.85, reason: 'Обе команды атакуют.', confidence: 0.75 }];
+  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: bets });
+  assert.equal(result.valid, true);
+});
+
+test('validateAiBriefOutput: invalid when recommended_bets is not an array', () => {
+  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: 'not-array' });
+  assert.equal(result.valid, false);
+  assert.equal(result.reason, 'invalid_recommended_bets_type');
+});
+
+test('validateAiBriefOutput: invalid when recommended_bets item is not an object', () => {
+  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: ['bad'] });
+  assert.equal(result.valid, false);
+  assert.equal(result.reason, 'invalid_recommended_bet_item');
+});
+
+test('validateAiBriefOutput: invalid when recommended_bets item is an array', () => {
+  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: [[]] });
+  assert.equal(result.valid, false);
+  assert.equal(result.reason, 'invalid_recommended_bet_item');
+});
+
+test('validateAiBriefOutput: invalid when recommended_bets item missing type', () => {
+  const bet = { outcome: 'w1', label: 'L', rate: 1.5, reason: 'R' };
+  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: [bet] });
+  assert.equal(result.valid, false);
+  assert.equal(result.reason, 'invalid_recommended_bet_item');
+});
+
+test('validateAiBriefOutput: invalid when recommended_bets item missing outcome', () => {
+  const bet = { type: 'one_x_two', label: 'L', rate: 1.5, reason: 'R' };
+  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: [bet] });
+  assert.equal(result.valid, false);
+  assert.equal(result.reason, 'invalid_recommended_bet_item');
+});
+
+test('validateAiBriefOutput: invalid when recommended_bets item missing label', () => {
+  const bet = { type: 'one_x_two', outcome: 'w1', rate: 1.5, reason: 'R' };
+  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: [bet] });
+  assert.equal(result.valid, false);
+  assert.equal(result.reason, 'invalid_recommended_bet_item');
+});
+
+test('validateAiBriefOutput: invalid when recommended_bets item rate is not a number', () => {
+  const bet = { type: 'one_x_two', outcome: 'w1', label: 'L', rate: '1.5', reason: 'R' };
+  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: [bet] });
+  assert.equal(result.valid, false);
+  assert.equal(result.reason, 'invalid_recommended_bet_item');
+});
+
+test('validateAiBriefOutput: invalid when recommended_bets item missing reason', () => {
+  const bet = { type: 'one_x_two', outcome: 'w1', label: 'L', rate: 1.5 };
+  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: [bet] });
+  assert.equal(result.valid, false);
+  assert.equal(result.reason, 'invalid_recommended_bet_item');
+});
+
+test('validateAiBriefOutput: invalid when recommended_bets item confidence is not a number', () => {
+  const bet = { type: 'one_x_two', outcome: 'w1', label: 'L', rate: 1.5, reason: 'R', confidence: 'high' };
+  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: [bet] });
+  assert.equal(result.valid, false);
+  assert.equal(result.reason, 'invalid_recommended_bet_item');
+});
+
+// --- recommended_bets: generateAiBrief round-trip ---
+
+test('generateAiBrief: ready output includes recommended_bets from LLM response', async () => {
+  const outputWithBets = {
+    ...VALID_OUTPUT,
+    recommended_bets: [
+      { type: 'one_x_two', outcome: 'w1', label: 'Победа хозяев', rate: 1.72, reason: 'Фаворит матча.' },
+    ],
+  };
+  const result = await generateAiBrief({
+    sourcePayload: SOURCE_PAYLOAD_FULL,
+    modelName: 'gpt-4o-mini',
+    promptVersion: 'v1',
+    provider: makeProvider(JSON.stringify(outputWithBets)),
+    promptPackDir: makePromptPackDir(),
+  });
+
+  assert.equal(result.status, 'ready');
+  assert.equal(result.output.recommended_bets.length, 1);
+  assert.equal(result.output.recommended_bets[0].outcome, 'w1');
+  assert.equal(result.output.recommended_bets[0].rate, 1.72);
+});
+
+test('generateAiBrief: ready output defaults recommended_bets to empty array when absent', async () => {
+  const result = await generateAiBrief({
+    sourcePayload: SOURCE_PAYLOAD_FULL,
+    modelName: 'gpt-4o-mini',
+    promptVersion: 'v1',
+    provider: makeProvider(JSON.stringify(VALID_OUTPUT)),
+    promptPackDir: makePromptPackDir(),
+  });
+
+  assert.equal(result.status, 'ready');
+  assert.deepEqual(result.output.recommended_bets, []);
+});
+
+test('generateAiBrief: fails when recommended_bets is not an array', async () => {
+  const bad = { ...VALID_OUTPUT, recommended_bets: 'not-array' };
+  const result = await generateAiBrief({
+    sourcePayload: SOURCE_PAYLOAD_FULL,
+    modelName: 'gpt-4o-mini',
+    promptVersion: 'v1',
+    provider: makeProvider(JSON.stringify(bad)),
+    promptPackDir: makePromptPackDir(),
+  });
+
+  assert.equal(result.status, 'failed');
+  assert.equal(result.error, 'invalid_recommended_bets_type');
+});
+
+test('generateAiBrief: fails when a recommended_bet item has wrong shape', async () => {
+  const bad = { ...VALID_OUTPUT, recommended_bets: [{ type: 'one_x_two', outcome: 'w1' }] };
+  const result = await generateAiBrief({
+    sourcePayload: SOURCE_PAYLOAD_FULL,
+    modelName: 'gpt-4o-mini',
+    promptVersion: 'v1',
+    provider: makeProvider(JSON.stringify(bad)),
+    promptPackDir: makePromptPackDir(),
+  });
+
+  assert.equal(result.status, 'failed');
+  assert.equal(result.error, 'invalid_recommended_bet_item');
+});
+
+// --- recommended_bets: normalizeAiBriefOutput ---
+
+test('normalizeAiBriefOutput: defaults recommended_bets to empty array when absent', () => {
+  const result = normalizeAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null });
+  assert.deepEqual(result.recommended_bets, []);
+});
+
+test('normalizeAiBriefOutput: passes through recommended_bets array', () => {
+  const bets = [{ type: 'total', outcome: 'over', label: 'ТБ 2.5', rate: 1.85, reason: 'Обе атакуют.' }];
+  const result = normalizeAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: bets });
+  assert.deepEqual(result.recommended_bets, bets);
 });

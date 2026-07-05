@@ -58,6 +58,35 @@ function validateAiBriefOutput(output) {
     return { valid: false, reason: 'risk_note_too_long' };
   }
 
+  if (output.recommended_bets !== undefined && output.recommended_bets !== null) {
+    if (!Array.isArray(output.recommended_bets)) {
+      return { valid: false, reason: 'invalid_recommended_bets_type' };
+    }
+    for (const bet of output.recommended_bets) {
+      if (!bet || typeof bet !== 'object' || Array.isArray(bet)) {
+        return { valid: false, reason: 'invalid_recommended_bet_item' };
+      }
+      if (typeof bet.type !== 'string' || !bet.type.trim()) {
+        return { valid: false, reason: 'invalid_recommended_bet_item' };
+      }
+      if (typeof bet.outcome !== 'string' || !bet.outcome.trim()) {
+        return { valid: false, reason: 'invalid_recommended_bet_item' };
+      }
+      if (typeof bet.label !== 'string' || !bet.label.trim()) {
+        return { valid: false, reason: 'invalid_recommended_bet_item' };
+      }
+      if (typeof bet.rate !== 'number') {
+        return { valid: false, reason: 'invalid_recommended_bet_item' };
+      }
+      if (typeof bet.reason !== 'string' || !bet.reason.trim()) {
+        return { valid: false, reason: 'invalid_recommended_bet_item' };
+      }
+      if (bet.confidence !== undefined && bet.confidence !== null && typeof bet.confidence !== 'number') {
+        return { valid: false, reason: 'invalid_recommended_bet_item' };
+      }
+    }
+  }
+
   return { valid: true };
 }
 
@@ -67,6 +96,7 @@ function normalizeAiBriefOutput(output) {
     headline: String(output.headline || '').trim(),
     brief: String(output.brief || '').trim(),
     risk_note: riskNote || null,
+    recommended_bets: Array.isArray(output.recommended_bets) ? output.recommended_bets : [],
   };
 }
 

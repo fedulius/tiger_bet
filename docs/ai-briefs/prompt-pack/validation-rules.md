@@ -6,6 +6,8 @@
 - `headline` and `brief` are non-empty trimmed strings.
 - Length limits are respected.
 - `risk_note` is either `string` or `null`.
+- `recommended_bets`, if present, is an array (empty array is allowed).
+- Each item in `recommended_bets` is an object with non-empty string fields `type`, `outcome`, `label`, `reason` and a numeric `rate`. Optional `confidence` must be a number if provided.
 
 ## Soft quality checks
 Если проваливаются, можно делать один retry с более жёсткой инструкцией.
