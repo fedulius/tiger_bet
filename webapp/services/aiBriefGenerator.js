@@ -91,7 +91,7 @@ function validateAiBriefOutput(output) {
   return { valid: true };
 }
 
-function normalizeAiBriefOutput(output) {
+function normalizeAiBriefOutput(output, sourcePayload) {
   const riskNote = output.risk_note != null ? String(output.risk_note).trim() : null;
   const bets = Array.isArray(output.recommended_bets) ? output.recommended_bets.map((b) => {
     let label = b.label || '';
@@ -114,16 +114,8 @@ function normalizeAiBriefOutput(output) {
     };
   }) : [];
 
-  // Fix duplicate bet types: group semantically similar markets together
-  if (bets.length > 1) {
-    const seenTypes = new Map(); // normalized_category -> index
-    const ALTERNATIVES = [
-      { type: 'total_over', outcome: 'over_2_5', label: 'Тотал больше 2.5', risk_label: 'medium' },
-      { type: 'both_to_score', outcome: 'yes', label: 'Обе забьют — да', risk_label: 'medium' },
-      { type: 'handicap', outcome: 'handicap_1_-1', label: 'Фора хозяев -1', risk_label: 'medium' },
-      { type: 'total_over', outcome: 'over_1_5', label: 'Тотал больше 1.5', risk_label: 'low' },
-    ];
-    // Map raw types to semantic categories
+  // Fix duplicate categories: replace with a real bet from source payload
+  if (bets.length > 1 && sourcePayload) {
     function betCategory(b) {
       const t = (b.type || '').toLowerCase();
       if (t === 'one_x_two' || t === 'match_qualify' || t === 'winner' || t === 'match_result') return 'winner';
@@ -131,20 +123,38 @@ function normalizeAiBriefOutput(output) {
       if (t.includes('both') || t.includes('btts') || t === 'both_to_score') return 'btts';
       if (t.includes('handicap')) return 'handicap';
       if (t === 'correct_score') return 'correct_score';
+      if (t === 'double_chance') return 'double_chance';
+      if (t.includes('corner')) return 'corner';
+      if (t.includes('yellow')) return 'yellow';
       return t;
     }
+
+    // Build pool of real bets from payload
+    const payloadBets = [
+      ...(sourcePayload.top_bets || []),
+      ...(sourcePayload.risk_bets || []),
+    ].filter(b => b.rate != null && b.label);
+
+    const usedCats = new Set(bets.map(betCategory));
     for (let i = bets.length - 1; i >= 0; i--) {
-      const b = bets[i];
-      const cat = betCategory(b);
-      if (seenTypes.has(cat)) {
-        // Duplicate — replace with an alternative from a different category
-        const usedCats = new Set([...seenTypes.keys()]);
-        const alt = ALTERNATIVES.find(a => !usedCats.has(betCategory(a)));
-        if (alt && b.rate != null) {
-          bets[i] = { ...b, ...alt, rate: b.rate, reason: b.reason };
+      const cat = betCategory(bets[i]);
+      const sameCatCount = bets.filter((x, j) => j !== i && betCategory(x) === cat).length;
+      if (sameCatCount > 0) {
+        // Find a real payload bet from a different category
+        const alt = payloadBets.find(pb => !usedCats.has(betCategory(pb)));
+        if (alt) {
+          usedCats.delete(cat);
+          bets[i] = {
+            ...bets[i],
+            type: alt.type,
+            outcome: alt.outcome,
+            label: alt.label,
+            rate: alt.rate,
+            risk_label: bets[i].risk_label,
+          };
+          usedCats.add(betCategory(bets[i]));
         }
       }
-      seenTypes.set(betCategory(bets[i]), i);
     }
   }
 
@@ -257,7 +267,7 @@ async function generateAiBrief({ sourcePayload, modelName, promptVersion, provid
     };
   }
 
-  const normalized = normalizeAiBriefOutput(parsed);
+  const normalized = normalizeAiBriefOutput(parsed, sourcePayload);
 
   return {
     status: 'ready',
