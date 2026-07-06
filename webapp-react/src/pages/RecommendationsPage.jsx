@@ -17,8 +17,8 @@ function buildDailyPickItems(feed) {
       league: slot.league,
       starts_at: slot.starts_at,
       bets: bets.map((bet) => ({
-        forecast: bet.forecast || bet.selection || bet.market || slot.headline || 'Прогноз',
-        coeff: bet.odds ?? bet.coeff ?? null,
+        forecast: bet.label || bet.forecast || bet.selection || bet.market || slot.headline || 'Прогноз',
+        coeff: bet.rate ?? bet.odds ?? bet.coeff ?? null,
         risk_label: bet.risk_label || 'low',
       })),
       ai_brief: {

@@ -72,7 +72,7 @@ function validateAiBriefOutput(output) {
       if (typeof bet.outcome !== 'string' || !bet.outcome.trim()) {
         return { valid: false, reason: 'invalid_recommended_bet_item' };
       }
-      if (typeof bet.label !== 'string' || !bet.label.trim()) {
+      if (bet.label != null && typeof bet.label !== 'string') {
         return { valid: false, reason: 'invalid_recommended_bet_item' };
       }
       if (typeof bet.rate !== 'number') {
@@ -81,9 +81,10 @@ function validateAiBriefOutput(output) {
       if (typeof bet.reason !== 'string' || !bet.reason.trim()) {
         return { valid: false, reason: 'invalid_recommended_bet_item' };
       }
-      if (bet.confidence !== undefined && bet.confidence !== null && typeof bet.confidence !== 'number') {
-        return { valid: false, reason: 'invalid_recommended_bet_item' };
+      if (bet.risk_label != null && !['low', 'medium', 'high'].includes(bet.risk_label)) {
+        return { valid: false, reason: 'invalid_risk_label' };
       }
+      // risk_label is optional — will be normalized to 'low' default
     }
   }
 
@@ -92,11 +93,16 @@ function validateAiBriefOutput(output) {
 
 function normalizeAiBriefOutput(output) {
   const riskNote = output.risk_note != null ? String(output.risk_note).trim() : null;
+  const bets = Array.isArray(output.recommended_bets) ? output.recommended_bets.map((b) => ({
+    ...b,
+    label: b.label || b.outcome || b.type || 'Ставка',
+    risk_label: b.risk_label || 'low',
+  })) : [];
   return {
     headline: String(output.headline || '').trim(),
     brief: String(output.brief || '').trim(),
     risk_note: riskNote || null,
-    recommended_bets: Array.isArray(output.recommended_bets) ? output.recommended_bets : [],
+    recommended_bets: bets,
   };
 }
 
