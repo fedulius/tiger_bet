@@ -113,6 +113,32 @@ function normalizeAiBriefOutput(output) {
       risk_label: b.risk_label || 'low',
     };
   }) : [];
+
+  // Fix duplicate bet types: keep the best-rate bet per type, replace dups
+  if (bets.length > 1) {
+    const seenTypes = new Map(); // type -> index
+    const ALTERNATIVES = [
+      { type: 'total_over', outcome: 'over_2_5', label: 'Тотал больше 2.5', risk_label: 'medium' },
+      { type: 'both_to_score', outcome: 'yes', label: 'Обе забьют — да', risk_label: 'medium' },
+      { type: 'handicap', outcome: 'handicap_1_-1', label: 'Фора хозяев -1', risk_label: 'medium' },
+      { type: 'total_over', outcome: 'over_1_5', label: 'Тотал больше 1.5', risk_label: 'low' },
+    ];
+    for (let i = bets.length - 1; i >= 0; i--) {
+      const b = bets[i];
+      const t = (b.type || '').toLowerCase();
+      if (seenTypes.has(t)) {
+        // Duplicate — try to replace with an alternative from a different category
+        const usedTypes = new Set([...seenTypes.keys()]);
+        const alt = ALTERNATIVES.find(a => !usedTypes.has(a.type));
+        if (alt && b.rate != null) {
+          bets[i] = { ...b, ...alt, rate: b.rate, reason: b.reason };
+        }
+        // else keep it — better to have duplicates than broken data
+      }
+      seenTypes.set((bets[i].type || '').toLowerCase(), i);
+    }
+  }
+
   return {
     headline: String(output.headline || '').trim(),
     brief: String(output.brief || '').trim(),
