@@ -389,4 +389,4 @@ async function runDailyPicks(pg, options = {}) {
   };
 }
 
-module.exports = { runDailyPicks, loadUsersWithFavorites, loadUserLeagueScope, buildSourcePayload };
+module.exports = { runDailyPicks, loadUsersWithFavorites, loadUserLeagueScope, buildSourcePayload, enrichPayloadWithSStatsData };
