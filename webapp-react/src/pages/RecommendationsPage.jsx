@@ -41,6 +41,9 @@ function RecCard({ rec, onClick }) {
     high: { label: 'Рискованный', dotClass: 'red' },
   };
 
+  const riskOrder = { low: 0, medium: 1, high: 2 };
+  const sortedBets = [...bets].sort((a, b) => (riskOrder[a.risk_label] ?? 1) - (riskOrder[b.risk_label] ?? 1));
+
   return (
     <div className="rec-card" onClick={onClick}>
       <div className="rec-card-top">
@@ -61,9 +64,9 @@ function RecCard({ rec, onClick }) {
         </div>
       )}
 
-      {bets.length > 0 && (
+      {sortedBets.length > 0 && (
         <div className="rec-bets">
-          {bets.map((bet, i) => {
+          {sortedBets.map((bet, i) => {
             const risk = riskMap[bet.risk_label] || riskMap.low;
             return (
               <button className="rec-bet" key={i} onClick={(e) => { e.stopPropagation(); onClick(); }}>
