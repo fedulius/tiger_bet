@@ -60,7 +60,7 @@ function RecCard({ rec, onClick }) {
             <span className="rec-ai-brief-dot" />
             {brief.headline || 'AI Прогноз'}
           </div>
-          <div className="rec-ai-brief-text">{brief.brief}</div>
+          <div className="rec-ai-brief-text truncated">{brief.brief}</div>
         </div>
       )}
 

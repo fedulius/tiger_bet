@@ -400,6 +400,13 @@ a {
   color: var(--text-2);
   line-height: 1.45;
 }
+.rec-ai-brief-text.truncated {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .rec-bets {
   display: flex;
