@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const MAX_HEADLINE_LENGTH = 200;
-const MAX_BRIEF_LENGTH = 2000;
+const MAX_BRIEF_LENGTH = 4000;
 const MAX_RISK_NOTE_LENGTH = 500;
 const DEFAULT_PROMPT_PACK_DIR = path.resolve(__dirname, '../../docs/ai-briefs/prompt-pack');
 const DEFAULT_PROMPT_VERSION = 'ai-brief-v1';
