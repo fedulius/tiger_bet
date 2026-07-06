@@ -93,11 +93,26 @@ function validateAiBriefOutput(output) {
 
 function normalizeAiBriefOutput(output) {
   const riskNote = output.risk_note != null ? String(output.risk_note).trim() : null;
-  const bets = Array.isArray(output.recommended_bets) ? output.recommended_bets.map((b) => ({
-    ...b,
-    label: b.label || b.outcome || b.type || 'Ставка',
-    risk_label: b.risk_label || 'low',
-  })) : [];
+  const bets = Array.isArray(output.recommended_bets) ? output.recommended_bets.map((b) => {
+    let label = b.label || '';
+    // Safety-net: translate codes to readable text
+    if (!label || /^(w1|w2|x)$/i.test(label.trim())) {
+      const code = label.trim().toLowerCase() || (b.outcome || '').toLowerCase();
+      const type = (b.type || '').toLowerCase();
+      if (code === 'w1') label = 'Победа хозяев';
+      else if (code === 'w2') label = 'Победа гостей';
+      else if (code === 'x') label = 'Ничья';
+      else if (type.includes('total') && type.includes('over')) label = 'Тотал больше';
+      else if (type.includes('total') && type.includes('under')) label = 'Тотал меньше';
+      else if (type.includes('both') || type.includes('btts')) label = 'Обе забьют';
+      else if (!label) label = b.outcome || b.type || 'Ставка';
+    }
+    return {
+      ...b,
+      label,
+      risk_label: b.risk_label || 'low',
+    };
+  }) : [];
   return {
     headline: String(output.headline || '').trim(),
     brief: String(output.brief || '').trim(),
