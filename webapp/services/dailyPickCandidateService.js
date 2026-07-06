@@ -126,6 +126,17 @@ function isInLeagueScope(match, userLeagueScope) {
 
   if (hasIds && matchLeagueId != null && leagueIds.some(lid => Number(lid) === matchLeagueId)) return true;
   if (hasSlugs && matchLeagueSlug && leagueSlugs.indexOf(matchLeagueSlug) !== -1) return true;
+
+  // Fallback: match by league display name (API name vs DB tournament name)
+  const matchLeagueName = leagueObj ? (leagueObj.name || '').toLowerCase().trim() : null;
+  if (hasSlugs && matchLeagueName) {
+    for (const slug of leagueSlugs) {
+      if (matchLeagueName === slug || matchLeagueName.includes(slug) || slug.includes(matchLeagueName)) {
+        return true;
+      }
+    }
+  }
+
   return false;
 }
 
@@ -149,7 +160,7 @@ function getCandidateMatchesForDate({ allMatches, userLeagueScope, targetDateMsk
     if (!match) continue;
     if (match.id == null && match.match_id == null) continue;
 
-    const startsAtRaw = match.starts_at || match.startsAt;
+    const startsAtRaw = match.starts_at || match.startsAt || match.matchDate;
     if (!startsAtRaw) continue;
 
     const startsAtTs = Date.parse(startsAtRaw);

@@ -38,6 +38,18 @@ async function resolveTournamentIdForCandidate(pg, { systemId, candidate }) {
     if (row) return row.tournament_id ?? null;
   }
 
+  // Fallback: match by league name directly against public.tournament
+  const leagueName = candidate.league_label;
+  if (leagueName) {
+    const [row] = await pg.connection(
+      `SELECT tournament_id FROM public.tournament
+       WHERE lower(tournament_name) = lower($1)
+          OR lower(tournament_name_en) = lower($1)`,
+      [leagueName],
+    );
+    if (row) return row.tournament_id ?? null;
+  }
+
   return null;
 }
 

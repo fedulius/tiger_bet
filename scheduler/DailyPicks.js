@@ -29,11 +29,14 @@ async function loadUserLeagueScope(pg, userId) {
   `, [userId]);
 
   const leagueIds = rows.map(r => Number(r.tournament_id)).filter(Number.isFinite);
-  const leagueNames = rows
-    .map(r => String(r.tournament_name_en || r.tournament_name || '').trim().toLowerCase())
-    .filter(Boolean);
+  const leagueNames = [];
+  for (const r of rows) {
+    if (r.tournament_name_en) leagueNames.push(String(r.tournament_name_en).trim().toLowerCase());
+    if (r.tournament_name) leagueNames.push(String(r.tournament_name).trim().toLowerCase());
+  }
+  const uniqueLeagueNames = [...new Set(leagueNames)].filter(Boolean);
 
-  return { leagueIds, leagueSlugs: leagueNames };
+  return { leagueIds, leagueSlugs: uniqueLeagueNames };
 }
 
 // ── Load candidates for a user + date ──────────────────────
@@ -229,14 +232,16 @@ async function runDailyPicks(pg, options = {}) {
   if (matchIds.length > 0) {
     const placeholders = matchIds.map((_, i) => `$${i + 1}`).join(', ');
     const existing = await pg.connection(
-      `SELECT ms.match_id FROM public.match_source ms
+      `SELECT pm.system_match_id FROM external.public_match pm
+       JOIN public.match_source ms ON ms.match_id = pm.match_id
        JOIN public.match_analysis ma ON ma.match_source_id = ms.match_source_id
-       WHERE ms.match_id IN (${placeholders})
+       WHERE pm.system_match_id IN (${placeholders})
+         AND pm.system_id = 3
          AND ma.analysis_status_id = (SELECT analysis_status_id FROM public.analysis_status WHERE analysis_status_name = 'ready')`,
       [...matchIds],
     ).catch(() => []);
     for (const row of existing) {
-      existingSnapshots.set(String(row.match_id), true);
+      existingSnapshots.set(String(row.system_match_id), true);
     }
   }
 
@@ -248,16 +253,15 @@ async function runDailyPicks(pg, options = {}) {
     const sourcePayload = await buildSourcePayload(match, popularBetsLoader, matchDetailLoader, riskBetsSelector);
     if (!sourcePayload || sourcePayload.source_mode === 'skip') continue;
 
-    // Resolve DB context
-    const candidate = normalizeCandidate(match);
-    const { systemId, sportId, tournamentId } = await resolveDbContextForCandidate(pg, { candidate });
+    // Resolve DB context (match is already normalized from getCandidateMatchesForDate)
+    const { systemId, sportId, tournamentId } = await resolveDbContextForCandidate(pg, { candidate: match });
     if (systemId == null || sportId == null || tournamentId == null) continue;
 
     // Persist match + source
     let sourceId;
     try {
       const result = await persistBundleSnapshot(pg, {
-        systemId, sportId, tournamentId, candidate, sourcePayload,
+        systemId, sportId, tournamentId, candidate: match, sourcePayload,
       });
       sourceId = result.sourceId;
     } catch (err) {
