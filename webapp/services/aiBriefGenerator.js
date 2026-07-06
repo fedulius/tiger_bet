@@ -92,7 +92,16 @@ function validateAiBriefOutput(output) {
 }
 
 function normalizeAiBriefOutput(output, sourcePayload) {
-  const riskNote = output.risk_note != null ? String(output.risk_note).trim() : null;
+  // Sanitize text: remove replacement characters and normalize unicode
+  function sanitizeText(text) {
+    if (!text) return text;
+    return String(text)
+      .replace(/\uFFFD/g, '') // remove replacement characters
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '') // remove control chars
+      .normalize('NFC');
+  }
+
+  const riskNote = output.risk_note != null ? sanitizeText(output.risk_note).trim() : null;
   const bets = Array.isArray(output.recommended_bets) ? output.recommended_bets.map((b) => {
     let label = b.label || '';
     // Safety-net: translate codes to readable text
@@ -175,8 +184,8 @@ function normalizeAiBriefOutput(output, sourcePayload) {
   }
 
   return {
-    headline: String(output.headline || '').trim(),
-    brief: String(output.brief || '').trim(),
+    headline: sanitizeText(output.headline || '').trim(),
+    brief: sanitizeText(output.brief || '').trim(),
     risk_note: riskNote || null,
     recommended_bets: bets,
   };
