@@ -154,48 +154,65 @@ async function buildSourcePayload(match, popularBetsLoader, matchDetailLoader, r
 }
 
 // ── Enrich payload with SStats data ────────────────────────
-async function enrichPayloadWithSStatsData(payload) {
+async function enrichPayloadWithSStatsData(payload, pg) {
   if (!sstatsApi.hasApiKey()) return payload;
   if (!payload || payload.sport_slug !== 'soccer') return payload;
 
   try {
-    // Extract team names from slug: "07-07-2026-usa-belgium" → "usa", "belgium"
     const slug = payload.match_slug || '';
-    const parts = slug.split('-').filter(p => !/^\d+$/.test(p) && p.length > 1);
-    if (parts.length < 2) return payload;
+    if (!slug) return payload;
 
-    // Try to find game in SStats (multiple search strategies)
-    let game = null;
-    const homeSearch = parts[parts.length - 2];
-    const awaySearch = parts[parts.length - 1];
+    // 1. Try to find SStats game ID from database
+    let sstatsGameId = null;
+    if (pg) {
+      const rows = await pg.connection(
+        'SELECT sstats_game_id FROM external.public_match WHERE system_match_slug = $1 AND system_id = 3 AND sstats_game_id IS NOT NULL LIMIT 1',
+        [slug],
+      ).catch(() => []);
+      if (rows.length && rows[0].sstats_game_id) {
+        sstatsGameId = rows[0].sstats_game_id;
+      }
+    }
 
-    // Strategy 1: Direct search by team names
-    game = await sstatsApi.findGameByTeams(homeSearch, awaySearch);
+    // 2. If not in DB, search by team names
+    if (!sstatsGameId) {
+      const parts = slug.split('-').filter(p => !/^\d+$/.test(p) && p.length > 1);
+      if (parts.length < 2) return payload;
 
-    // Strategy 2: Search WC games directly
-    if (!game) {
+      const homeSearch = parts[parts.length - 2];
+      const awaySearch = parts[parts.length - 1];
+
+      // Search WC games
       const wcGames = await sstatsApi.apiGet('/Games/list', {
         LeagueId: '1',
         Year: '2026',
         limit: '200',
         TimeZone: '3',
       });
+
       if (wcGames?.length) {
         for (const g of wcGames) {
           const home = (g.homeTeam?.name || '').toLowerCase();
           const away = (g.awayTeam?.name || '').toLowerCase();
           if (home.includes(homeSearch) && away.includes(awaySearch)) {
-            game = g;
+            sstatsGameId = g.id;
+            // Store in DB for future use
+            if (pg) {
+              await pg.connection(
+                'UPDATE external.public_match SET sstats_game_id = $1 WHERE system_match_slug = $2 AND system_id = 3',
+                [sstatsGameId, slug],
+              ).catch(() => {});
+            }
             break;
           }
         }
       }
     }
 
-    if (!game) return payload;
+    if (!sstatsGameId) return payload;
 
-    // Build full payload with lineups, form, statistics
-    const sstatsPayload = await sstatsApi.buildMatchPayload(game.id);
+    // 3. Build full payload with lineups, form, statistics
+    const sstatsPayload = await sstatsApi.buildMatchPayload(sstatsGameId);
     if (!sstatsPayload) return payload;
 
     return {
@@ -320,7 +337,7 @@ async function runDailyPicks(pg, options = {}) {
     if (!sourcePayload || sourcePayload.source_mode === 'skip') continue;
 
     // Enrich with SStats data (lineups, form, statistics)
-    const enrichedPayload = await enrichPayloadWithSStatsData(sourcePayload);
+    const enrichedPayload = await enrichPayloadWithSStatsData(sourcePayload, pg);
 
     // Resolve DB context (match is already normalized from getCandidateMatchesForDate)
     const { systemId, sportId, tournamentId } = await resolveDbContextForCandidate(pg, { candidate: match });
