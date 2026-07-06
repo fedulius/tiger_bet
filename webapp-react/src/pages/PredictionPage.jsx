@@ -98,7 +98,10 @@ export function PredictionPage() {
       {bets.length > 0 && (
         <div className="prediction-bets">
           <div className="prediction-bets-title">Ставки</div>
-          {bets.map((bet, i) => {
+          {[...bets].sort((a, b) => {
+            const order = { low: 0, medium: 1, high: 2 };
+            return (order[a.risk_label] ?? 1) - (order[b.risk_label] ?? 1);
+          }).map((bet, i) => {
             const risk = RISK_MAP[bet.risk_label] || RISK_MAP.low;
             return (
               <div className="prediction-bet-card" key={i} style={{ borderLeftColor: risk.dot === 'green' ? 'var(--green, #22c55e)' : risk.dot === 'amber' ? 'var(--amber, #f59e0b)' : 'var(--red, #ef4444)' }}>
