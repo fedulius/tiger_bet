@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { HomePage } from './pages/HomePage.jsx';
 import { RecommendationsPage } from './pages/RecommendationsPage.jsx';
+import { PredictionPage } from './pages/PredictionPage.jsx';
 import { BetsPage } from './pages/BetsPage.jsx';
 import { LeaguesPage } from './pages/LeaguesPage.jsx';
 import { ProfilePage } from './pages/ProfilePage.jsx';
@@ -11,7 +12,7 @@ import { initTelegramWebApp } from './lib/telegram.js';
 
 export default function App() {
   const location = useLocation();
-  const isMatchPage = location.pathname.startsWith('/match');
+  const isMatchPage = location.pathname.startsWith('/match') || location.pathname.startsWith('/prediction');
 
   useEffect(() => { initTelegramWebApp(); }, []);
 
@@ -21,6 +22,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/recommendations" element={<RecommendationsPage />} />
+          <Route path="/prediction/:slug" element={<PredictionPage />} />
           <Route path="/bets" element={<BetsPage />} />
           <Route path="/leagues" element={<LeaguesPage />} />
           <Route path="/profile" element={<ProfilePage />} />

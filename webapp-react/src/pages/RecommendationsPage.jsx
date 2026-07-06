@@ -118,7 +118,7 @@ export function RecommendationsPage() {
   const openMatch = (rec) => {
     const slug = rec.match_slug || rec.slug || rec.match_id;
     if (slug) {
-      navigate(`/match/${slug}`);
+      navigate(`/prediction/${slug}`);
     }
   };
 
