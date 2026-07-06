@@ -158,6 +158,22 @@ function normalizeAiBriefOutput(output, sourcePayload) {
     }
   }
 
+  // Assign risk labels based on actual coefficients: lowest = safe, highest = risky
+  if (bets.length >= 3) {
+    const sorted = [...bets].sort((a, b) => (a.rate || 0) - (b.rate || 0));
+    const rateToLabel = ['low', 'medium', 'high'];
+    for (let i = 0; i < sorted.length; i++) {
+      const idx = bets.indexOf(sorted[i]);
+      if (idx !== -1) bets[idx].risk_label = rateToLabel[i] || 'medium';
+    }
+  } else if (bets.length === 2) {
+    const sorted = [...bets].sort((a, b) => (a.rate || 0) - (b.rate || 0));
+    const idx0 = bets.indexOf(sorted[0]);
+    const idx1 = bets.indexOf(sorted[1]);
+    if (idx0 !== -1) bets[idx0].risk_label = 'low';
+    if (idx1 !== -1) bets[idx1].risk_label = 'high';
+  }
+
   return {
     headline: String(output.headline || '').trim(),
     brief: String(output.brief || '').trim(),
