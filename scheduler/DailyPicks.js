@@ -155,29 +155,48 @@ async function buildSourcePayload(match, popularBetsLoader, matchDetailLoader, r
 
 // ── Enrich payload with SStats data ────────────────────────
 async function enrichPayloadWithSStatsData(payload) {
-  if (!sstatsApi.hasApiKey()) { console.log('  SStats: no API key'); return payload; }
-  if (!payload || payload.sport_slug !== 'soccer') { console.log('  SStats: not soccer, sport_slug=' + payload?.sport_slug); return payload; }
+  if (!sstatsApi.hasApiKey()) return payload;
+  if (!payload || payload.sport_slug !== 'soccer') return payload;
 
   try {
-    // Extract team names from slug: "06-07-2026-portugal-spain" → "portugal", "spain"
+    // Extract team names from slug: "07-07-2026-usa-belgium" → "usa", "belgium"
     const slug = payload.match_slug || '';
     const parts = slug.split('-').filter(p => !/^\d+$/.test(p) && p.length > 1);
-    if (parts.length < 2) { console.log('  SStats: not enough parts in slug'); return payload; }
+    if (parts.length < 2) return payload;
 
-    console.log('  SStats: searching for', parts[parts.length - 2], 'vs', parts[parts.length - 1]);
+    // Try to find game in SStats (multiple search strategies)
+    let game = null;
+    const homeSearch = parts[parts.length - 2];
+    const awaySearch = parts[parts.length - 1];
 
-    // Find game in SStats
-    const today = new Date().toISOString().slice(0, 10);
-    const game = await sstatsApi.findGameByTeams(parts[parts.length - 2], parts[parts.length - 1], today);
-    if (!game) { console.log('  SStats: game not found'); return payload; }
+    // Strategy 1: Direct search by team names
+    game = await sstatsApi.findGameByTeams(homeSearch, awaySearch);
 
-    console.log('  SStats: found game ID', game.id);
+    // Strategy 2: Search WC games directly
+    if (!game) {
+      const wcGames = await sstatsApi.apiGet('/Games/list', {
+        LeagueId: '1',
+        Year: '2026',
+        limit: '200',
+        TimeZone: '3',
+      });
+      if (wcGames?.length) {
+        for (const g of wcGames) {
+          const home = (g.homeTeam?.name || '').toLowerCase();
+          const away = (g.awayTeam?.name || '').toLowerCase();
+          if (home.includes(homeSearch) && away.includes(awaySearch)) {
+            game = g;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!game) return payload;
 
     // Build full payload with lineups, form, statistics
     const sstatsPayload = await sstatsApi.buildMatchPayload(game.id);
-    if (!sstatsPayload) { console.log('  SStats: buildMatchPayload failed'); return payload; }
-
-    console.log('  SStats: enriched! Status:', sstatsPayload.status, 'Form:', sstatsPayload.recent_form?.home?.length || 0);
+    if (!sstatsPayload) return payload;
 
     return {
       ...payload,
@@ -194,8 +213,7 @@ async function enrichPayloadWithSStatsData(payload) {
         odds: sstatsPayload.odds,
       },
     };
-  } catch (e) {
-    console.log('  SStats error:', e.message);
+  } catch {
     return payload;
   }
 }
