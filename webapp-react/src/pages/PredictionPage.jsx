@@ -83,7 +83,11 @@ export function PredictionPage() {
 
       {/* Brief */}
       {data.brief && (
-        <div className="prediction-brief">{data.brief}</div>
+        <div className="prediction-brief">
+          {data.brief.split('\n\n').map((paragraph, i) => (
+            <p key={i}>{paragraph}</p>
+          ))}
+        </div>
       )}
 
       {/* Risk note */}
@@ -183,6 +187,12 @@ export function PredictionPage() {
           color: var(--text-2, #ccc);
           margin-bottom: 12px;
           padding: 0 4px;
+        }
+        .prediction-brief p {
+          margin: 0 0 12px 0;
+        }
+        .prediction-brief p:last-child {
+          margin-bottom: 0;
         }
         .prediction-risk-note {
           display: flex;
