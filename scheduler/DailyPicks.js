@@ -1,6 +1,7 @@
 'use strict';
 
 const stavkaApi = require('../lib/stavkaApi');
+const apiFootball = require('../lib/apiFootball');
 const { normalizeCandidate, getCandidateMatchesForDate } = require('../webapp/services/dailyPickCandidateService');
 const { rankCandidateMatches } = require('../webapp/services/dailyPickRankingService');
 const { resolveDbContextForCandidate } = require('../webapp/services/dailyPickMappingService');
@@ -152,6 +153,81 @@ async function buildSourcePayload(match, popularBetsLoader, matchDetailLoader, r
   };
 }
 
+// ── Enrich payload with API-Football data ─────────────────
+async function enrichPayloadWithFootballData(payload, matchDetail) {
+  if (!apiFootball.hasApiKey()) return payload;
+  if (!payload || payload.sport_slug !== 'soccer') return payload;
+
+  try {
+    // Try to find teams by name from the match slug
+    const slug = payload.match_slug || '';
+    // Extract team names from slug: "06-07-2026-portugal-spain" → "portugal", "spain"
+    const parts = slug.split('-').filter(p => !/^\d+$/.test(p) && p.length > 1);
+    if (parts.length < 2) return payload;
+
+    // Try to find teams (best effort — rate limited)
+    const [homeTeam, awayTeam] = await Promise.all([
+      apiFootball.searchTeam(parts[parts.length - 2]),
+      apiFootball.searchTeam(parts[parts.length - 1]),
+    ]);
+
+    if (!homeTeam || !awayTeam) return payload;
+
+    // Get H2H and predictions
+    const [h2h, fixtures] = await Promise.all([
+      apiFootball.fetchH2H(homeTeam.id, awayTeam.id),
+      apiFootball.fetchTeamLastFixtures(homeTeam.id, 5),
+    ]);
+
+    // Get predictions for the most relevant fixture if available
+    let predictions = null;
+    if (fixtures?.length) {
+      const relevant = fixtures.find(f =>
+        f.teams?.home?.id === homeTeam.id || f.teams?.away?.id === homeTeam.id ||
+        f.teams?.home?.id === awayTeam.id || f.teams?.away?.id === awayTeam.id
+      );
+      if (relevant?.fixture?.id) {
+        predictions = await apiFootball.fetchFixturePredictions(relevant.fixture.id);
+      }
+    }
+
+    // Format recent form
+    function formatForm(fixtures) {
+      if (!fixtures?.length) return null;
+      return fixtures.slice(0, 5).map(f => ({
+        date: f.fixture?.date?.substring(0, 10),
+        opponent: f.teams?.home?.id === homeTeam.id ? f.teams?.away?.name : f.teams?.home?.name,
+        score: `${f.goals?.home ?? '?'}:${f.goals?.away ?? '?'}`,
+        result: f.teams?.home?.winner === true
+          ? (f.teams?.home?.id === homeTeam.id ? 'W' : 'L')
+          : f.teams?.away?.winner === true
+            ? (f.teams?.away?.id === homeTeam.id ? 'W' : 'L')
+            : 'D',
+      }));
+    }
+
+    return {
+      ...payload,
+      football_data: {
+        home_team: { id: homeTeam.id, name: homeTeam.name },
+        away_team: { id: awayTeam.id, name: awayTeam.name },
+        h2h: h2h?.length ? h2h : null,
+        predictions: predictions ? {
+          advice: predictions.advice,
+          comparison: predictions.comparison,
+          goals: predictions.goals,
+        } : null,
+        recent_form: {
+          home: formatForm(fixtures),
+        },
+      },
+    };
+  } catch {
+    // Silently fail — football data is optional enrichment
+    return payload;
+  }
+}
+
 // ── Main orchestrator ──────────────────────────────────────
 async function runDailyPicks(pg, options = {}) {
   const {
@@ -253,6 +329,9 @@ async function runDailyPicks(pg, options = {}) {
     const sourcePayload = await buildSourcePayload(match, popularBetsLoader, matchDetailLoader, riskBetsSelector);
     if (!sourcePayload || sourcePayload.source_mode === 'skip') continue;
 
+    // Enrich with API-Football data (H2H, form, predictions)
+    const enrichedPayload = await enrichPayloadWithFootballData(sourcePayload, null);
+
     // Resolve DB context (match is already normalized from getCandidateMatchesForDate)
     const { systemId, sportId, tournamentId } = await resolveDbContextForCandidate(pg, { candidate: match });
     if (systemId == null || sportId == null || tournamentId == null) continue;
@@ -273,7 +352,7 @@ async function runDailyPicks(pg, options = {}) {
     // Generate analysis via LLM (if generator provided)
     if (typeof generator === 'function') {
       try {
-        const genResult = await generator({ sourcePayload, modelName, promptVersion, provider: generatorProvider });
+        const genResult = await generator({ sourcePayload: enrichedPayload, modelName, promptVersion, provider: generatorProvider });
         if (genResult && genResult.status === 'ready') {
           await persistAnalysisSnapshot(pg, {
             matchSourceId: sourceId,
