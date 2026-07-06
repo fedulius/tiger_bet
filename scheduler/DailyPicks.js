@@ -166,11 +166,11 @@ async function enrichPayloadWithSStatsData(payload, pg) {
     let sstatsGameId = null;
     if (pg) {
       const rows = await pg.connection(
-        'SELECT sstats_game_id FROM external.public_match WHERE system_match_slug = $1 AND system_id = 3 AND sstats_game_id IS NOT NULL LIMIT 1',
+        'SELECT system_match_id FROM external.public_match WHERE system_match_slug = $1 AND system_id = 3 LIMIT 1',
         [slug],
       ).catch(() => []);
-      if (rows.length && rows[0].sstats_game_id) {
-        sstatsGameId = rows[0].sstats_game_id;
+      if (rows.length && rows[0].system_match_id) {
+        sstatsGameId = Number(rows[0].system_match_id);
       }
     }
 
@@ -199,8 +199,8 @@ async function enrichPayloadWithSStatsData(payload, pg) {
             // Store in DB for future use
             if (pg) {
               await pg.connection(
-                'UPDATE external.public_match SET sstats_game_id = $1 WHERE system_match_slug = $2 AND system_id = 3',
-                [sstatsGameId, slug],
+                'UPDATE external.public_match SET system_match_id = $1 WHERE system_match_slug = $2 AND system_id = 3',
+                [String(sstatsGameId), slug],
               ).catch(() => {});
             }
             break;
