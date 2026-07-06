@@ -114,28 +114,37 @@ function normalizeAiBriefOutput(output) {
     };
   }) : [];
 
-  // Fix duplicate bet types: keep the best-rate bet per type, replace dups
+  // Fix duplicate bet types: group semantically similar markets together
   if (bets.length > 1) {
-    const seenTypes = new Map(); // type -> index
+    const seenTypes = new Map(); // normalized_category -> index
     const ALTERNATIVES = [
       { type: 'total_over', outcome: 'over_2_5', label: 'Тотал больше 2.5', risk_label: 'medium' },
       { type: 'both_to_score', outcome: 'yes', label: 'Обе забьют — да', risk_label: 'medium' },
       { type: 'handicap', outcome: 'handicap_1_-1', label: 'Фора хозяев -1', risk_label: 'medium' },
       { type: 'total_over', outcome: 'over_1_5', label: 'Тотал больше 1.5', risk_label: 'low' },
     ];
+    // Map raw types to semantic categories
+    function betCategory(b) {
+      const t = (b.type || '').toLowerCase();
+      if (t === 'one_x_two' || t === 'match_qualify' || t === 'winner' || t === 'match_result') return 'winner';
+      if (t.includes('total') || t.includes('totals')) return 'total';
+      if (t.includes('both') || t.includes('btts') || t === 'both_to_score') return 'btts';
+      if (t.includes('handicap')) return 'handicap';
+      if (t === 'correct_score') return 'correct_score';
+      return t;
+    }
     for (let i = bets.length - 1; i >= 0; i--) {
       const b = bets[i];
-      const t = (b.type || '').toLowerCase();
-      if (seenTypes.has(t)) {
-        // Duplicate — try to replace with an alternative from a different category
-        const usedTypes = new Set([...seenTypes.keys()]);
-        const alt = ALTERNATIVES.find(a => !usedTypes.has(a.type));
+      const cat = betCategory(b);
+      if (seenTypes.has(cat)) {
+        // Duplicate — replace with an alternative from a different category
+        const usedCats = new Set([...seenTypes.keys()]);
+        const alt = ALTERNATIVES.find(a => !usedCats.has(betCategory(a)));
         if (alt && b.rate != null) {
           bets[i] = { ...b, ...alt, rate: b.rate, reason: b.reason };
         }
-        // else keep it — better to have duplicates than broken data
       }
-      seenTypes.set((bets[i].type || '').toLowerCase(), i);
+      seenTypes.set(betCategory(bets[i]), i);
     }
   }
 
