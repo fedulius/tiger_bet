@@ -44,13 +44,6 @@ export async function auth() {
   return payload;
 }
 
-export function getRecommendations({ recommendations_version } = {}) {
-  const params = new URLSearchParams();
-  if (recommendations_version) params.set('recommendations_version', recommendations_version);
-  const suffix = params.toString();
-  return getJson(suffix ? `/recommendations?${suffix}` : '/recommendations');
-}
-
 export function getFavorites() {
   return getJson('/favorites');
 }
@@ -72,18 +65,6 @@ export function setFavorites(payload) {
 
 export function getMatchDetails(id) {
   return getJson(`/match/${encodeURIComponent(id)}`);
-}
-
-export function getFeed({ window, sport, country, league, feed_version, limit = 10, offset = 0 } = {}) {
-  const params = new URLSearchParams();
-  if (window) params.set('window', window);
-  if (sport) params.set('sport', sport);
-  if (country) params.set('country', country);
-  if (league) params.set('league', league);
-  if (feed_version) params.set('feed_version', feed_version);
-  params.set('limit', String(limit));
-  params.set('offset', String(offset));
-  return getJson(`/feed?${params.toString()}`);
 }
 
 export function getHomeMatches() {
