@@ -190,7 +190,7 @@ async function enrichPayloadWithSStatsData(payload) {
         events: sstatsPayload.events,
         statistics: sstatsPayload.statistics,
         recent_form: sstatsPayload.recent_form,
-        last_games_stats: sstatsPayload.last_games_stats,
+        team_stats: sstatsPayload.team_stats,
         odds: sstatsPayload.odds,
       },
     };
