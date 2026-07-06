@@ -1,19 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { auth } from '../lib/api.js';
+import { auth, getPrediction } from '../lib/api.js';
 import { formatMoscowDateTime } from '../lib/format.js';
-
-function getPrediction(slug) {
-  const headers = {};
-  const initData = window.Telegram?.WebApp?.initData;
-  if (initData) headers['X-Telegram-Init-Data'] = initData;
-  const token = sessionStorage.getItem('auth_token');
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  return fetch(`/prediction/${encodeURIComponent(slug)}`, { headers }).then((r) => {
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    return r.json();
-  });
-}
 
 const RISK_MAP = {
   low: { label: 'Надёжный', dot: 'green', bg: 'rgba(34,197,94,0.08)' },

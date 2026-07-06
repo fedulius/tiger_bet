@@ -71,6 +71,10 @@ export function getHomeMatches() {
   return getJson('/home');
 }
 
+export function getPrediction(slug) {
+  return getJson(`/prediction/${encodeURIComponent(slug)}`);
+}
+
 export function getDailyPicks() {
   return getJson('/home/daily-picks');
 }
