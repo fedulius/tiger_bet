@@ -90,6 +90,11 @@ a {
   position: relative;
   overflow: hidden;
   padding-bottom: calc(82px + env(safe-area-inset-bottom, 0px));
+  transition: padding-bottom 0.2s ease;
+}
+
+.keyboard-open .app-shell {
+  padding-bottom: 0;
 }
 
 /* ===== Status Bar (cosmetic) ===== */
