@@ -327,7 +327,7 @@ export function LeaguesPage() {
           <div
             className="league-row league-row-tappable"
             key={`league-${l.tournament_id}`}
-            onClick={() => setSearchViewOpen(true)}
+            onClick={() => toggleFav(l.tournament_id)}
           >
             <div className="league-logo-lg">
               <img src={l.tournament_image_path} alt="" style={{ width: 28, height: 28, objectFit: 'contain', borderRadius: 6 }} />

@@ -89,6 +89,7 @@ a {
   margin: 0 auto;
   position: relative;
   overflow: hidden;
+  padding-bottom: calc(82px + env(safe-area-inset-bottom, 0px));
 }
 
 /* ===== Status Bar (cosmetic) ===== */
@@ -324,7 +325,13 @@ a {
 
 /* ===== Bottom Tabs ===== */
 .bottom-tabs {
-  flex-shrink: 0;
+  position: fixed;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 480px;
+  z-index: 900;
   height: 82px;
   background: color-mix(in oklch, var(--surface) 88%, transparent);
   backdrop-filter: blur(20px);
@@ -336,6 +343,7 @@ a {
   padding-top: 10px;
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
+
 .tab-btn {
   display: flex;
   flex-direction: column;
