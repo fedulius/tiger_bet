@@ -259,6 +259,14 @@ export function LeaguesPage() {
     setSearchError('');
   };
 
+  const resetSearchFlow = () => {
+    clearSearch();
+    const active = document.activeElement;
+    if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
+      active.blur();
+    }
+  };
+
   const renderSkeletonRows = (count = 6, showTrailing = false) => (
     <div className="card-group skeleton-group" aria-hidden="true">
       {Array.from({ length: count }).map((_, idx) => (
@@ -349,10 +357,13 @@ export function LeaguesPage() {
           <div
             className="league-row league-row-tappable"
             key={`country-${c.country_id}-${c.sport_id}`}
-            onClick={() => openCountry(
-              { country_id: c.country_id, country_name: c.country_name, country_code: c.country_code },
-              { sport_id: c.sport_id, sport_name: c.sport_name }
-            )}
+            onClick={() => {
+              resetSearchFlow();
+              openCountry(
+                { country_id: c.country_id, country_name: c.country_name, country_code: c.country_code },
+                { sport_id: c.sport_id, sport_name: c.sport_name }
+              );
+            }}
           >
             <div className="league-logo-lg">
               {c.country_code
