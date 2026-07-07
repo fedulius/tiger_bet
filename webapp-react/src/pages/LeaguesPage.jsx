@@ -31,6 +31,8 @@ export function LeaguesPage() {
   const favsDirty = useRef(false); // true after optimistic remove, skip server refresh
   const latestSuggestRef = useRef(0);
   const latestSearchRef = useRef(0);
+  const touchStartYRef = useRef(null);
+  const swipeDismissedKeyboardRef = useRef(false);
 
   useEffect(() => {
     (async () => {
@@ -79,6 +81,45 @@ export function LeaguesPage() {
         if (requestId === latestSuggestRef.current) setSuggestLoading(false);
       });
   }, [debouncedQuery]);
+
+  useEffect(() => {
+    const handleTouchStart = (event) => {
+      touchStartYRef.current = event.touches?.[0]?.clientY ?? null;
+      swipeDismissedKeyboardRef.current = false;
+    };
+
+    const handleTouchMove = (event) => {
+      const startY = touchStartYRef.current;
+      const currentY = event.touches?.[0]?.clientY ?? null;
+      if (startY == null || currentY == null || swipeDismissedKeyboardRef.current) return;
+
+      const deltaY = currentY - startY;
+      if (deltaY < 28) return;
+
+      const active = document.activeElement;
+      if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
+        active.blur();
+        swipeDismissedKeyboardRef.current = true;
+      }
+    };
+
+    const handleTouchEnd = () => {
+      touchStartYRef.current = null;
+      swipeDismissedKeyboardRef.current = false;
+    };
+
+    document.addEventListener('touchstart', handleTouchStart, { passive: true });
+    document.addEventListener('touchmove', handleTouchMove, { passive: true });
+    document.addEventListener('touchend', handleTouchEnd, { passive: true });
+    document.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+
+    return () => {
+      document.removeEventListener('touchstart', handleTouchStart);
+      document.removeEventListener('touchmove', handleTouchMove);
+      document.removeEventListener('touchend', handleTouchEnd);
+      document.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, []);
 
   useEffect(() => {
     if (!searchViewOpen || debouncedQuery.length < 2) {
