@@ -41,6 +41,7 @@
 
 html {
   scroll-behavior: smooth;
+  background: var(--bg);
 }
 
 body {
@@ -51,6 +52,11 @@ body {
   overscroll-behavior: none;
   min-height: 100vh;
   min-height: 100dvh;
+}
+
+body,
+#root {
+  background: var(--bg);
 }
 
 button, input {
@@ -89,6 +95,7 @@ a {
   margin: 0 auto;
   position: relative;
   overflow: hidden;
+  background: var(--bg);
   padding-bottom: calc(82px + env(safe-area-inset-bottom, 0px));
 }
 
