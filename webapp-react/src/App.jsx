@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import { HomePage } from './pages/HomePage.jsx';
 import { RecommendationsPage } from './pages/RecommendationsPage.jsx';
 import { PredictionPage } from './pages/PredictionPage.jsx';
@@ -24,9 +24,6 @@ function isTextInputElement(target) {
 }
 
 export default function App() {
-  const location = useLocation();
-  const isMatchPage = location.pathname.startsWith('/match') || location.pathname.startsWith('/prediction');
-
   useEffect(() => { initTelegramWebApp(); }, []);
 
   useEffect(() => {
@@ -93,7 +90,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
-      {!isMatchPage ? <WebAppTabs /> : null}
+      <WebAppTabs />
     </div>
   );
 }
