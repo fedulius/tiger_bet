@@ -51,6 +51,9 @@ export function withTelegramInitDataHeaders(headers = {}, globalRef = globalThis
 export function initTelegramWebApp(globalRef = globalThis) {
   const tg = globalRef?.Telegram?.WebApp || globalRef?.window?.Telegram?.WebApp;
   if (tg) {
+    try { tg.setBackgroundColor?.('#161a1d'); } catch {}
+    try { tg.setHeaderColor?.('#161a1d'); } catch {}
+    try { tg.setBottomBarColor?.('#161a1d'); } catch {}
     try { tg.expand(); } catch {}
     try { tg.ready(); } catch {}
   }
