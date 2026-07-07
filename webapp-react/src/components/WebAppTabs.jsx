@@ -51,19 +51,17 @@ export function WebAppTabs() {
   const { pathname } = useLocation();
 
   const tabs = [
-    { to: '/', icon: HomeIcon, label: 'Матчи' },
-    { to: '/recommendations', icon: StarIcon, label: 'Прогнозы' },
-    { to: '/bets', icon: WalletIcon, label: 'Ставки' },
-    { to: '/leagues', icon: GlobeIcon, label: 'Лиги' },
-    { to: '/profile', icon: UserIcon, label: 'Профиль' },
+    { to: '/', icon: HomeIcon, label: 'Матчи', match: (path) => path === '/' || path.startsWith('/match') },
+    { to: '/recommendations', icon: StarIcon, label: 'Прогнозы', match: (path) => path.startsWith('/recommendations') || path.startsWith('/prediction') },
+    { to: '/bets', icon: WalletIcon, label: 'Ставки', match: (path) => path.startsWith('/bets') },
+    { to: '/leagues', icon: GlobeIcon, label: 'Лиги', match: (path) => path.startsWith('/leagues') },
+    { to: '/profile', icon: UserIcon, label: 'Профиль', match: (path) => path.startsWith('/profile') },
   ];
 
   return (
     <nav className="bottom-tabs" aria-label="Навигация">
-      {tabs.map(({ to, icon: Icon, label }) => {
-        const isActive = to === '/'
-          ? pathname === '/'
-          : pathname.startsWith(to);
+      {tabs.map(({ to, icon: Icon, label, match }) => {
+        const isActive = match(pathname);
         return (
           <NavLink
             key={to}
