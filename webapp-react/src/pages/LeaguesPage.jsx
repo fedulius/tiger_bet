@@ -220,12 +220,15 @@ export function LeaguesPage() {
     loadCountries(sport.sport_id);
   };
 
-  const openCountry = (country) => {
+  const openCountry = (country, sportOverride = null) => {
+    const sport = sportOverride || selectedSport;
+    if (!sport?.sport_id) return;
+    setSelectedSport(sport);
     setSelectedCountry(country);
     setAnimDir('forward');
     setLevelKey(k => k + 1);
     setLevel(3);
-    loadLeagues(selectedSport.sport_id, country.country_id);
+    loadLeagues(sport.sport_id, country.country_id);
   };
 
   const goBack = () => {
@@ -346,7 +349,10 @@ export function LeaguesPage() {
           <div
             className="league-row league-row-tappable"
             key={`country-${c.country_id}-${c.sport_id}`}
-            onClick={() => openSport({ sport_id: c.sport_id, sport_name: c.sport_name })}
+            onClick={() => openCountry(
+              { country_id: c.country_id, country_name: c.country_name, country_code: c.country_code },
+              { sport_id: c.sport_id, sport_name: c.sport_name }
+            )}
           >
             <div className="league-logo-lg">
               {c.country_code
