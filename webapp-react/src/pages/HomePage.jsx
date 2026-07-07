@@ -176,7 +176,7 @@ export function HomePage() {
 
     const interval = setInterval(() => {
       loadData();
-    }, 60000);
+    }, 30000);
 
     return () => clearInterval(interval);
   }, [data, loadData]);

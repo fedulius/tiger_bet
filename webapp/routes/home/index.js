@@ -6,10 +6,10 @@ const { getDailyPicksFeed } = require('../../services/dailyPickReadService');
 // In-memory cache, shared across ALL users.
 // Key = dayType + sorted league IDs → different favorites get separate cache entries.
 // Yesterday/tomorrow: 24h (data won't change)
-// Today: 5 minutes (live scores update)
+// Today: 15s (live elapsed time / scores must refresh frequently)
 const CACHE_TTL = {
   yesterday: 24 * 60 * 60 * 1000,
-  today: 5 * 60 * 1000,
+  today: 15 * 1000,
   tomorrow: 24 * 60 * 60 * 1000,
 };
 const _cache = new Map(); // key: "dayType:1,2,235", value: { data, expiresAt }
