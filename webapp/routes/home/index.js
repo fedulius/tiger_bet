@@ -94,6 +94,7 @@ function formatMatch(m) {
     },
     status: m.status,
     statusName: m.statusName,
+    elapsed: Number.isFinite(Number(m.elapsed)) ? Number(m.elapsed) : null,
     date: m.date,
     league: resolveLeague(m.season?.league?.name),
     leagueId: m.season?.league?.id,

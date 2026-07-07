@@ -73,6 +73,20 @@ function TeamRow({ team, score, showScore }) {
   );
 }
 
+function formatLiveValue(match) {
+  if (match?.elapsed != null && Number.isFinite(Number(match.elapsed))) {
+    return `${Number(match.elapsed)}'`;
+  }
+
+  const statusName = String(match?.statusName || '').toLowerCase();
+  if (statusName.includes('half time')) return 'HT';
+  if (statusName.includes('break time')) return 'Пер.';
+  if (statusName.includes('extra time')) return 'ДВ';
+  if (statusName.includes('penalties')) return 'Пен.';
+
+  return formatScore(match.score) || formatTime(match.date);
+}
+
 function MatchCard({ match, onClick }) {
   const finished = isFinished(match.status);
   const live = isLive(match.status);
@@ -88,7 +102,7 @@ function MatchCard({ match, onClick }) {
         {live ? (
           <div className="match-time live">
             <span className="live-dot" />
-            <span className="live-value">{hasScore ? formatScore(match.score) : formatTime(match.date)}</span>
+            <span className="live-value">{formatLiveValue(match)}</span>
           </div>
         ) : finished ? (
           <div className="match-time" style={{ color: 'var(--text-3)', fontWeight: 600 }}>
