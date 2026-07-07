@@ -346,6 +346,7 @@ async function matchRoutes(fastify) {
         awayTeamId: match.awayTeam?.id,
         status: match.status,
         statusName: match.statusName,
+        elapsed: Number.isFinite(Number(match.elapsed)) ? Number(match.elapsed) : null,
         round: resolveRound(match.roundName),
         isLive: isLive(match.status),
         isFinished: isFinished(match.status),

@@ -100,14 +100,9 @@ function MatchCard({ match, onClick }) {
       </div>
       <div className="match-info">
         {live ? (
-          <div className="match-time live" style={{ flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', minHeight: '14px' }}>
-              <span className="live-dot" />
-              <span className="live-value" style={{ fontSize: '12px', fontWeight: 700 }}>{formatLiveValue(match)}</span>
-            </div>
-            <div className="match-time" style={{ color: 'var(--text)', fontSize: '15px', fontWeight: 800 }}>
-              {hasScore ? formatScore(match.score) : '—'}
-            </div>
+          <div className="match-time live">
+            <span className="live-dot" />
+            <span className="live-value">{formatLiveValue(match)}</span>
           </div>
         ) : finished ? (
           <div className="match-time" style={{ color: 'var(--text-3)', fontWeight: 600 }}>

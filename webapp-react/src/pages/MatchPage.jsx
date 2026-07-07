@@ -101,6 +101,20 @@ function EventRow({ event, homeTeamId, homeTeamCode, awayTeamCode, score, isLast
   );
 }
 
+function formatDetailLiveValue(item) {
+  if (item?.elapsed != null && Number.isFinite(Number(item.elapsed))) {
+    return `${Number(item.elapsed)}'`;
+  }
+
+  const statusName = String(item?.statusName || '').toLowerCase();
+  if (statusName.includes('half time')) return 'HT';
+  if (statusName.includes('break time')) return 'Пер.';
+  if (statusName.includes('extra time')) return 'ДВ';
+  if (statusName.includes('penalties')) return 'Пен.';
+
+  return '';
+}
+
 export function MatchPage() {
   const { id: routeParamId } = useParams();
   const location = useLocation();
@@ -227,9 +241,18 @@ export function MatchPage() {
               </div>
               <div className="detail-team-name">{team1Name}</div>
             </div>
-            <div className="detail-score">
-              {item.isLive && <span className="live-dot" style={{ marginRight: '6px' }} />}
-              {item.score || '—'}
+            <div className="detail-score" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+              {item.isLive && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minHeight: '16px' }}>
+                  <span className="live-dot" />
+                  <span className="live-value" style={{ fontSize: '13px', fontWeight: 700, color: 'var(--accent)' }}>
+                    {formatDetailLiveValue(item)}
+                  </span>
+                </div>
+              )}
+              <div>
+                {item.score || '—'}
+              </div>
               {item.penaltyResult && (
                 <div style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: '4px', textAlign: 'center' }}>
                   по пенальти: {item.penaltyResult.home} : {item.penaltyResult.away}
