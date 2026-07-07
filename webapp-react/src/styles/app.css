@@ -85,6 +85,11 @@ a {
   50% { opacity: 0.25; }
 }
 
+@keyframes tb-pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.58; }
+}
+
 /* ===== App Shell ===== */
 .app-shell {
   display: flex;
@@ -335,7 +340,7 @@ a {
 
 .live-value {
   display: inline-block;
-  animation: tb-pulse 1.4s infinite;
+  animation: tb-pulse-soft 1.4s infinite;
 }
 
 /* ===== Bottom Tabs ===== */
