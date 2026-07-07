@@ -324,12 +324,16 @@ a {
   max-width: 100%;
 }
 
-/* Live dot */
 .live-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: var(--accent);
+  display: inline-block;
+  animation: tb-pulse 1.4s infinite;
+}
+
+.live-value {
   display: inline-block;
   animation: tb-pulse 1.4s infinite;
 }

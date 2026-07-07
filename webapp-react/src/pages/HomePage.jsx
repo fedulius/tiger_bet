@@ -88,7 +88,7 @@ function MatchCard({ match, onClick }) {
         {live ? (
           <div className="match-time live">
             <span className="live-dot" />
-            {hasScore ? formatScore(match.score) : formatTime(match.date)}
+            <span className="live-value">{hasScore ? formatScore(match.score) : formatTime(match.date)}</span>
           </div>
         ) : finished ? (
           <div className="match-time" style={{ color: 'var(--text-3)', fontWeight: 600 }}>
