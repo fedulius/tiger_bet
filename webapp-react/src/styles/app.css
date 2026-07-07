@@ -899,13 +899,13 @@ a {
 .detail-title { font-size: 17px; font-weight: 700; color: var(--text); }
 
 .detail-hero {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 22px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: start;
+  column-gap: 22px;
   padding: 18px 20px 8px;
 }
-.detail-team { text-align: center; flex: 1; }
+.detail-team { text-align: center; min-width: 0; }
 .detail-flag {
   width: 62px;
   height: 62px;
@@ -922,6 +922,8 @@ a {
   font-family: ui-monospace, monospace;
 }
 .detail-team-name { font-size: 15px; font-weight: 600; color: var(--text); }
+.detail-hero > .detail-team:first-child { justify-self: end; }
+.detail-hero > .detail-team:last-child { justify-self: start; }
 .detail-score { font-size: 30px; font-weight: 800; color: var(--text); flex-shrink: 0; letter-spacing: -0.5px; text-align: center; }
 .detail-meta { text-align: center; font-size: 13px; color: var(--text-2); padding-bottom: 4px; }
 
