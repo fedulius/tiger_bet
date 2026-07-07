@@ -24,7 +24,6 @@ export function LeaguesPage() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [toast, setToast] = useState(null);
   const [searchError, setSearchError] = useState('');
-  const [searchViewOpen, setSearchViewOpen] = useState(false);
   const toastTimer = useRef(null);
   const [animDir, setAnimDir] = useState('none'); // 'forward' | 'backward' | 'none'
   const [levelKey, setLevelKey] = useState(0);
@@ -56,7 +55,6 @@ export function LeaguesPage() {
       setSuggestLoading(false);
       setSearchLoading(false);
       setSearchError('');
-      if (!debouncedQuery) setSearchViewOpen(false);
       return;
     }
 
@@ -122,11 +120,9 @@ export function LeaguesPage() {
   }, []);
 
   useEffect(() => {
-    if (!searchViewOpen || debouncedQuery.length < 2) {
-      if (debouncedQuery.length < 2) {
-        setSearchLoading(false);
-        setSearchResults([]);
-      }
+    if (debouncedQuery.length < 2) {
+      setSearchLoading(false);
+      setSearchResults([]);
       return;
     }
 
@@ -146,7 +142,7 @@ export function LeaguesPage() {
       .finally(() => {
         if (requestId === latestSearchRef.current) setSearchLoading(false);
       });
-  }, [debouncedQuery, searchViewOpen]);
+  }, [debouncedQuery]);
 
   const loadSports = async () => {
     setLoading(true);
@@ -258,7 +254,6 @@ export function LeaguesPage() {
     setSuggestions({ leagues: [], countries: [], sports: [] });
     setSearchResults([]);
     setSearchError('');
-    setSearchViewOpen(false);
   };
 
   const renderSkeletonRows = (count = 6, showTrailing = false) => (
@@ -284,9 +279,6 @@ export function LeaguesPage() {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && searchQuery.trim().length >= 2) {
-              setSearchViewOpen(true);
-            }
             if (e.key === 'Escape') {
               clearSearch();
             }
@@ -311,23 +303,6 @@ export function LeaguesPage() {
             Сброс
           </button>
         ) : null}
-        <button
-          type="button"
-          onClick={() => {
-            if (searchQuery.trim().length >= 2) setSearchViewOpen(true);
-          }}
-          style={{
-            border: 'none',
-            borderRadius: 999,
-            padding: '8px 12px',
-            background: 'var(--accent)',
-            color: '#fff',
-            fontSize: 14,
-            fontWeight: 600,
-          }}
-        >
-          Найти
-        </button>
       </div>
     </div>
   );
@@ -359,36 +334,11 @@ export function LeaguesPage() {
     if (suggestLoading) return renderSkeletonRows(4, true);
     if (searchError) return renderSearchEmpty(searchError);
 
-    const hasAny = suggestions.leagues.length || suggestions.countries.length || suggestions.sports.length;
-    if (!hasAny) return renderSearchEmpty('Ничего не найдено');
+    const hasAny = searchResults.length || suggestions.countries.length || suggestions.sports.length;
+    if (!hasAny && !searchLoading) return renderSearchEmpty('Ничего не найдено');
 
     return (
       <>
-        {renderSuggestionSection('Лиги', suggestions.leagues, (l) => (
-          <div
-            className="league-row league-row-tappable"
-            key={`league-${l.tournament_id}`}
-            onClick={() => toggleFav(l.tournament_id)}
-          >
-            <div className="league-logo-lg">
-              <img src={l.tournament_image_path} alt="" style={{ width: 28, height: 28, objectFit: 'contain', borderRadius: 6 }} />
-            </div>
-            <div className="league-row-info">
-              <div className="league-row-title">{l.tournament_name}</div>
-              <div className="league-row-country">{l.sport_name} · {l.country_name}</div>
-            </div>
-            <span
-              className={`league-star ${favs[l.tournament_id] ? 'on' : 'off'}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleFav(l.tournament_id);
-              }}
-            >
-              {favs[l.tournament_id] ? '★' : '☆'}
-            </span>
-          </div>
-        ))}
-
         {renderSuggestionSection('Страны', suggestions.countries, (c) => (
           <div
             className="league-row league-row-tappable"
@@ -423,65 +373,51 @@ export function LeaguesPage() {
     );
   };
 
-  const renderSearchResultsView = () => {
-    const slideStyle = { '--slide-from': '30px' };
+  const renderLiveLeagueResults = () => {
+    if (debouncedQuery.length < 2) return null;
+    if (searchLoading) {
+      return (
+        <>
+          <div className="section-header">Все найденные лиги</div>
+          {renderSkeletonRows(6, true)}
+        </>
+      );
+    }
+    if (searchError) return null;
+    if (searchResults.length === 0) return null;
+
     return (
-      <div key={`search-${levelKey}`} className="level-enter" style={slideStyle}>
-        <div className="detail-header">
-          <button type="button" className="back-btn" onClick={() => setSearchViewOpen(false)} aria-label="Назад">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
-          </button>
-          <div className="detail-header-copy">
-            <div className="detail-header-kicker">Поиск</div>
-            <div className="detail-header-title">Результаты лиг</div>
-          </div>
+      <>
+        <div className="section-header">Все найденные лиги</div>
+        <div className="card-group">
+          {searchResults.map((l) => (
+            <div
+              className="league-row league-row-tappable"
+              key={`search-league-${l.tournament_id}`}
+              onClick={() => toggleFav(l.tournament_id)}
+            >
+              <div className="league-logo-lg">
+                <img src={l.tournament_image_path} alt="" style={{ width: 28, height: 28, objectFit: 'contain', borderRadius: 6 }} />
+              </div>
+              <div className="league-row-info">
+                <div className="league-row-title">{l.tournament_name}</div>
+                <div className="league-row-country">{l.sport_name} · {l.country_name}</div>
+              </div>
+              <span
+                className={`league-star ${favs[l.tournament_id] ? 'on' : 'off'}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleFav(l.tournament_id);
+                }}
+              >
+                {favs[l.tournament_id] ? '★' : '☆'}
+              </span>
+            </div>
+          ))}
         </div>
-
-        {renderSearchBar()}
-
-        {debouncedQuery.length < 2
-          ? renderSearchEmpty('Начните вводить запрос')
-          : searchLoading
-            ? renderSkeletonRows(6, true)
-            : searchError
-              ? renderSearchEmpty(searchError)
-              : searchResults.length === 0
-                ? renderSearchEmpty('Ничего не найдено')
-                : (
-                  <div className="card-group">
-                    {searchResults.map((l) => (
-                      <div className="league-row league-row-tappable" key={`search-league-${l.tournament_id}`}>
-                        <div className="league-logo-lg">
-                          <img src={l.tournament_image_path} alt="" style={{ width: 28, height: 28, objectFit: 'contain', borderRadius: 6 }} />
-                        </div>
-                        <div className="league-row-info">
-                          <div className="league-row-title">{l.tournament_name}</div>
-                          <div className="league-row-country">{l.sport_name} · {l.country_name}</div>
-                        </div>
-                        <span
-                          className={`league-star ${favs[l.tournament_id] ? 'on' : 'off'}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleFav(l.tournament_id);
-                          }}
-                        >
-                          {favs[l.tournament_id] ? '★' : '☆'}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-        <div style={{ height: 90 }} />
-      </div>
+      </>
     );
   };
-
-  if (searchViewOpen) {
-    return renderSearchResultsView();
-  }
 
   // Level 1: Sports
   if (level === 1) {
@@ -498,7 +434,12 @@ export function LeaguesPage() {
 
         {renderSearchBar()}
 
-        {showSearchFlow ? renderSuggestions() : (
+        {showSearchFlow ? (
+          <>
+            {renderSuggestions()}
+            {renderLiveLeagueResults()}
+          </>
+        ) : (
           <>
             {filteredFavs.length > 0 && (
               <>
