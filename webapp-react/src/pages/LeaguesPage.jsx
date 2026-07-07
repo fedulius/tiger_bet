@@ -279,6 +279,9 @@ export function LeaguesPage() {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.currentTarget.blur();
+            }
             if (e.key === 'Escape') {
               clearSearch();
             }
