@@ -24,6 +24,7 @@ export function LeaguesPage() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [toast, setToast] = useState(null);
   const [searchError, setSearchError] = useState('');
+  const [openedCountryFromSearch, setOpenedCountryFromSearch] = useState(false);
   const toastTimer = useRef(null);
   const [animDir, setAnimDir] = useState('none'); // 'forward' | 'backward' | 'none'
   const [levelKey, setLevelKey] = useState(0);
@@ -213,6 +214,7 @@ export function LeaguesPage() {
   };
 
   const openSport = (sport) => {
+    setOpenedCountryFromSearch(false);
     setSelectedSport(sport);
     setAnimDir('forward');
     setLevelKey(k => k + 1);
@@ -223,6 +225,7 @@ export function LeaguesPage() {
   const openCountry = (country, sportOverride = null) => {
     const sport = sportOverride || selectedSport;
     if (!sport?.sport_id) return;
+    setOpenedCountryFromSearch(Boolean(sportOverride));
     setSelectedSport(sport);
     setSelectedCountry(country);
     setAnimDir('forward');
@@ -235,6 +238,16 @@ export function LeaguesPage() {
     setAnimDir('backward');
     setLevelKey(k => k + 1);
     if (level === 3) {
+      if (openedCountryFromSearch) {
+        setLevel(1);
+        setLeagues([]);
+        setCountries([]);
+        setSelectedCountry(null);
+        setSelectedSport(null);
+        setOpenedCountryFromSearch(false);
+        loadFavs();
+        return;
+      }
       setLevel(2);
       setLeagues([]);
       setSelectedCountry(null);
@@ -242,6 +255,7 @@ export function LeaguesPage() {
       setLevel(1);
       setCountries([]);
       setSelectedSport(null);
+      setOpenedCountryFromSearch(false);
       loadFavs();
     }
   };
