@@ -34,17 +34,33 @@ export default function App() {
     const vv = window.visualViewport;
     const baselineHeight = Math.max(window.innerHeight || 0, vv?.height || 0);
 
+    const setKeyboardOpen = (open) => {
+      root.classList.toggle(KEYBOARD_OPEN_CLASS, open);
+    };
+
     const updateKeyboardState = () => {
       const active = document.activeElement;
       const activeIsInput = isTextInputElement(active);
       const viewportHeight = vv?.height || window.innerHeight || 0;
       const keyboardOpen = activeIsInput && baselineHeight - viewportHeight > KEYBOARD_DELTA_PX;
-      root.classList.toggle(KEYBOARD_OPEN_CLASS, keyboardOpen);
+      setKeyboardOpen(keyboardOpen);
     };
 
-    const handleFocusIn = () => updateKeyboardState();
+    const handleFocusIn = (event) => {
+      if (isTextInputElement(event.target)) {
+        setKeyboardOpen(true);
+      }
+      window.setTimeout(updateKeyboardState, 30);
+    };
+
     const handleFocusOut = () => {
-      window.setTimeout(updateKeyboardState, 50);
+      window.setTimeout(() => {
+        const active = document.activeElement;
+        if (!isTextInputElement(active)) {
+          setKeyboardOpen(false);
+        }
+        updateKeyboardState();
+      }, 80);
     };
 
     updateKeyboardState();
@@ -54,7 +70,7 @@ export default function App() {
     document.addEventListener('focusout', handleFocusOut);
 
     return () => {
-      root.classList.remove(KEYBOARD_OPEN_CLASS);
+      setKeyboardOpen(false);
       vv?.removeEventListener('resize', updateKeyboardState);
       window.removeEventListener('resize', updateKeyboardState);
       document.removeEventListener('focusin', handleFocusIn);
