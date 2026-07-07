@@ -241,16 +241,16 @@ export function MatchPage() {
               </div>
               <div className="detail-team-name">{team1Name}</div>
             </div>
-            <div className="detail-score" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+            <div className="detail-score" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minWidth: '92px', textAlign: 'center' }}>
               {item.isLive && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minHeight: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', minHeight: '14px', marginBottom: '4px', fontSize: '11px', fontWeight: 600, color: 'var(--text-3)' }}>
                   <span className="live-dot" />
-                  <span className="live-value" style={{ fontSize: '13px', fontWeight: 700, color: 'var(--accent)' }}>
+                  <span className="live-value" style={{ color: 'var(--text-3)' }}>
                     {formatDetailLiveValue(item)}
                   </span>
                 </div>
               )}
-              <div>
+              <div style={{ lineHeight: 1 }}>
                 {item.score || '—'}
               </div>
               {item.penaltyResult && (
