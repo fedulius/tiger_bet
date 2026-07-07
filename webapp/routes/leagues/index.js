@@ -64,6 +64,84 @@ async function leaguesRoutes(fastify) {
     return { leagues: rows };
   });
 
+  // GET /leagues/search/suggest?q=... — быстрые live-подсказки
+  fastify.get('/search/suggest', async (request, reply) => {
+    const query = String(request.query?.q || '').trim();
+    if (query.length < 2) {
+      return { leagues: [], countries: [], sports: [] };
+    }
+
+    const like = `%${query}%`;
+
+    const leagues = await fastify.pg.connection(`
+      SELECT t.tournament_id, t.tournament_name, t.tournament_name_en,
+             t.tournament_image_path,
+             c.country_id, c.country_name,
+             s.sport_id, s.sport_name
+      FROM public.tournament t
+      JOIN public.country c ON c.country_id = t.country_id
+      JOIN public.sport s ON s.sport_id = t.sport_id
+      WHERE t.tournament_name ILIKE $1
+         OR COALESCE(t.tournament_name_en, '') ILIKE $1
+         OR c.country_name ILIKE $1
+         OR COALESCE(c.country_name_en, '') ILIKE $1
+         OR s.sport_name ILIKE $1
+      ORDER BY t.tournament_name
+      LIMIT 8
+    `, [like]);
+
+    const countries = await fastify.pg.connection(`
+      SELECT DISTINCT c.country_id, c.country_name, c.country_code,
+             s.sport_id, s.sport_name
+      FROM public.country c
+      JOIN public.tournament t ON t.country_id = c.country_id
+      JOIN public.sport s ON s.sport_id = t.sport_id
+      WHERE c.country_name ILIKE $1
+         OR COALESCE(c.country_name_en, '') ILIKE $1
+         OR s.sport_name ILIKE $1
+      ORDER BY c.country_name
+      LIMIT 5
+    `, [like]);
+
+    const sports = await fastify.pg.connection(`
+      SELECT s.sport_id, s.sport_name, s.sport_url
+      FROM public.sport s
+      WHERE s.sport_name ILIKE $1
+      ORDER BY s.sport_name
+      LIMIT 5
+    `, [like]);
+
+    return { leagues, countries, sports };
+  });
+
+  // GET /leagues/search?q=... — полный список лиг для search results view
+  fastify.get('/search', async (request, reply) => {
+    const query = String(request.query?.q || '').trim();
+    if (query.length < 2) {
+      return { leagues: [] };
+    }
+
+    const like = `%${query}%`;
+    const leagues = await fastify.pg.connection(`
+      SELECT t.tournament_id, t.tournament_name, t.tournament_name_en,
+             t.tournament_image_path,
+             c.country_id, c.country_name,
+             s.sport_id, s.sport_name
+      FROM public.tournament t
+      JOIN public.country c ON c.country_id = t.country_id
+      JOIN public.sport s ON s.sport_id = t.sport_id
+      WHERE t.tournament_name ILIKE $1
+         OR COALESCE(t.tournament_name_en, '') ILIKE $1
+         OR c.country_name ILIKE $1
+         OR COALESCE(c.country_name_en, '') ILIKE $1
+         OR s.sport_name ILIKE $1
+      ORDER BY t.tournament_name
+      LIMIT 100
+    `, [like]);
+
+    return { leagues };
+  });
+
   // GET /leagues/favorites — избранные турниры текущего пользователя
   fastify.get('/favorites', { preHandler: requireAuth }, async (request, reply) => {
     const userId = Number(request.user?.userId);

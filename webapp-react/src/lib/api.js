@@ -93,3 +93,11 @@ export async function fetchJSON(url, options = {}) {
   }
   return response.json();
 }
+
+export function getLeagueSearchSuggestions(query) {
+  return fetchJSON(`/leagues/search/suggest?q=${encodeURIComponent(query)}`);
+}
+
+export function searchLeagues(query) {
+  return fetchJSON(`/leagues/search?q=${encodeURIComponent(query)}`);
+}

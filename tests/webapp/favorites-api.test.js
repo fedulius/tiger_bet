@@ -238,3 +238,183 @@ test('PUT /favorites returns 401 without JWT', async () => {
     await app.close();
   }
 });
+
+test('GET /leagues/search/suggest returns leagues countries and sports groups', async () => {
+  const fakePg = createFakePg({
+    handler(query, params) {
+      if (/FROM public\.tournament t/i.test(query)) {
+        assert.deepEqual(params, ['%prem%']);
+        return [
+          {
+            tournament_id: 10,
+            tournament_name: 'Premier League',
+            tournament_name_en: 'Premier League',
+            tournament_image_path: '/premier.png',
+            country_id: 20,
+            country_name: 'Англия',
+            sport_id: 1,
+            sport_name: 'Футбол',
+          },
+        ];
+      }
+      if (/FROM public\.country c/i.test(query)) {
+        assert.deepEqual(params, ['%prem%']);
+        return [
+          {
+            country_id: 20,
+            country_name: 'Англия',
+            country_code: 'gb',
+            sport_id: 1,
+            sport_name: 'Футбол',
+          },
+        ];
+      }
+      if (/FROM public\.sport s/i.test(query)) {
+        assert.deepEqual(params, ['%prem%']);
+        return [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' }];
+      }
+      return [];
+    },
+  });
+
+  const app = buildTestApp(buildApp, { pg: fakePg });
+  await app.ready();
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/leagues/search/suggest?q=prem',
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json(), {
+      leagues: [
+        {
+          tournament_id: 10,
+          tournament_name: 'Premier League',
+          tournament_name_en: 'Premier League',
+          tournament_image_path: '/premier.png',
+          country_id: 20,
+          country_name: 'Англия',
+          sport_id: 1,
+          sport_name: 'Футбол',
+        },
+      ],
+      countries: [
+        {
+          country_id: 20,
+          country_name: 'Англия',
+          country_code: 'gb',
+          sport_id: 1,
+          sport_name: 'Футбол',
+        },
+      ],
+      sports: [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' }],
+    });
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /leagues/search/suggest returns empty groups for short query', async () => {
+  const fakePg = createFakePg({
+    handler() {
+      throw new Error('DB should not be called for short query');
+    },
+  });
+
+  const app = buildTestApp(buildApp, { pg: fakePg });
+  await app.ready();
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/leagues/search/suggest?q=p',
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json(), {
+      leagues: [],
+      countries: [],
+      sports: [],
+    });
+    assert.equal(fakePg.calls.length, 0);
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /leagues/search returns full leagues list', async () => {
+  const fakePg = createFakePg({
+    handler(query, params) {
+      if (/FROM public\.tournament t/i.test(query)) {
+        assert.deepEqual(params, ['%prem%']);
+        return [
+          {
+            tournament_id: 10,
+            tournament_name: 'Premier League',
+            tournament_name_en: 'Premier League',
+            tournament_image_path: '/premier.png',
+            country_id: 20,
+            country_name: 'Англия',
+            sport_id: 1,
+            sport_name: 'Футбол',
+          },
+        ];
+      }
+      return [];
+    },
+  });
+
+  const app = buildTestApp(buildApp, { pg: fakePg });
+  await app.ready();
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/leagues/search?q=prem',
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json(), {
+      leagues: [
+        {
+          tournament_id: 10,
+          tournament_name: 'Premier League',
+          tournament_name_en: 'Premier League',
+          tournament_image_path: '/premier.png',
+          country_id: 20,
+          country_name: 'Англия',
+          sport_id: 1,
+          sport_name: 'Футбол',
+        },
+      ],
+    });
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /leagues/search returns empty list for short query', async () => {
+  const fakePg = createFakePg({
+    handler() {
+      throw new Error('DB should not be called for short query');
+    },
+  });
+
+  const app = buildTestApp(buildApp, { pg: fakePg });
+  await app.ready();
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/leagues/search?q=p',
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json(), { leagues: [] });
+    assert.equal(fakePg.calls.length, 0);
+  } finally {
+    await app.close();
+  }
+});
