@@ -342,6 +342,13 @@ a {
   justify-content: space-around;
   padding-top: 10px;
   padding-bottom: env(safe-area-inset-bottom, 0px);
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.keyboard-open .bottom-tabs {
+  transform: translate(-50%, calc(100% + env(safe-area-inset-bottom, 0px) + 12px));
+  opacity: 0;
+  pointer-events: none;
 }
 
 .tab-btn {
