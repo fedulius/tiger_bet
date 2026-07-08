@@ -51,6 +51,24 @@ function StatRow({ label, home, away, isBar, decimals }) {
   );
 }
 
+function buildTeamAbbreviation(name = '') {
+  const normalized = String(name || '')
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/[^\p{L}\p{N}\s-]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!normalized) return '???';
+
+  const words = normalized
+    .split(/[\s-]+/)
+    .map((word) => word.trim())
+    .filter(Boolean);
+
+  const primary = words.find((word) => /\p{L}/u.test(word)) || words[0] || normalized;
+  return primary.slice(0, 3).toUpperCase();
+}
+
 function EventRow({ event, homeTeamId, homeTeamCode, awayTeamCode, score, isLast }) {
   const isHome = event.teamId === homeTeamId;
   const teamCode = isHome ? homeTeamCode : awayTeamCode;
@@ -184,8 +202,8 @@ export function MatchPage() {
   const team1Name = parts[0] || 'Команда 1';
   const team2Name = parts[1] || 'Команда 2';
 
-  const team1Code = item?.team1_code || team1Name.substring(0, 3).toUpperCase();
-  const team2Code = item?.team2_code || team2Name.substring(0, 3).toUpperCase();
+  const team1Code = buildTeamAbbreviation(team1Name);
+  const team2Code = buildTeamAbbreviation(team2Name);
   const team1Badge = getTeamBadge({ id: item?.homeTeamId, name: item?.team1_name_ru || team1Name, country: { code: item?.team1_code, name: '' } });
   const team2Badge = getTeamBadge({ id: item?.awayTeamId, name: item?.team2_name_ru || team2Name, country: { code: item?.team2_code, name: '' } });
 
