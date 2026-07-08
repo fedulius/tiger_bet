@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, getHomeMatches } from '../lib/api.js';
-import { resolveLeague, resolveRound, resolveTeamName, resolveTeamCode, TEAM_LOCALE } from '../lib/locale.js';
+import { resolveLeague, resolveRound, resolveTeamName } from '../lib/locale.js';
+import { getTeamBadge } from '../lib/teamVisuals.js';
 
 const DATE_TABS = [
   { key: 'yesterday', label: 'Вчера' },
@@ -35,33 +36,28 @@ function isLive(status) {
 function resolveTeam(team) {
   const name = team?.name || '';
   const ruName = resolveTeamName(name);
-  const code = resolveTeamCode(name, team?.country?.code);
   return {
+    ...team,
     name: ruName,
-    id: team?.id,
-    country: {
-      code: code === 'WW' ? 'US' : code,
-      name: ruName,
-    },
   };
 }
 
 function TeamRow({ team, score, showScore }) {
   const resolved = resolveTeam(team);
-  const code = resolved.country?.code;
-  const hasFlag = code && code !== 'WW';
+  const badge = getTeamBadge(team);
+  const badgeSrc = badge.logoUrl || (badge.flagCode ? `/country-flags/${badge.flagCode}.svg` : null);
   return (
     <div className="match-team">
       <div className="team-flag">
-        {hasFlag ? (
+        {badgeSrc ? (
           <img
-            src={`/country-flags/${code}.svg`}
-            alt={code}
+            src={badgeSrc}
+            alt={resolved.name}
             style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
             onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
           />
         ) : null}
-        <span style={{ display: hasFlag ? 'none' : 'flex', fontSize: '14px' }}>⚽</span>
+        <span style={{ display: badgeSrc ? 'none' : 'flex', fontSize: '14px' }}>⚽</span>
       </div>
       <span className="team-name">{resolved.name}</span>
       {showScore && score != null && (

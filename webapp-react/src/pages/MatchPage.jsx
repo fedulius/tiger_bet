@@ -3,6 +3,7 @@ import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import { auth, getMatchDetails } from '../lib/api.js';
 import { formatMoscowDateTime } from '../lib/format.js';
 import { resolveMatchId } from '../lib/match.js';
+import { getTeamBadge } from '../lib/teamVisuals.js';
 
 const STAT_ROWS = [
   { key: 'possession', label: 'Владение мячом', suffix: '%', isBar: true },
@@ -185,6 +186,8 @@ export function MatchPage() {
 
   const team1Code = item?.team1_code || team1Name.substring(0, 3).toUpperCase();
   const team2Code = item?.team2_code || team2Name.substring(0, 3).toUpperCase();
+  const team1Badge = getTeamBadge({ id: item?.homeTeamId, name: item?.team1_name_ru || team1Name, country: { code: item?.team1_code, name: '' } });
+  const team2Badge = getTeamBadge({ id: item?.awayTeamId, name: item?.team2_name_ru || team2Name, country: { code: item?.team2_code, name: '' } });
 
   const stats = item?.stats || {};
   const events = item?.events || [];
@@ -232,12 +235,12 @@ export function MatchPage() {
           <div className="detail-hero">
             <div className="detail-team">
               <div className="detail-flag">
-                {team1Code !== 'WW' ? (
-                  <img src={`/country-flags/${team1Code}.svg`} alt={team1Code}
+                {(team1Badge.logoUrl || team1Badge.flagCode) ? (
+                  <img src={team1Badge.logoUrl || `/country-flags/${team1Badge.flagCode}.svg`} alt={team1Name}
                     style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
                     onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
                 ) : null}
-                <span style={{ display: team1Code !== 'WW' ? 'none' : 'flex', fontSize: '16px' }}>⚽</span>
+                <span style={{ display: (team1Badge.logoUrl || team1Badge.flagCode) ? 'none' : 'flex', fontSize: '16px' }}>⚽</span>
               </div>
               <div className="detail-team-name">{team1Name}</div>
             </div>
@@ -261,12 +264,12 @@ export function MatchPage() {
             </div>
             <div className="detail-team">
               <div className="detail-flag">
-                {team2Code !== 'WW' ? (
-                  <img src={`/country-flags/${team2Code}.svg`} alt={team2Code}
+                {(team2Badge.logoUrl || team2Badge.flagCode) ? (
+                  <img src={team2Badge.logoUrl || `/country-flags/${team2Badge.flagCode}.svg`} alt={team2Name}
                     style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
                     onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
                 ) : null}
-                <span style={{ display: team2Code !== 'WW' ? 'none' : 'flex', fontSize: '16px' }}>⚽</span>
+                <span style={{ display: (team2Badge.logoUrl || team2Badge.flagCode) ? 'none' : 'flex', fontSize: '16px' }}>⚽</span>
               </div>
               <div className="detail-team-name">{team2Name}</div>
             </div>
