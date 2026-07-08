@@ -191,6 +191,7 @@ export function MatchPage() {
 
   const stats = item?.stats || {};
   const events = item?.events || [];
+  const visibleStatRows = STAT_ROWS.filter((row) => stats[row.key] && (stats[row.key].home != null || stats[row.key].away != null));
 
   if (state.unauthorized) {
     return (
@@ -577,18 +578,54 @@ export function MatchPage() {
               {Object.keys(stats).length > 0 && (
                 <>
                   <div className="section-header">Статистика</div>
-                  <div style={{ margin: '0 16px', background: 'var(--surface)', borderRadius: 'var(--radius)', border: '1px solid var(--sep)', padding: '12px 16px' }}>
-                    {STAT_ROWS.filter((r) => stats[r.key] && (stats[r.key].home != null || stats[r.key].away != null)).map((row) => (
-                      <StatRow
-                        key={row.key}
-                        label={row.label}
-                        home={stats[row.key]?.home}
-                        away={stats[row.key]?.away}
-                        isBar={row.isBar}
-                        decimals={row.decimals}
-                      />
-                    ))}
-                  </div>
+                  {visibleStatRows.length > 0 ? (
+                    <div style={{ margin: '0 16px', background: 'var(--surface)', borderRadius: 'var(--radius)', border: '1px solid var(--sep)', padding: '12px 16px' }}>
+                      {visibleStatRows.map((row) => (
+                        <StatRow
+                          key={row.key}
+                          label={row.label}
+                          home={stats[row.key]?.home}
+                          away={stats[row.key]?.away}
+                          isBar={row.isBar}
+                          decimals={row.decimals}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{
+                      margin: '0 16px',
+                      background: 'linear-gradient(180deg, color-mix(in oklab, var(--surface) 92%, oklch(0.78 0.12 72) 8%) 0%, var(--surface) 100%)',
+                      borderRadius: 'var(--radius)',
+                      border: '1px solid color-mix(in oklab, var(--sep) 72%, oklch(0.78 0.12 72) 28%)',
+                      padding: '18px 16px',
+                      boxShadow: '0 10px 24px rgba(0, 0, 0, 0.18)',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                        <div style={{
+                          width: '40px',
+                          height: '40px',
+                          borderRadius: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '20px',
+                          background: 'oklch(0.78 0.12 72 / 0.14)',
+                          border: '1px solid oklch(0.78 0.12 72 / 0.22)',
+                          flexShrink: 0,
+                        }}>
+                          📊
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text)', marginBottom: '6px' }}>
+                            Пока статистика недоступна
+                          </div>
+                          <div style={{ fontSize: '13px', color: 'var(--text-2)', lineHeight: '1.5' }}>
+                            Для этого матча провайдер ещё не отдал live-данные. Мы работаем над этим ⏳
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
               {events.length > 0 && (
