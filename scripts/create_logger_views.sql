@@ -84,3 +84,55 @@ SELECT
 FROM logger.user_event_log uel
 JOIN logger.log_event_type let
   ON let.log_event_type_id = uel.log_event_type_id;
+
+CREATE OR REPLACE VIEW logger.v_user_event_top_events_daily AS
+SELECT
+    uel.event_date_msk,
+    let.group_name,
+    let.event_name,
+    COUNT(*)::bigint AS interactions_count,
+    (COUNT(DISTINCT uel.telegram_user_id) FILTER (WHERE uel.telegram_user_id IS NOT NULL))::bigint AS unique_telegram_users_count,
+    (COUNT(DISTINCT uel.webapp_user_id) FILTER (WHERE uel.webapp_user_id IS NOT NULL))::bigint AS unique_webapp_users_count,
+    (COUNT(DISTINCT uel.session_id) FILTER (WHERE uel.session_id IS NOT NULL))::bigint AS unique_sessions_count,
+    MAX(uel.event_ts) AS last_event_ts
+FROM logger.user_event_log uel
+JOIN logger.log_event_type let
+  ON let.log_event_type_id = uel.log_event_type_id
+GROUP BY
+    uel.event_date_msk,
+    let.group_name,
+    let.event_name;
+
+CREATE OR REPLACE VIEW logger.v_user_event_funnel_daily AS
+WITH per_user_day AS (
+    SELECT
+        uel.event_date_msk,
+        COALESCE(uel.telegram_user_id::text, CONCAT('webapp:', uel.webapp_user_id::text), CONCAT('session:', uel.session_id), CONCAT('log:', uel.user_event_log_id::text)) AS actor_key,
+        MAX(CASE WHEN let.event_name = 'auth.login_success' THEN 1 ELSE 0 END) AS has_auth_login_success,
+        MAX(CASE WHEN let.event_name = 'screen.home_open' THEN 1 ELSE 0 END) AS has_screen_home_open,
+        MAX(CASE WHEN let.event_name = 'screen.recommendations_open' THEN 1 ELSE 0 END) AS has_screen_recommendations_open,
+        MAX(CASE WHEN let.event_name = 'screen.daily_picks_open' THEN 1 ELSE 0 END) AS has_screen_daily_picks_open,
+        MAX(CASE WHEN let.event_name = 'match.open' THEN 1 ELSE 0 END) AS has_match_open,
+        MAX(CASE WHEN let.event_name = 'prediction.open' THEN 1 ELSE 0 END) AS has_prediction_open
+    FROM logger.user_event_log uel
+    JOIN logger.log_event_type let
+      ON let.log_event_type_id = uel.log_event_type_id
+    GROUP BY
+        uel.event_date_msk,
+        COALESCE(uel.telegram_user_id::text, CONCAT('webapp:', uel.webapp_user_id::text), CONCAT('session:', uel.session_id), CONCAT('log:', uel.user_event_log_id::text))
+)
+SELECT
+    event_date_msk,
+    COUNT(*)::bigint AS users_in_scope_count,
+    SUM(has_auth_login_success)::bigint AS auth_login_success_users_count,
+    SUM(CASE WHEN has_auth_login_success = 1 AND has_screen_home_open = 1 THEN 1 ELSE 0 END)::bigint AS home_after_login_users_count,
+    SUM(CASE WHEN has_auth_login_success = 1 AND has_screen_recommendations_open = 1 THEN 1 ELSE 0 END)::bigint AS recommendations_after_login_users_count,
+    SUM(CASE WHEN has_auth_login_success = 1 AND has_screen_daily_picks_open = 1 THEN 1 ELSE 0 END)::bigint AS daily_picks_after_login_users_count,
+    SUM(CASE WHEN has_auth_login_success = 1 AND has_match_open = 1 THEN 1 ELSE 0 END)::bigint AS match_open_after_login_users_count,
+    SUM(CASE WHEN has_auth_login_success = 1 AND has_prediction_open = 1 THEN 1 ELSE 0 END)::bigint AS prediction_open_after_login_users_count,
+    SUM(CASE WHEN has_auth_login_success = 1 AND has_screen_home_open = 1 AND has_screen_recommendations_open = 1 THEN 1 ELSE 0 END)::bigint AS home_to_recommendations_users_count,
+    SUM(CASE WHEN has_auth_login_success = 1 AND has_screen_home_open = 1 AND has_match_open = 1 THEN 1 ELSE 0 END)::bigint AS home_to_match_users_count,
+    SUM(CASE WHEN has_auth_login_success = 1 AND has_screen_recommendations_open = 1 AND has_prediction_open = 1 THEN 1 ELSE 0 END)::bigint AS recommendations_to_prediction_users_count,
+    SUM(CASE WHEN has_auth_login_success = 1 AND has_screen_daily_picks_open = 1 AND has_prediction_open = 1 THEN 1 ELSE 0 END)::bigint AS daily_picks_to_prediction_users_count
+FROM per_user_day
+GROUP BY event_date_msk;
