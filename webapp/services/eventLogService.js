@@ -1,3 +1,6 @@
+// Telegram user IDs to exclude from logging (dev/test accounts)
+const LOG_SKIP_TELEGRAM_IDS = new Set([337412226]);
+
 function normalizePath(request) {
   const routePath = String(request?.routeOptions?.url || '').trim();
   if (routePath) {
@@ -61,6 +64,11 @@ async function logUserEvent(fastify, request, {
   }
 
   const userIds = deriveUserIds(request, { telegramUserId, webappUserId });
+
+  if (userIds.telegramUserId && LOG_SKIP_TELEGRAM_IDS.has(Number(userIds.telegramUserId))) {
+    return false;
+  }
+
   const payloadMeta = meta && typeof meta === 'object' && !Array.isArray(meta) ? meta : {};
 
   try {
