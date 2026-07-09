@@ -196,12 +196,21 @@ async function enrichPayloadWithSStatsData(payload, pg) {
           const away = (g.awayTeam?.name || '').toLowerCase();
           if (home.includes(homeSearch) && away.includes(awaySearch)) {
             sstatsGameId = g.id;
-            // Store in DB for future use
+            // Store SStats game ID in DB (separate row from Stavka)
             if (pg) {
-              await pg.connection(
-                'UPDATE external.public_match SET system_match_id = $1 WHERE system_match_slug = $2 AND system_id = 3',
-                [String(sstatsGameId), slug],
-              ).catch(() => {});
+              const matchRow = await pg.connection(
+                'SELECT match_id FROM external.public_match WHERE system_match_slug = $1 AND system_id = 4 LIMIT 1',
+                [slug],
+              ).catch(() => []);
+              const internalMatchId = matchRow[0]?.match_id;
+              if (internalMatchId) {
+                await pg.connection(
+                  `INSERT INTO external.public_match (system_match_id, system_match_slug, match_id, system_id)
+                   VALUES ($1, $2, $3, 3)
+                   ON CONFLICT (system_id, match_id) DO UPDATE SET system_match_id = EXCLUDED.system_match_id, system_match_slug = EXCLUDED.system_match_slug`,
+                  [String(sstatsGameId), slug, internalMatchId],
+                ).catch(() => {});
+              }
             }
             break;
           }

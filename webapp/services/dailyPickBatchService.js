@@ -94,7 +94,7 @@ async function runDailyPickBatch({
         const candidate = findCandidateForSnapshot(snapshot.match_id, candidatesByUserId);
         if (candidate) {
           try {
-            const { systemId, sportId, tournamentId } = await resolveDbContextForCandidate(pg, { candidate });
+            const { systemId, sportId, tournamentId } = await resolveDbContextForCandidate(pg, { systemName: 'stavka', candidate });
             if (systemId != null && sportId != null && tournamentId != null) {
               const { sourceId } = await persistBundleSnapshot(pg, {
                 systemId, sportId, tournamentId, candidate, sourcePayload: snapshot.source_payload,
