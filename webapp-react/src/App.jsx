@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { HomePage } from './pages/HomePage.jsx';
 import { RecommendationsPage } from './pages/RecommendationsPage.jsx';
@@ -9,6 +9,7 @@ import { ProfilePage } from './pages/ProfilePage.jsx';
 import { MatchPage } from './pages/MatchPage.jsx';
 import { WebAppTabs } from './components/WebAppTabs.jsx';
 import { initTelegramWebApp } from './lib/telegram.js';
+import { auth } from './lib/api.js';
 
 const KEYBOARD_OPEN_CLASS = 'keyboard-open';
 const KEYBOARD_DELTA_PX = 140;
@@ -23,8 +24,37 @@ function isTextInputElement(target) {
   return target instanceof HTMLElement && target.isContentEditable;
 }
 
+function DeniedScreen() {
+  return (
+    <div style={{ padding: '80px 24px', textAlign: 'center' }}>
+      <div style={{ fontSize: '48px', marginBottom: '20px' }}>🔒</div>
+      <div style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text)', marginBottom: '12px' }}>
+        Купите подписку для доступа в приложение
+      </div>
+      <div style={{ fontSize: '14px', color: 'var(--text-3)', lineHeight: 1.5 }}>
+        Ваш Telegram-аккаунт не добавлен в список доступа.<br />
+        Обратитесь к администратору для получения доступа.
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
+  const [authState, setAuthState] = useState('pending');
+
   useEffect(() => { initTelegramWebApp(); }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    auth()
+      .then(() => { if (!cancelled) setAuthState('ok'); })
+      .catch((err) => {
+        if (!cancelled) {
+          setAuthState(err?.status === 403 ? 'denied' : 'ok');
+        }
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -74,6 +104,31 @@ export default function App() {
       document.removeEventListener('focusout', handleFocusOut);
     };
   }, []);
+
+  if (authState === 'pending') {
+    return (
+      <div className="app-shell">
+        <div className="page active" style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          minHeight: 'calc(100vh - 120px)',
+        }}>
+          <div style={{ fontSize: '40px', animation: 'ball-bounce 0.6s ease-in-out infinite alternate' }}>⚽</div>
+          <div style={{ fontSize: '14px', color: 'var(--text-3)', marginTop: '16px' }}>Загрузка</div>
+          <style>{`@keyframes ball-bounce { 0% { transform: translateY(0); } 100% { transform: translateY(-16px); } }`}</style>
+        </div>
+      </div>
+    );
+  }
+
+  if (authState === 'denied') {
+    return (
+      <div className="app-shell">
+        <div className="page active">
+          <DeniedScreen />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="app-shell">
