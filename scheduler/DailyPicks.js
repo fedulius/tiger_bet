@@ -349,7 +349,7 @@ async function runDailyPicks(pg, options = {}) {
     const enrichedPayload = await enrichPayloadWithSStatsData(sourcePayload, pg);
 
     // Resolve DB context (match is already normalized from getCandidateMatchesForDate)
-    const { systemId, sportId, tournamentId } = await resolveDbContextForCandidate(pg, { candidate: match });
+    const { systemId, sportId, tournamentId } = await resolveDbContextForCandidate(pg, { systemName: 'stavka', candidate: match });
     if (systemId == null || sportId == null || tournamentId == null) continue;
 
     // Persist match + source
