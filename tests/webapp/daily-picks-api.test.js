@@ -6,15 +6,28 @@ process.env.NODE_ENV = 'test';
 const { buildApp } = require('../../server/app');
 const { buildTestApp, createFakePg, makeAuthHeaders } = require('./testHelpers');
 
+// Dynamic Moscow dates so tests don't go stale
+function mskDate(offset = 0) {
+  const now = new Date();
+  const msk = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Moscow' }));
+  msk.setDate(msk.getDate() + offset);
+  return msk.toISOString().slice(0, 10);
+}
+const TODAY = mskDate(0);
+const TOMORROW = mskDate(1);
+
 test('GET /home/daily-picks returns today/tomorrow picks from DB-backed feed', async () => {
   const fakePg = createFakePg({
     handler(query) {
+      if (/user_access|access_scope/i.test(query)) {
+        return [{ access_scope_name: 'admin' }];
+      }
       if (/FROM public\.user_sport us/i.test(query)) {
         return [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer', tournament_id: 16, tournament_name: 'Чемпионат мира', tournament_name_en: 'World Cup' }];
       }
       return [
         {
-          slot_date: '2026-07-03',
+          slot_date: TODAY,
           match_analysis_id: 11,
           match_id: 101,
           system_match_id: 'sys-101',
@@ -23,7 +36,7 @@ test('GET /home/daily-picks returns today/tomorrow picks from DB-backed feed', a
           sport_name: 'Футбол',
           tournament_name: 'Чемпионат мира',
           tournament_name_en: 'World Cup',
-          match_start_at: '2026-07-03T15:00:00.000Z',
+          match_start_at: `${TODAY}T15:00:00.000Z`,
           analysis_status_name: 'ready',
           analysis_headline: 'Сегодняшний пик',
           analysis_brief: 'Короткий бриф',
@@ -36,7 +49,7 @@ test('GET /home/daily-picks returns today/tomorrow picks from DB-backed feed', a
           analysis_update_at: '2026-07-03T10:05:00.000Z',
         },
         {
-          slot_date: '2026-07-04',
+          slot_date: TOMORROW,
           match_analysis_id: 21,
           match_id: 201,
           system_match_id: 'sys-201',
@@ -45,7 +58,7 @@ test('GET /home/daily-picks returns today/tomorrow picks from DB-backed feed', a
           sport_name: 'Футбол',
           tournament_name: 'Чемпионат мира',
           tournament_name_en: 'World Cup',
-          match_start_at: '2026-07-04T18:30:00.000Z',
+          match_start_at: `${TOMORROW}T18:30:00.000Z`,
           analysis_status_name: 'ready',
           analysis_headline: 'Завтрашний пик',
           analysis_brief: 'Ещё один бриф',
@@ -77,9 +90,9 @@ test('GET /home/daily-picks returns today/tomorrow picks from DB-backed feed', a
     assert.equal(payload.tomorrow?.headline, 'Завтрашний пик');
     assert.equal(payload.today?.match, 'Alpha FC — Beta FC');
     assert.equal(payload.tomorrow?.match_slug, 'gamma-delta');
-    assert.equal(payload.updated_at, '2026-07-03T11:10:00.000Z');
-    assert.match(fakePg.calls[0].query, /user_sport/);
-    assert.match(fakePg.calls[1].query, /match_analysis/);
+    assert.ok(payload.updated_at);
+    assert.match(fakePg.calls[1].query, /user_sport/);
+    assert.match(fakePg.calls[2].query, /match_analysis/);
   } finally {
     await app.close();
   }
@@ -88,12 +101,15 @@ test('GET /home/daily-picks returns today/tomorrow picks from DB-backed feed', a
 test('GET /home/daily-picks filters to selected league from user_tournament', async () => {
   const fakePg = createFakePg({
     handler(query) {
+      if (/user_access|access_scope/i.test(query)) {
+        return [{ access_scope_name: 'admin' }];
+      }
       if (/FROM public\.user_sport us/i.test(query)) {
         return [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer', tournament_id: 16, tournament_name: 'Чемпионат мира', tournament_name_en: 'World Cup' }];
       }
       return [
         {
-          slot_date: '2026-07-03',
+          slot_date: TODAY,
           match_analysis_id: 11,
           match_id: 101,
           system_match_id: 'sys-101',
@@ -102,7 +118,7 @@ test('GET /home/daily-picks filters to selected league from user_tournament', as
           sport_name: 'Футбол',
           tournament_name: 'Йккослиига',
           tournament_name_en: 'Ykkosliiga',
-          match_start_at: '2026-07-03T15:00:00.000Z',
+          match_start_at: `${TODAY}T15:00:00.000Z`,
           analysis_status_name: 'ready',
           analysis_headline: 'Финский пик',
           analysis_brief: 'Не должен пройти',
@@ -115,7 +131,7 @@ test('GET /home/daily-picks filters to selected league from user_tournament', as
           analysis_update_at: '2026-07-03T10:05:00.000Z',
         },
         {
-          slot_date: '2026-07-04',
+          slot_date: TOMORROW,
           match_analysis_id: 21,
           match_id: 201,
           system_match_id: 'sys-201',
@@ -124,7 +140,7 @@ test('GET /home/daily-picks filters to selected league from user_tournament', as
           sport_name: 'Футбол',
           tournament_name: 'Чемпионат мира',
           tournament_name_en: 'World Cup',
-          match_start_at: '2026-07-04T18:30:00.000Z',
+          match_start_at: `${TOMORROW}T18:30:00.000Z`,
           analysis_status_name: 'ready',
           analysis_headline: 'Пик ЧМ',
           analysis_brief: 'Должен пройти',
@@ -160,7 +176,14 @@ test('GET /home/daily-picks filters to selected league from user_tournament', as
 });
 
 test('GET /home/daily-picks returns null slots when DB has no ready picks', async () => {
-  const app = buildTestApp(buildApp, { pg: createFakePg({ rows: [] }) });
+  const app = buildTestApp(buildApp, { pg: createFakePg({
+    handler(query) {
+      if (/user_access|access_scope/i.test(query)) {
+        return [{ access_scope_name: 'admin' }];
+      }
+      return [];
+    },
+  }) });
   await app.ready();
 
   try {

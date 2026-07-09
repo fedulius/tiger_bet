@@ -2,6 +2,7 @@ const SSTATS_BASE = 'https://api.sstats.net';
 const { resolveLeague, resolveRound, resolveTeamName, resolveTeamCode } = require('../../services/locale');
 const { getDailyPicksFeed } = require('../../services/dailyPickReadService');
 const { logUserEvent } = require('../../services/eventLogService');
+const { checkHeavyRouteAccess } = require('../../services/accessCheck');
 
 // ── Cache ──────────────────────────────────────────────────
 // In-memory cache, shared across ALL users.
@@ -150,7 +151,12 @@ async function loadFavoriteSports(fastify, userId) {
 
 // ── Route ──────────────────────────────────────────────────
 async function homeRoutes(fastify) {
-  fastify.get('/daily-picks', async (request) => {
+  fastify.get('/daily-picks', async (request, reply) => {
+    const access = await checkHeavyRouteAccess(fastify, request);
+    if (!access.allowed) {
+      return reply.status(403).send({ error: 'Access denied' });
+    }
+
     const userId = Number(request.user?.userId);
     const favoriteSports = Number.isFinite(userId)
       ? await loadFavoriteSports(fastify, userId)
@@ -171,7 +177,12 @@ async function homeRoutes(fastify) {
     return payload;
   });
 
-  fastify.get('/', async (request) => {
+  fastify.get('/', async (request, reply) => {
+    const access = await checkHeavyRouteAccess(fastify, request);
+    if (!access.allowed) {
+      return reply.status(403).send({ error: 'Access denied' });
+    }
+
     const userId = Number(request.user?.userId);
     if (!Number.isFinite(userId)) {
       return { yesterday: [], today: [], tomorrow: [] };

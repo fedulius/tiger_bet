@@ -155,6 +155,9 @@ test('GET /history writes screen.history_open event', async () => {
 test('GET /home/daily-picks writes screen.daily_picks_open event', async () => {
   const fakePg = createFakePg({
     handler(query) {
+      if (/user_access|access_scope/i.test(query)) {
+        return [{ access_scope_name: 'admin' }];
+      }
       if (/FROM public\.user_sport us/i.test(query)) {
         return [];
       }
@@ -191,6 +194,9 @@ test('GET /home/daily-picks writes screen.daily_picks_open event', async () => {
 test('GET /recommendations writes screen.recommendations_open event', async () => {
   const fakePg = createFakePg({
     handler(query) {
+      if (/user_access|access_scope/i.test(query)) {
+        return [{ access_scope_name: 'admin' }];
+      }
       if (/FROM public\.user_sport us/i.test(query)) {
         return [];
       }
