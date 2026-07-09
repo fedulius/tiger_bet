@@ -1,6 +1,7 @@
 const { getCatalogBySportNames, getAvailableLeaguesForSport } = require('../../services/sportLeaguesCatalog');
 const { normalizeSportsSettings, loadResolvedFavoriteSports } = require('../../services/favoritesStore');
 const { invalidateRecommendationsCache } = require('../../services/recommendationService');
+const { logUserEvent } = require('../../services/eventLogService');
 
 function buildSportLookupKeys(name = '') {
   const normalized = String(name || '').trim().toLowerCase();
@@ -45,7 +46,7 @@ async function favoritesRoutes(fastify) {
       ORDER BY sport_id
     `);
 
-    return {
+    const response = {
       sports: favoriteSports.map(({ sport_name, sport_url, leagues }) => buildResponseSportSetting({ name: sport_name, sport_url, leagues })),
       profile: String(request.user?.profile || ''),
       available_sports: allSports
@@ -53,6 +54,19 @@ async function favoritesRoutes(fastify) {
         .filter((item) => item.sport_name),
       leagues_catalog: getCatalogBySportNames(allSports.map(normalizeSportOutput)),
     };
+
+    await logUserEvent(fastify, request, {
+      eventName: 'screen.favorites_open',
+      statusCode: 200,
+      entityId: 'favorites',
+      meta: {
+        screen: 'favorites',
+        sports_count: response.sports.length,
+        leagues_count: response.sports.reduce((sum, item) => sum + item.leagues.length, 0),
+      },
+    });
+
+    return response;
   });
 
   fastify.put('/', async (request, reply) => {
@@ -128,10 +142,23 @@ async function favoritesRoutes(fastify) {
         redisClient: fastify.recommendationsRedis,
       });
 
-      return {
+      const response = {
         sports: updatedFavorites.map(({ sport_name, sport_url, leagues }) => buildResponseSportSetting({ name: sport_name, sport_url, leagues })),
         profile: String(request.user?.profile || ''),
       };
+
+      await logUserEvent(fastify, request, {
+        eventName: 'favorites.update',
+        statusCode: 200,
+        entityId: 'profile',
+        meta: {
+          sports_count: response.sports.length,
+          leagues_count: response.sports.reduce((sum, item) => sum + item.leagues.length, 0),
+          favorites_count: response.sports.length + response.sports.reduce((sum, item) => sum + item.leagues.length, 0),
+        },
+      });
+
+      return response;
     } catch (error) {
       return reply.status(400).send({
         error: error.message || 'Invalid payload',
@@ -148,6 +175,17 @@ async function favoritesRoutes(fastify) {
     await invalidateRecommendationsCache({
       favoriteSportsSets: [previousFavorites, []],
       redisClient: fastify.recommendationsRedis,
+    });
+
+    await logUserEvent(fastify, request, {
+      eventName: 'favorites.clear',
+      statusCode: 200,
+      entityId: 'profile',
+      meta: {
+        sports_count: 0,
+        leagues_count: 0,
+        favorites_count: 0,
+      },
     });
 
     return reply.send(1);

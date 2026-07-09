@@ -1,6 +1,7 @@
 const SSTATS_BASE = 'https://api.sstats.net';
 const { resolveLeague, resolveRound, resolveTeamName, resolveTeamCode } = require('../../services/locale');
 const { getDailyPicksFeed } = require('../../services/dailyPickReadService');
+const { logUserEvent } = require('../../services/eventLogService');
 
 // ── Cache ──────────────────────────────────────────────────
 // In-memory cache, shared across ALL users.
@@ -155,7 +156,19 @@ async function homeRoutes(fastify) {
       ? await loadFavoriteSports(fastify, userId)
       : [];
 
-    return getDailyPicksFeed(fastify.pg, { favoriteSports });
+    const payload = await getDailyPicksFeed(fastify.pg, { favoriteSports });
+    await logUserEvent(fastify, request, {
+      eventName: 'screen.daily_picks_open',
+      statusCode: 200,
+      entityId: 'daily_picks',
+      meta: {
+        screen: 'daily_picks',
+        today_exists: Boolean(payload?.today),
+        tomorrow_exists: Boolean(payload?.tomorrow),
+      },
+    });
+
+    return payload;
   });
 
   fastify.get('/', async (request) => {
@@ -230,7 +243,7 @@ async function homeRoutes(fastify) {
       }
     }
 
-    return {
+    const response = {
       yesterday: yLeagues,
       today: tLeagues,
       tomorrow: twLeagues,
@@ -241,6 +254,18 @@ async function homeRoutes(fastify) {
         country: r.country_name_en,
       })),
     };
+
+    await logUserEvent(fastify, request, {
+      eventName: 'screen.home_open',
+      statusCode: 200,
+      entityId: 'home',
+      meta: {
+        screen: 'home',
+        leagues_count: response.leagues.length,
+      },
+    });
+
+    return response;
   });
 }
 

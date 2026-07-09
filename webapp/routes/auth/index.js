@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { logUserEvent } = require('../../services/eventLogService');
 
 function parseInitData(initDataRaw = '') {
   const params = new URLSearchParams(String(initDataRaw || ''));
@@ -62,6 +63,18 @@ async function authRoutes(fastify) {
       profile: 'preview',
       preview: true,
     });
+    await logUserEvent(fastify, req, {
+      eventName: 'auth.preview_login',
+      statusCode: 200,
+      entityId: 'preview',
+      source: 'preview',
+      webappUserId: 1,
+      meta: {
+        auth_provider: 'preview',
+        access_mode: 'preview',
+        is_preview: true,
+      },
+    });
     return res.send({ token });
   });
 
@@ -90,6 +103,17 @@ async function authRoutes(fastify) {
 
     const users = await dal.checkUser(telegramUserId);
     if (!Array.isArray(users) || users.length === 0) {
+      await logUserEvent(fastify, req, {
+        eventName: 'auth.login_forbidden',
+        statusCode: 403,
+        entityId: 'forbidden',
+        telegramUserId,
+        meta: {
+          auth_provider: 'telegram',
+          access_mode: 'denied',
+          is_preview: false,
+        },
+      });
       return res.status(403).send({ error: 'Access denied' });
     }
 
@@ -102,6 +126,18 @@ async function authRoutes(fastify) {
       userId: dbUserId,
       telegram_user_id: telegramUserId,
       profile: `telegram:${telegramUserId}`,
+    });
+    await logUserEvent(fastify, req, {
+      eventName: 'auth.login_success',
+      statusCode: 200,
+      entityId: 'jwt',
+      telegramUserId,
+      webappUserId: dbUserId,
+      meta: {
+        auth_provider: 'telegram',
+        access_mode: 'allowed',
+        is_preview: false,
+      },
     });
     return res.send({ token });
   });

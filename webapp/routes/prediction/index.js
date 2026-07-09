@@ -1,5 +1,6 @@
 'use strict';
 
+const { logUserEvent } = require('../../services/eventLogService');
 async function predictionRoutes(fastify) {
   fastify.get('/:slug', async (request, reply) => {
     const { slug } = request.params;
@@ -52,7 +53,7 @@ async function predictionRoutes(fastify) {
     const row = rows[0];
     const bets = Array.isArray(row.recommended_bets) ? row.recommended_bets : [];
 
-    return {
+    const payload = {
       id: row.match_analysis_id,
       match_id: row.match_id,
       match_slug: slug,
@@ -77,6 +78,20 @@ async function predictionRoutes(fastify) {
       created_at: row.analysis_create_at || null,
       updated_at: row.analysis_update_at || null,
     };
+
+    await logUserEvent(fastify, request, {
+      eventName: 'prediction.open',
+      statusCode: 200,
+      entityId: slug,
+      meta: {
+        match_slug: slug,
+        match_id: row.match_id,
+        sport_name: row.sport_name || '',
+        league_name: row.tournament_name || row.tournament_name_en || '',
+      },
+    });
+
+    return payload;
   });
 }
 

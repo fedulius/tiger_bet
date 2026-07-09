@@ -1,5 +1,6 @@
 const SSTATS_BASE = 'https://api.sstats.net';
 const { resolveLeague, resolveRound, resolveTeamName, resolveTeamCode } = require('../../services/locale');
+const { logUserEvent } = require('../../services/eventLogService');
 
 // ── Cache ──────────────────────────────────────────────────
 // Shared across all users. Live=60s, finished=24h.
@@ -373,6 +374,18 @@ async function matchRoutes(fastify) {
       if (glicko) response.glicko = glicko;
 
       response.hasAnalytics = !!(h2h.length > 0 || form || injuries.length > 0 || glicko);
+
+      await logUserEvent(fastify, request, {
+        eventName: 'match.open',
+        statusCode: 200,
+        entityId: String(match.id),
+        meta: {
+          match_id: match.id,
+          sport_name: response.league ? 'Футбол' : '',
+          league_name: response.league || '',
+          is_live: response.isLive,
+        },
+      });
 
       // Cache with appropriate TTL
       const ttl = isLive(match.status)
