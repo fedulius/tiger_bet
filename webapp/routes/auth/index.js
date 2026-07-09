@@ -101,8 +101,8 @@ async function authRoutes(fastify) {
       return res.status(401).send({ error: 'Invalid telegram user' });
     }
 
-    const users = await dal.checkUser(telegramUserId);
-    if (!Array.isArray(users) || users.length === 0) {
+    const access = await dal.checkWebappAccess(telegramUserId);
+    if (!access || !access.is_allowed) {
       await logUserEvent(fastify, req, {
         eventName: 'auth.login_forbidden',
         statusCode: 403,
@@ -112,12 +112,13 @@ async function authRoutes(fastify) {
           auth_provider: 'telegram',
           access_mode: 'denied',
           is_preview: false,
+          reason: access ? 'inactive_access' : 'not_found',
         },
       });
       return res.status(403).send({ error: 'Access denied' });
     }
 
-    const dbUserId = Number(users[0]?.user_id);
+    const dbUserId = Number(access.user_id);
     if (!Number.isFinite(dbUserId) || dbUserId <= 0) {
       return res.status(403).send({ error: 'Access denied' });
     }
@@ -137,6 +138,7 @@ async function authRoutes(fastify) {
         auth_provider: 'telegram',
         access_mode: 'allowed',
         is_preview: false,
+        granted_scope: access.granted_scope,
       },
     });
     return res.send({ token });

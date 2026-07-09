@@ -145,6 +145,8 @@ export function HomePage() {
     } catch (err) {
       if (err.status === 401) {
         setAuthState('unauthorized');
+      } else if (err.status === 403) {
+        setAuthState('denied');
       } else {
         setAuthState('ok');
         setData({ yesterday: [], today: [], tomorrow: [] });
@@ -231,9 +233,37 @@ export function HomePage() {
         </button>
       </div>
     );
-  }
+    }
 
-  const noLeagues = data && Array.isArray(data.leagues) && data.leagues.length === 0;
+    if (authState === 'denied') {
+      return (
+        <div style={{ padding: '60px 20px', textAlign: 'center' }}>
+          <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text)', marginBottom: '12px' }}>
+            Доступ к приложению пока не открыт
+          </div>
+          <div style={{ fontSize: '14px', color: 'var(--text-3)', marginBottom: '20px' }}>
+            Ваш Telegram-аккаунт не добавлен в список доступа
+          </div>
+          <button
+            onClick={loadData}
+            style={{
+              padding: '10px 24px',
+              borderRadius: '12px',
+              background: 'var(--accent)',
+              color: '#fff',
+              border: 'none',
+              fontWeight: 600,
+              fontSize: '14px',
+              cursor: 'pointer',
+            }}
+          >
+            Повторить
+          </button>
+        </div>
+      );
+    }
+
+    const noLeagues = data && Array.isArray(data.leagues) && data.leagues.length === 0;
   const leagues = data?.[activeTab] || [];
   const hasAnyData = (data?.yesterday?.length || 0) + (data?.today?.length || 0) + (data?.tomorrow?.length || 0) > 0;
 

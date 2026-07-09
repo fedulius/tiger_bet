@@ -29,9 +29,11 @@ function makeInitData({ userId = 123, botToken = 'test-bot-token', authDate = Ma
   return params.toString();
 }
 
-test('GET /auth returns token for valid telegram init data and allowed user', async () => {
+test('GET /auth returns token for allowed webapp user', async () => {
   process.env.TELEGRAM_BOT_TOKEN = 'test-bot-token';
-  const fakePg = createFakePg({ rows: [{ user_id: 1 }] });
+  const fakePg = createFakePg({
+    rows: [{ user_id: 1, telegram_user_id: 777, is_allowed: true, granted_scope: 'webapp' }],
+  });
   const app = buildTestApp(buildApp, { pg: fakePg });
   await app.ready();
 
@@ -51,6 +53,34 @@ test('GET /auth returns token for valid telegram init data and allowed user', as
     assert.equal(decoded.userId, 1);
     assert.equal(decoded.telegram_user_id, 777);
     assert.equal(decoded.profile, 'telegram:777');
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /auth returns token for allowed admin user', async () => {
+  process.env.TELEGRAM_BOT_TOKEN = 'test-bot-token';
+  const fakePg = createFakePg({
+    rows: [{ user_id: 2, telegram_user_id: 888, is_allowed: true, granted_scope: 'admin' }],
+  });
+  const app = buildTestApp(buildApp, { pg: fakePg });
+  await app.ready();
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/auth',
+      headers: {
+        'x-telegram-init-data': makeInitData({ botToken: process.env.TELEGRAM_BOT_TOKEN, userId: 888 }),
+      },
+    });
+
+    assert.equal(response.statusCode, 200);
+    const payload = response.json();
+    const decoded = app.jwt.verify(payload.token);
+    assert.equal(decoded.userId, 2);
+    assert.equal(decoded.telegram_user_id, 888);
+    assert.equal(decoded.profile, 'telegram:888');
   } finally {
     await app.close();
   }
@@ -76,7 +106,7 @@ test('GET /auth returns 401 for invalid hash', async () => {
   }
 });
 
-test('GET /auth returns 403 when telegram user is not allowed', async () => {
+test('GET /auth returns 403 when telegram user has no access mapping', async () => {
   process.env.TELEGRAM_BOT_TOKEN = 'test-bot-token';
   const app = buildTestApp(buildApp, { pg: createFakePg({ rows: [] }) });
   await app.ready();
@@ -87,6 +117,29 @@ test('GET /auth returns 403 when telegram user is not allowed', async () => {
       url: '/auth',
       headers: {
         'x-telegram-init-data': makeInitData({ botToken: process.env.TELEGRAM_BOT_TOKEN, userId: 999 }),
+      },
+    });
+
+    assert.equal(response.statusCode, 403);
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /auth returns 403 when access is inactive', async () => {
+  process.env.TELEGRAM_BOT_TOKEN = 'test-bot-token';
+  const fakePg = createFakePg({
+    rows: [{ user_id: 3, telegram_user_id: 555, is_allowed: false, granted_scope: 'webapp' }],
+  });
+  const app = buildTestApp(buildApp, { pg: fakePg });
+  await app.ready();
+
+  try {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/auth',
+      headers: {
+        'x-telegram-init-data': makeInitData({ botToken: process.env.TELEGRAM_BOT_TOKEN, userId: 555 }),
       },
     });
 

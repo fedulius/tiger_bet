@@ -3,17 +3,31 @@ class DAL {
     this.pg = pg;
   }
 
-  async checkUser(telegramUserId) {
+  async checkWebappAccess(telegramUserId) {
     if (telegramUserId === undefined || telegramUserId === null) {
       throw new Error('telegramUserId is required');
     }
 
-    return await this.pg.connection(`
-      SELECT user_id, system_user_id, system_id
-      FROM external.public_user
-      WHERE system_user_id = $1
-        AND system_id = 1;
-    `, [telegramUserId])
+    const rows = await this.pg.connection(`
+      SELECT
+        u.user_id,
+        epu.system_user_id AS telegram_user_id,
+        ua.is_allowed,
+        asc.access_scope_name AS granted_scope
+      FROM external.public_user epu
+      JOIN public.user u ON u.user_id = epu.user_id
+      JOIN public.access_scope asc ON asc.access_scope_name IN ('admin', 'webapp')
+      JOIN public.user_access ua
+        ON ua.user_id = u.user_id
+       AND ua.access_scope_id = asc.access_scope_id
+      WHERE epu.system_id = 1
+        AND epu.system_user_id = $1
+        AND ua.is_allowed = true
+      ORDER BY asc.access_scope_id ASC
+      LIMIT 1;
+    `, [telegramUserId]);
+
+    return rows[0] || null;
   }
 }
 

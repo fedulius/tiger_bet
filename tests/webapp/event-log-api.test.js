@@ -34,7 +34,7 @@ test('GET /auth writes auth.login_success event', async () => {
   const fakePg = createFakePg({
     handler(query) {
       if (/FROM external\.public_user/i.test(query)) {
-        return [{ user_id: 1 }];
+        return [{ user_id: 1, telegram_user_id: 777, is_allowed: true, granted_scope: 'webapp' }];
       }
       if (/logger\.user_event_log_create/i.test(query)) {
         return [{ ok: true }];

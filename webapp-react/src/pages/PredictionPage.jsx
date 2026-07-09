@@ -15,6 +15,7 @@ export function PredictionPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [denied, setDenied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -28,7 +29,11 @@ export function PredictionPage() {
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err.message || 'Ошибка загрузки');
+          if (err?.status === 403) {
+            setDenied(true);
+          } else {
+            setError(err.message || 'Ошибка загрузки');
+          }
           setLoading(false);
         }
       }
@@ -49,6 +54,19 @@ export function PredictionPage() {
     return (
       <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--red)' }}>
         {error}
+      </div>
+    );
+  }
+
+  if (denied) {
+    return (
+      <div style={{ padding: '60px 20px', textAlign: 'center' }}>
+        <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text)', marginBottom: '12px' }}>
+          Доступ к приложению пока не открыт
+        </div>
+        <div style={{ fontSize: '14px', color: 'var(--text-3)' }}>
+          Ваш Telegram-аккаунт не добавлен в список доступа
+        </div>
       </div>
     );
   }

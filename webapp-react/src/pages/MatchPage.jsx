@@ -184,6 +184,8 @@ export function MatchPage() {
         if (!cancelled) {
           if (String(error?.message || '') === 'HTTP 401') {
             setState({ loading: false, error: '', item: null, unauthorized: true });
+          } else if (error?.status === 403 || String(error?.message || '') === 'HTTP 403') {
+            setState({ loading: false, error: '', item: null, denied: true });
           } else {
             setState({ loading: false, error: 'Матч не найден', item: null, unauthorized: false });
           }
@@ -220,6 +222,21 @@ export function MatchPage() {
         </div>
         <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-2)' }}>
           Откройте приложение через кнопку в Telegram-боте.
+        </div>
+      </div>
+    );
+  }
+
+  if (state.denied) {
+    return (
+      <div className="page active">
+        <div className="detail-header">
+          <button className="back-btn" onClick={() => navigate(-1)}>←</button>
+          <span className="detail-title">Доступ ограничен</span>
+        </div>
+        <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-2)' }}>
+          <div style={{ marginBottom: '8px' }}>Доступ к приложению пока не открыт</div>
+          <div style={{ fontSize: '13px', color: 'var(--text-3)' }}>Ваш Telegram-аккаунт не добавлен в список доступа</div>
         </div>
       </div>
     );
