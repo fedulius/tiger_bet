@@ -50,7 +50,7 @@ export default function App() {
       .then(() => { if (!cancelled) setAuthState('ok'); })
       .catch((err) => {
         if (!cancelled) {
-          setAuthState(err?.status === 403 ? 'denied' : 'ok');
+          setAuthState(err?.status === 403 ? 'denied' : 'error');
         }
       });
     return () => { cancelled = true; };
@@ -125,6 +125,25 @@ export default function App() {
       <div className="app-shell">
         <div className="page active">
           <DeniedScreen />
+        </div>
+      </div>
+    );
+  }
+
+  if (authState === 'error') {
+    return (
+      <div className="app-shell">
+        <div className="page active" style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          minHeight: 'calc(100vh - 120px)', padding: '20px',
+        }}>
+          <div style={{ fontSize: '48px', marginBottom: '20px' }}>⚠️</div>
+          <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text)', marginBottom: '8px' }}>
+            Ошибка подключения
+          </div>
+          <div style={{ fontSize: '14px', color: 'var(--text-3)' }}>
+            Попробуйте обновить страницу
+          </div>
         </div>
       </div>
     );

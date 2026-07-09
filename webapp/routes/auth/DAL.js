@@ -13,17 +13,17 @@ class DAL {
         u.user_id,
         epu.system_user_id AS telegram_user_id,
         ua.is_allowed,
-        asc.access_scope_name AS granted_scope
+        s.access_scope_name AS granted_scope
       FROM external.public_user epu
       JOIN public.user u ON u.user_id = epu.user_id
-      JOIN public.access_scope asc ON asc.access_scope_name IN ('admin', 'webapp')
+      JOIN public.access_scope s ON s.access_scope_name IN ('admin', 'webapp')
       JOIN public.user_access ua
         ON ua.user_id = u.user_id
-       AND ua.access_scope_id = asc.access_scope_id
+       AND ua.access_scope_id = s.access_scope_id
       WHERE epu.system_id = 1
         AND epu.system_user_id = $1
         AND ua.is_allowed = true
-      ORDER BY asc.access_scope_id ASC
+      ORDER BY s.access_scope_id ASC
       LIMIT 1;
     `, [telegramUserId]);
 
