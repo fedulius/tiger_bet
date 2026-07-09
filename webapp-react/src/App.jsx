@@ -9,7 +9,7 @@ import { ProfilePage } from './pages/ProfilePage.jsx';
 import { MatchPage } from './pages/MatchPage.jsx';
 import { WebAppTabs } from './components/WebAppTabs.jsx';
 import { initTelegramWebApp } from './lib/telegram.js';
-import { auth } from './lib/api.js';
+import { auth, setOnAccessDenied } from './lib/api.js';
 
 const KEYBOARD_OPEN_CLASS = 'keyboard-open';
 const KEYBOARD_DELTA_PX = 140;
@@ -45,6 +45,7 @@ export default function App() {
   useEffect(() => { initTelegramWebApp(); }, []);
 
   useEffect(() => {
+    setOnAccessDenied(() => setAuthState('denied'));
     let cancelled = false;
     auth()
       .then(() => { if (!cancelled) setAuthState('ok'); })

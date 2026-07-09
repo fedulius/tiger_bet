@@ -1,6 +1,11 @@
 import { withTelegramInitDataHeaders, getTelegramInitData } from './telegram.js';
 
 let authToken = '';
+let _onAccessDenied = null;
+
+export function setOnAccessDenied(cb) {
+  _onAccessDenied = cb;
+}
 
 function buildHeaders(headers = {}) {
   const base = withTelegramInitDataHeaders(headers);
@@ -26,6 +31,9 @@ async function getJson(url) {
     const error = new Error(`HTTP ${response.status}`);
     error.status = response.status;
     error.payload = payload;
+    if (response.status === 403 && _onAccessDenied) {
+      _onAccessDenied();
+    }
     throw error;
   }
 
@@ -89,6 +97,9 @@ export async function fetchJSON(url, options = {}) {
   if (!response.ok) {
     const error = new Error(`HTTP ${response.status}`);
     error.status = response.status;
+    if (response.status === 403 && _onAccessDenied) {
+      _onAccessDenied();
+    }
     throw error;
   }
   return response.json();
