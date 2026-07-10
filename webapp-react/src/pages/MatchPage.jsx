@@ -353,8 +353,15 @@ export function MatchPage() {
 
           {followState.visible && followState.canFollow && !followState.isFinished && !item.isFinished && (
             <div style={{ margin: '12px 16px 0' }}>
-              <button type="button" className="follow-match-btn" onClick={handleFollowToggle} disabled={followState.loading} aria-label={followState.following ? 'Отменить отслеживание матча' : 'Отслеживать матч'}>
-                {followState.loading ? 'Обновление…' : followState.following ? 'Отслеживается' : 'Отслеживать матч'}
+              <button
+                type="button"
+                className={`follow-match-btn${followState.following ? ' is-following' : ''}`}
+                onClick={handleFollowToggle}
+                disabled={followState.loading}
+                aria-pressed={followState.following}
+                aria-label={followState.following ? 'Отменить отслеживание матча' : 'Отслеживать матч'}
+              >
+                {followState.loading ? 'Обновление…' : followState.following ? '✓ Отслеживается' : 'Отслеживать матч'}
               </button>
               {followState.error && <div className="follow-match-error" role="status">{followState.error}</div>}
             </div>
