@@ -69,6 +69,11 @@ export function WebAppTabs() {
             className={`tab-btn${isActive ? ' active' : ''}`}
             aria-label={label}
             title={label}
+            onClick={() => {
+              if (to === '/leagues' && isActive) {
+                window.dispatchEvent(new CustomEvent('tiger-bet:reset-leagues-tab'));
+              }
+            }}
           >
             <Icon />
             <span>{label}</span>

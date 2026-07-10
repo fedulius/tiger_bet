@@ -34,6 +34,31 @@ export function LeaguesPage() {
   const touchStartYRef = useRef(null);
   const swipeDismissedKeyboardRef = useRef(false);
 
+  const scrollToPageTop = () => {
+    requestAnimationFrame(() => {
+      const scrollRoot = document.querySelector('.page.active') || document.scrollingElement || document.documentElement;
+      if (scrollRoot && typeof scrollRoot.scrollTo === 'function') {
+        scrollRoot.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+        return;
+      }
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    });
+  };
+
+  const resetToRoot = () => {
+    setAnimDir('backward');
+    setLevelKey(k => k + 1);
+    setLevel(1);
+    setCountries([]);
+    setLeagues([]);
+    setSelectedSport(null);
+    setSelectedCountry(null);
+    setOpenedCountryFromSearch(false);
+    clearSearch();
+    loadFavs();
+    scrollToPageTop();
+  };
+
   useEffect(() => {
     (async () => {
       try { await auth(); } catch {}
@@ -220,6 +245,7 @@ export function LeaguesPage() {
     setLevelKey(k => k + 1);
     setLevel(2);
     loadCountries(sport.sport_id);
+    scrollToPageTop();
   };
 
   const openCountry = (country, sportOverride = null) => {
@@ -232,6 +258,7 @@ export function LeaguesPage() {
     setLevelKey(k => k + 1);
     setLevel(3);
     loadLeagues(sport.sport_id, country.country_id);
+    scrollToPageTop();
   };
 
   const goBack = () => {
@@ -246,17 +273,20 @@ export function LeaguesPage() {
         setSelectedSport(null);
         setOpenedCountryFromSearch(false);
         loadFavs();
+        scrollToPageTop();
         return;
       }
       setLevel(2);
       setLeagues([]);
       setSelectedCountry(null);
+      scrollToPageTop();
     } else if (level === 2) {
       setLevel(1);
       setCountries([]);
       setSelectedSport(null);
       setOpenedCountryFromSearch(false);
       loadFavs();
+      scrollToPageTop();
     }
   };
 
@@ -280,6 +310,12 @@ export function LeaguesPage() {
       active.blur();
     }
   };
+
+  useEffect(() => {
+    const handleReset = () => resetToRoot();
+    window.addEventListener('tiger-bet:reset-leagues-tab', handleReset);
+    return () => window.removeEventListener('tiger-bet:reset-leagues-tab', handleReset);
+  }, []);
 
   const renderSkeletonRows = (count = 6, showTrailing = false) => (
     <div className="card-group skeleton-group" aria-hidden="true">
