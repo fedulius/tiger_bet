@@ -75,6 +75,18 @@ export function getMatchDetails(id) {
   return getJson(`/match/${encodeURIComponent(id)}`);
 }
 
+export function getMatchFollow(id) {
+  return getJson(`/match/${encodeURIComponent(id)}/follow`);
+}
+
+export function followMatch(id) {
+  return fetchJSON(`/match/${encodeURIComponent(id)}/follow`, { method: 'PUT' });
+}
+
+export function unfollowMatch(id) {
+  return fetchJSON(`/match/${encodeURIComponent(id)}/follow`, { method: 'DELETE' });
+}
+
 export function getHomeMatches() {
   return getJson('/home');
 }
@@ -94,15 +106,18 @@ export async function fetchJSON(url, options = {}) {
     ...options.headers,
   });
   const response = await fetch(url, { ...options, headers });
+  const contentType = response.headers.get('content-type') || '';
+  const payload = contentType.includes('application/json') ? await response.json() : null;
   if (!response.ok) {
     const error = new Error(`HTTP ${response.status}`);
     error.status = response.status;
+    error.payload = payload;
     if (response.status === 403 && _onAccessDenied) {
       _onAccessDenied();
     }
     throw error;
   }
-  return response.json();
+  return payload;
 }
 
 export function getLeagueSearchSuggestions(query) {

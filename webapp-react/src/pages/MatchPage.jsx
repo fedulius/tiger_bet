@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useParams, useNavigate } from 'react-router-dom';
-import { auth, getMatchDetails } from '../lib/api.js';
+import { auth, followMatch, getMatchDetails, getMatchFollow, unfollowMatch } from '../lib/api.js';
 import { formatMoscowDateTime } from '../lib/format.js';
 import { resolveMatchId } from '../lib/match.js';
 import { getTeamBadge } from '../lib/teamVisuals.js';
@@ -146,6 +146,7 @@ export function MatchPage() {
 
   const [state, setState] = useState({ loading: true, error: '', item: null, unauthorized: false });
   const [activeTab, setActiveTab] = useState('analytics');
+  const [followState, setFollowState] = useState({ visible: false, following: false, canFollow: false, isFinished: false, loading: false, error: '' });
 
   // Auto-refresh for live matches
   useEffect(() => {
@@ -155,6 +156,7 @@ export function MatchPage() {
       try {
         const updated = await getMatchDetails(matchId);
         setState((prev) => ({ ...prev, item: updated }));
+        setFollowState((prev) => ({ ...prev, isFinished: Boolean(updated?.isFinished) }));
       } catch {
         // silent — next tick will retry
       }
@@ -176,9 +178,13 @@ export function MatchPage() {
 
       try {
         await auth();
-        const item = await getMatchDetails(matchId);
+        const [item, follow] = await Promise.all([
+          getMatchDetails(matchId),
+          getMatchFollow(matchId),
+        ]);
         if (!cancelled) {
           setState({ loading: false, error: '', item, unauthorized: false });
+          setFollowState({ visible: true, following: Boolean(follow?.following), canFollow: Boolean(follow?.canFollow), isFinished: Boolean(follow?.isFinished || item?.isFinished), loading: false, error: '' });
         }
       } catch (error) {
         if (!cancelled) {
@@ -186,6 +192,13 @@ export function MatchPage() {
             setState({ loading: false, error: '', item: null, unauthorized: true });
           } else if (error?.status === 403 || String(error?.message || '') === 'HTTP 403') {
             setState({ loading: false, error: '', item: null, denied: true });
+          } else if (error?.status === 503 && error?.payload?.error === 'FEATURE_DISABLED') {
+            setFollowState((prev) => ({ ...prev, visible: false, loading: false }));
+            getMatchDetails(matchId).then((item) => {
+              if (!cancelled) setState({ loading: false, error: '', item, unauthorized: false });
+            }).catch(() => {
+              if (!cancelled) setState({ loading: false, error: 'Матч не найден', item: null, unauthorized: false });
+            });
           } else {
             setState({ loading: false, error: 'Матч не найден', item: null, unauthorized: false });
           }
@@ -198,6 +211,18 @@ export function MatchPage() {
   }, [matchId]);
 
   const item = state.item;
+
+  async function handleFollowToggle() {
+    if (!followState.visible || followState.loading || !followState.canFollow || followState.isFinished || item?.isFinished) return;
+    const wasFollowing = followState.following;
+    setFollowState((prev) => ({ ...prev, loading: true, error: '' }));
+    try {
+      const next = wasFollowing ? await unfollowMatch(matchId) : await followMatch(matchId);
+      setFollowState((prev) => ({ ...prev, following: Boolean(next?.following), canFollow: Boolean(next?.canFollow), isFinished: Boolean(next?.isFinished), loading: false }));
+    } catch {
+      setFollowState((prev) => ({ ...prev, following: wasFollowing, loading: false, error: 'Не удалось обновить отслеживание' }));
+    }
+  }
 
   const matchName = item?.match || 'Матч — Матч';
   const parts = matchName.split(' — ');
@@ -325,6 +350,15 @@ export function MatchPage() {
               {item.halftime && <span style={{ marginLeft: '8px' }}>Тайм: {item.halftime}</span>}
             </div>
           </div>
+
+          {followState.visible && followState.canFollow && !followState.isFinished && !item.isFinished && (
+            <div style={{ margin: '12px 16px 0' }}>
+              <button type="button" className="follow-match-btn" onClick={handleFollowToggle} disabled={followState.loading} aria-label={followState.following ? 'Отменить отслеживание матча' : 'Отслеживать матч'}>
+                {followState.loading ? 'Обновление…' : followState.following ? 'Отслеживается' : 'Отслеживать матч'}
+              </button>
+              {followState.error && <div className="follow-match-error" role="status">{followState.error}</div>}
+            </div>
+          )}
 
           {/* Tab toggle — only when match is live/finished AND has analytics */}
           {item.hasAnalytics && (item.isLive || item.isFinished) && (
