@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import { auth, followMatch, getMatchDetails, getMatchFollow, unfollowMatch } from '../lib/api.js';
 import { formatMoscowDateTime } from '../lib/format.js';
@@ -147,6 +147,74 @@ export function MatchPage() {
   const [state, setState] = useState({ loading: true, error: '', item: null, unauthorized: false });
   const [activeTab, setActiveTab] = useState('analytics');
   const [followState, setFollowState] = useState({ visible: false, following: false, canFollow: false, isFinished: false, loading: false, error: '' });
+  const swipeBackRef = useRef(null);
+
+  const goBack = () => navigate(-1);
+
+  const startSwipeBackGesture = (clientX, clientY) => {
+    const pageLeft = document.querySelector('.page.active')?.getBoundingClientRect?.().left || 0;
+    if (clientX - pageLeft > 36) {
+      swipeBackRef.current = null;
+      return;
+    }
+
+    swipeBackRef.current = {
+      startX: clientX,
+      startY: clientY,
+      active: true,
+      triggered: false,
+    };
+  };
+
+  const updateSwipeBackGesture = (clientX, clientY) => {
+    const gesture = swipeBackRef.current;
+    if (!gesture?.active || gesture.triggered) return;
+
+    const dx = clientX - gesture.startX;
+    const dy = Math.abs(clientY - gesture.startY);
+    if (dx < 0 || dy > 48) {
+      swipeBackRef.current = null;
+      return;
+    }
+
+    if (dx >= 84 && dy <= 42) {
+      gesture.triggered = true;
+      goBack();
+    }
+  };
+
+  const handleTouchStart = (event) => {
+    const touch = event.touches?.[0];
+    if (!touch) {
+      swipeBackRef.current = null;
+      return;
+    }
+    startSwipeBackGesture(touch.clientX, touch.clientY);
+  };
+
+  const handleTouchMove = (event) => {
+    const touch = event.touches?.[0];
+    if (!touch) return;
+    updateSwipeBackGesture(touch.clientX, touch.clientY);
+  };
+
+  const handleTouchEnd = () => {
+    swipeBackRef.current = null;
+  };
+
+  const swipeBackHandlers = {
+    onTouchStart: handleTouchStart,
+    onTouchMove: handleTouchMove,
+    onTouchEnd: handleTouchEnd,
+    onTouchCancel: handleTouchEnd,
+    onPointerDown: (event) => {
+      if (event.pointerType === 'mouse' && event.button !== 0) return;
+      startSwipeBackGesture(event.clientX, event.clientY);
+    },
+    onPointerMove: (event) => updateSwipeBackGesture(event.clientX, event.clientY),
+    onPointerUp: handleTouchEnd,
+    onPointerCancel: handleTouchEnd,
+  };
 
   // Auto-refresh for live matches
   useEffect(() => {
@@ -240,9 +308,9 @@ export function MatchPage() {
 
   if (state.unauthorized) {
     return (
-      <div className="page active">
+      <div className="page active" {...swipeBackHandlers}>
         <div className="detail-header">
-          <button className="back-btn" onClick={() => navigate(-1)}>←</button>
+          <button className="back-btn" onClick={goBack}>←</button>
           <span className="detail-title">Доступ ограничен</span>
         </div>
         <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-2)' }}>
@@ -254,9 +322,9 @@ export function MatchPage() {
 
   if (state.denied) {
     return (
-      <div className="page active">
+      <div className="page active" {...swipeBackHandlers}>
         <div className="detail-header">
-          <button className="back-btn" onClick={() => navigate(-1)}>←</button>
+          <button className="back-btn" onClick={goBack}>←</button>
           <span className="detail-title">Доступ ограничен</span>
         </div>
         <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-2)' }}>
@@ -268,10 +336,10 @@ export function MatchPage() {
   }
 
   return (
-    <div className="page active">
+    <div className="page active" {...swipeBackHandlers}>
       {/* Header */}
       <div className="detail-header">
-        <button className="back-btn" onClick={() => navigate(-1)}>←</button>
+        <button className="back-btn" onClick={goBack}>←</button>
         <span className="detail-title">{item?.league || 'Матч'}</span>
       </div>
 
