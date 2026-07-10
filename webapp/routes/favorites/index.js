@@ -43,6 +43,7 @@ async function favoritesRoutes(fastify) {
     const allSports = await fastify.pg.connection(`
       SELECT sport_id, sport_name, sport_url
       FROM public.sport
+      WHERE COALESCE(is_active, 0) = 1
       ORDER BY sport_id
     `);
 
@@ -80,6 +81,7 @@ async function favoritesRoutes(fastify) {
       const allSports = await fastify.pg.connection(`
         SELECT sport_id, sport_name, sport_url
         FROM public.sport
+        WHERE COALESCE(is_active, 0) = 1
       `);
 
       const allTournaments = await fastify.pg.connection(`

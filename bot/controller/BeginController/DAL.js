@@ -8,6 +8,7 @@ class DAL {
     return await this.pg.connection(`
       SELECT *
       FROM public.sport
+      WHERE COALESCE(is_active, 0) = 1
     `);
   }
 

@@ -16,6 +16,7 @@ async function leaguesRoutes(fastify) {
              COUNT(t.tournament_id) AS tournament_count
       FROM public.sport s
       LEFT JOIN public.tournament t ON t.sport_id = s.sport_id
+      WHERE COALESCE(s.is_active, 0) = 1
       GROUP BY s.sport_id, s.sport_name, s.sport_url
       ORDER BY s.sport_id
     `);
@@ -35,6 +36,7 @@ async function leaguesRoutes(fastify) {
              COUNT(t.tournament_id) AS tournament_count
       FROM public.country c
       INNER JOIN public.tournament t ON t.country_id = c.country_id AND t.sport_id = $1
+      INNER JOIN public.sport s ON s.sport_id = t.sport_id AND COALESCE(s.is_active, 0) = 1
       GROUP BY c.country_id, c.country_name, c.country_name_en, c.country_code, c.country_image_path
       ORDER BY c.country_name
     `, [sportId]);
@@ -57,6 +59,7 @@ async function leaguesRoutes(fastify) {
              tt.type_title AS tournament_type
       FROM public.tournament t
       JOIN public.tournament_type tt ON t.tournament_type_id = tt.tournament_type_id
+      JOIN public.sport s ON s.sport_id = t.sport_id AND COALESCE(s.is_active, 0) = 1
       WHERE t.sport_id = $1 AND t.country_id = $2
       ORDER BY t.tournament_name
     `, [sportId, countryId]);
@@ -81,11 +84,14 @@ async function leaguesRoutes(fastify) {
       FROM public.tournament t
       JOIN public.country c ON c.country_id = t.country_id
       JOIN public.sport s ON s.sport_id = t.sport_id
-      WHERE t.tournament_name ILIKE $1
-         OR COALESCE(t.tournament_name_en, '') ILIKE $1
-         OR c.country_name ILIKE $1
-         OR COALESCE(c.country_name_en, '') ILIKE $1
-         OR s.sport_name ILIKE $1
+      WHERE COALESCE(s.is_active, 0) = 1
+        AND (
+          t.tournament_name ILIKE $1
+          OR COALESCE(t.tournament_name_en, '') ILIKE $1
+          OR c.country_name ILIKE $1
+          OR COALESCE(c.country_name_en, '') ILIKE $1
+          OR s.sport_name ILIKE $1
+        )
       ORDER BY t.tournament_name
       LIMIT 8
     `, [like]);
@@ -96,9 +102,12 @@ async function leaguesRoutes(fastify) {
       FROM public.country c
       JOIN public.tournament t ON t.country_id = c.country_id
       JOIN public.sport s ON s.sport_id = t.sport_id
-      WHERE c.country_name ILIKE $1
-         OR COALESCE(c.country_name_en, '') ILIKE $1
-         OR s.sport_name ILIKE $1
+      WHERE COALESCE(s.is_active, 0) = 1
+        AND (
+          c.country_name ILIKE $1
+          OR COALESCE(c.country_name_en, '') ILIKE $1
+          OR s.sport_name ILIKE $1
+        )
       ORDER BY c.country_name
       LIMIT 5
     `, [like]);
@@ -106,7 +115,8 @@ async function leaguesRoutes(fastify) {
     const sports = await fastify.pg.connection(`
       SELECT s.sport_id, s.sport_name, s.sport_url
       FROM public.sport s
-      WHERE s.sport_name ILIKE $1
+      WHERE COALESCE(s.is_active, 0) = 1
+        AND s.sport_name ILIKE $1
       ORDER BY s.sport_name
       LIMIT 5
     `, [like]);
@@ -130,11 +140,14 @@ async function leaguesRoutes(fastify) {
       FROM public.tournament t
       JOIN public.country c ON c.country_id = t.country_id
       JOIN public.sport s ON s.sport_id = t.sport_id
-      WHERE t.tournament_name ILIKE $1
-         OR COALESCE(t.tournament_name_en, '') ILIKE $1
-         OR c.country_name ILIKE $1
-         OR COALESCE(c.country_name_en, '') ILIKE $1
-         OR s.sport_name ILIKE $1
+      WHERE COALESCE(s.is_active, 0) = 1
+        AND (
+          t.tournament_name ILIKE $1
+          OR COALESCE(t.tournament_name_en, '') ILIKE $1
+          OR c.country_name ILIKE $1
+          OR COALESCE(c.country_name_en, '') ILIKE $1
+          OR s.sport_name ILIKE $1
+        )
       ORDER BY t.tournament_name
       LIMIT 100
     `, [like]);
@@ -158,6 +171,7 @@ async function leaguesRoutes(fastify) {
       JOIN public.country c ON c.country_id = t.country_id
       JOIN public.sport s ON s.sport_id = t.sport_id
       WHERE ut.user_id = $1
+        AND COALESCE(s.is_active, 0) = 1
       ORDER BY c.country_name, t.tournament_name, t.tournament_id
     `, [userId]);
 
@@ -176,6 +190,20 @@ async function leaguesRoutes(fastify) {
     if (!Number.isFinite(tournamentId)) {
       reply.code(400);
       return { error: 'Invalid tournament_id' };
+    }
+
+    const [target] = await fastify.pg.connection(`
+      SELECT t.tournament_id
+      FROM public.tournament t
+      JOIN public.sport s ON s.sport_id = t.sport_id
+      WHERE t.tournament_id = $1
+        AND COALESCE(s.is_active, 0) = 1
+      LIMIT 1
+    `, [tournamentId]);
+
+    if (!target) {
+      reply.code(404);
+      return { error: 'Tournament not found' };
     }
 
     await fastify.pg.connection(

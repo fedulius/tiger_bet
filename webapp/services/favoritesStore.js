@@ -100,6 +100,7 @@ async function loadResolvedFavoriteSports(pg, userId) {
       ON t.tournament_id = ut.tournament_id
      AND t.sport_id = us.sport_id
     WHERE us.user_id = $1
+      AND COALESCE(s.is_active, 0) = 1
     ORDER BY us.sport_id, t.tournament_name_en, t.tournament_name
   `, [userId]);
 

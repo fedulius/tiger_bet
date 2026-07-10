@@ -122,10 +122,11 @@ async function getDailyPicksByDateRange(pg, { startDate, endDate, favoriteSports
       JOIN public.analysis_status ast ON ast.analysis_status_id = ma.analysis_status_id
       JOIN public.match_source ms ON ms.match_source_id = ma.match_source_id
       JOIN public.match m ON m.match_id = ms.match_id
-      LEFT JOIN public.sport s ON s.sport_id = m.sport_id
+      JOIN public.sport s ON s.sport_id = m.sport_id
       LEFT JOIN public.tournament t ON t.tournament_id = m.tournament_id
       LEFT JOIN external.public_match pm ON pm.match_id = m.match_id
       WHERE ast.analysis_status_name = 'ready'
+        AND COALESCE(s.is_active, 0) = 1
         AND to_char(m.match_start_at AT TIME ZONE 'Europe/Moscow', 'YYYY-MM-DD') BETWEEN $1 AND $2
     )
     SELECT *

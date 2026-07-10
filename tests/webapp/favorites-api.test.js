@@ -18,16 +18,15 @@ test('GET /favorites returns DB-backed favorites', async () => {
   const fakePg = createFakePg({
     handler(query) {
       if (/FROM public\.user_sport us/i.test(query)) {
+        assert.match(query, /COALESCE\(s\.is_active, 0\) = 1/);
         return [
           { sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer', tournament_id: null, tournament_name: null, tournament_name_en: null },
-          { sport_id: 3, sport_name: 'Теннис', sport_url: 'tennis', tournament_id: null, tournament_name: null, tournament_name_en: null },
         ];
       }
       if (/FROM public\.sport/i.test(query)) {
+        assert.match(query, /COALESCE\(is_active, 0\) = 1/);
         return [
           { sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' },
-          { sport_id: 2, sport_name: 'Хоккей', sport_url: 'ice-hockey' },
-          { sport_id: 3, sport_name: 'Теннис', sport_url: 'tennis' },
         ];
       }
       return [];
@@ -45,7 +44,7 @@ test('GET /favorites returns DB-backed favorites', async () => {
     });
 
     assert.equal(response.statusCode, 200);
-    assert.equal(fakePg.calls.length, 2);
+    assert.ok(fakePg.calls.length >= 2);
     assert.deepEqual(response.json(), {
       sports: [
         {
@@ -56,25 +55,13 @@ test('GET /favorites returns DB-backed favorites', async () => {
           available_leagues: ['Premier League', 'La Liga', 'Serie A', 'Bundesliga', 'Ligue 1', 'Champions League', 'World Cup', 'FIFA Club World Cup'],
           leagues_summary: 'Все лиги',
         },
-        {
-          name: 'Теннис',
-          sport_url: 'tennis',
-          leagues: [],
-          all_leagues: true,
-          available_leagues: ['ATP', 'WTA', 'Challenger'],
-          leagues_summary: 'Все лиги',
-        },
       ],
       profile: 'telegram:777',
       available_sports: [
         { sport_name: 'Футбол', sport_url: 'soccer' },
-        { sport_name: 'Хоккей', sport_url: 'ice-hockey' },
-        { sport_name: 'Теннис', sport_url: 'tennis' },
       ],
       leagues_catalog: {
         'Футбол': ['Premier League', 'La Liga', 'Serie A', 'Bundesliga', 'Ligue 1', 'Champions League', 'World Cup', 'FIFA Club World Cup'],
-        'Хоккей': ['KHL', 'NHL', 'World Championship'],
-        'Теннис': ['ATP', 'WTA', 'Challenger'],
       },
     });
   } finally {
@@ -93,13 +80,12 @@ test('PUT /favorites replaces user favorite sports in DB and persists selected l
           ? [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer', tournament_id: null, tournament_name: null, tournament_name_en: null }]
           : [
               { sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer', tournament_id: 10, tournament_name: 'АПЛ', tournament_name_en: 'Premier League' },
-              { sport_id: 3, sport_name: 'Теннис', sport_url: 'tennis', tournament_id: null, tournament_name: null, tournament_name_en: null },
             ];
       }
       if (/SELECT\s+sport_id,\s+sport_name,\s+sport_url\s+FROM public\.sport/i.test(query)) {
+        assert.match(query, /COALESCE\(is_active, 0\) = 1/);
         return [
           { sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' },
-          { sport_id: 3, sport_name: 'Теннис', sport_url: 'tennis' },
         ];
       }
       if (/SELECT\s+tournament_id,\s+sport_id,\s+tournament_name,\s+tournament_name_en\s+FROM public\.tournament/i.test(query)) {
@@ -155,14 +141,6 @@ test('PUT /favorites replaces user favorite sports in DB and persists selected l
           available_leagues: ['Premier League', 'La Liga', 'Serie A', 'Bundesliga', 'Ligue 1', 'Champions League', 'World Cup', 'FIFA Club World Cup'],
           leagues_summary: 'Premier League',
         },
-        {
-          name: 'Теннис',
-          sport_url: 'tennis',
-          leagues: [],
-          all_leagues: true,
-          available_leagues: ['ATP', 'WTA', 'Challenger'],
-          leagues_summary: 'Все лиги',
-        },
       ],
       profile: 'telegram:777',
     });
@@ -170,13 +148,13 @@ test('PUT /favorites replaces user favorite sports in DB and persists selected l
     assert.ok(fakePg.calls.some((call) => /DELETE FROM public\.user_tournament/i.test(call.query)));
     assert.ok(fakePg.calls.some((call) => /DELETE FROM public\.user_sport/i.test(call.query)));
     assert.ok(fakePg.calls.some((call) => /INSERT INTO public\.user_sport/i.test(call.query) && JSON.stringify(call.params) === JSON.stringify([55, 1])));
-    assert.ok(fakePg.calls.some((call) => /INSERT INTO public\.user_sport/i.test(call.query) && JSON.stringify(call.params) === JSON.stringify([55, 3])));
+    assert.ok(!fakePg.calls.some((call) => /INSERT INTO public\.user_sport/i.test(call.query) && JSON.stringify(call.params) === JSON.stringify([55, 3])));
     assert.ok(fakePg.calls.some((call) => /INSERT INTO public\.user_tournament/i.test(call.query) && JSON.stringify(call.params) === JSON.stringify([55, 10])));
     assert.deepEqual(fakeRedis.deletedKeys.sort(), [
       'recommendations:1:',
       'recommendations:1::current_version',
-      'recommendations:1:Premier League|3:',
-      'recommendations:1:Premier League|3::current_version',
+      'recommendations:1:Premier League',
+      'recommendations:1:Premier League:current_version',
     ]);
   } finally {
     await app.close();

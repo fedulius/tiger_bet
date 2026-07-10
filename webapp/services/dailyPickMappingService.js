@@ -12,7 +12,7 @@ async function resolveSystemIdForDailyPickSource(pg, { systemName = 'sstats' } =
 async function resolveSportIdBySportSlug(pg, { sportSlug }) {
   if (!sportSlug) throw new Error('sportSlug is required');
   const [row] = await pg.connection(
-    'SELECT sport_id FROM public.sport WHERE sport_url = $1',
+    'SELECT sport_id FROM public.sport WHERE sport_url = $1 AND COALESCE(is_active, 0) = 1',
     [sportSlug],
   );
   return row ? (row.sport_id ?? null) : null;
