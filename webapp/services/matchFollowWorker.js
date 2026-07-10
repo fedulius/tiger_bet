@@ -18,6 +18,11 @@ function scoreFromGame(game) {
   };
 }
 
+function elapsedFromGame(game) {
+  const value = game?.elapsed ?? game?.minute ?? game?.time?.elapsed ?? null;
+  return value == null ? null : value;
+}
+
 function occurredAt(game) {
   return game?.date || game?.startDate || game?.start_time || new Date().toISOString();
 }
@@ -95,7 +100,7 @@ async function processFollowedMatches({ pg, fetcher = defaultFetchSstats, dryRun
       VALUES ($1, 'sstats', $2, $3, $4, $5, $6, $7, $8::jsonb)
       ON CONFLICT (provider_code, provider_event_key) DO NOTHING
       RETURNING match_event_id
-    `, [match.match_id, event.providerEventKey, event.kind, occurredAt(game), score.home, score.away, status.match_status_id, JSON.stringify({ status_id: statusId })]);
+    `, [match.match_id, event.providerEventKey, event.kind, occurredAt(game), score.home, score.away, status.match_status_id, JSON.stringify({ status_id: statusId, elapsed: elapsedFromGame(game) })]);
     if (inserted?.[0]?.match_event_id != null) {
       summary.events_created += 1;
       await enqueueNotificationsForMatchEvent({
@@ -106,7 +111,7 @@ async function processFollowedMatches({ pg, fetcher = defaultFetchSstats, dryRun
         occurredAt: occurredAt(game),
         scoreHome: score.home,
         scoreAway: score.away,
-        data: { status_id: statusId },
+        data: { status_id: statusId, elapsed: elapsedFromGame(game) },
       });
     } else summary.skipped += 1;
   }

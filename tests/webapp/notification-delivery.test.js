@@ -33,3 +33,15 @@ test('template renderer exposes text and HTML-ready fields', () => {
   const rendered = renderTemplate({ title_template: 'Title', body_template: 'Счёт: {{score}}\n{{match_title}}' }, { score: '1:0', match_title: 'A — B' });
   assert.deepEqual(rendered, { title: 'Title', text: 'Счёт: 1:0\nA — B', html: 'Счёт: 1:0<br>A — B' });
 });
+
+test('template renderer unescapes literal newline sequences and trims empty tail', () => {
+  const rendered = renderTemplate(
+    { title_template: '⚽ Матч начался', body_template: '⚽ Матч начался\\n\\n{{match_title}}\\n{{league_name}}\\n\\n' },
+    { match_title: 'Испания — Бельгия', league_name: 'Футбол · Чемпионат мира' },
+  );
+  assert.deepEqual(rendered, {
+    title: '⚽ Матч начался',
+    text: '⚽ Матч начался\n\nИспания — Бельгия\nФутбол · Чемпионат мира',
+    html: '⚽ Матч начался<br><br>Испания — Бельгия<br>Футбол · Чемпионат мира',
+  });
+});

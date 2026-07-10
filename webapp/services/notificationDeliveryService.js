@@ -8,12 +8,61 @@ const TYPE_BY_EVENT_KIND = {
   cancelled: 'match.cancelled',
 };
 
+function normalizeRenderedText(value) {
+  return String(value ?? '')
+    .replace(/\\n/g, '\n')
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function renderTemplate(template, fields) {
   const replace = (value) => String(value ?? '').replace(/{{\s*([a-zA-Z0-9_]+)\s*}}/g, (_, key) => fields[key] ?? '');
+  const text = normalizeRenderedText(replace(template.body_template || template.bodyTemplate || ''));
   return {
-    text: replace(template.body_template || template.bodyTemplate || ''),
-    html: replace(template.body_template || template.bodyTemplate || '').replace(/\n/g, '<br>'),
-    title: replace(template.title_template || template.titleTemplate || ''),
+    text,
+    html: text.replace(/\n/g, '<br>'),
+    title: normalizeRenderedText(replace(template.title_template || template.titleTemplate || '')),
+  };
+}
+
+function formatScore(scoreHome, scoreAway) {
+  if (scoreHome == null || scoreAway == null) return '';
+  return `${scoreHome}:${scoreAway}`;
+}
+
+function formatElapsed(value) {
+  if (value == null || value === '') return '';
+  const n = Number(value);
+  if (!Number.isFinite(n)) return String(value);
+  return `${n}'`;
+}
+
+async function resolveMatchNotificationFields(pg, { matchId, scoreHome, scoreAway, data = {} }) {
+  const rows = await pg.connection(`
+    SELECT m.home_team, m.away_team, m.match_start_at,
+           t.tournament_name, t.tournament_name_en,
+           s.sport_name
+    FROM public.match m
+    LEFT JOIN public.tournament t ON t.tournament_id = m.tournament_id
+    LEFT JOIN public.sport s ON s.sport_id = m.sport_id
+    WHERE m.match_id = $1
+    LIMIT 1
+  `, [matchId]);
+  const match = rows?.[0] || {};
+  const home = String(match.home_team || '').trim();
+  const away = String(match.away_team || '').trim();
+  const league = String(match.tournament_name || match.tournament_name_en || '').trim();
+  const sport = String(match.sport_name || '').trim();
+
+  return {
+    match_title: home && away ? `${home} — ${away}` : '',
+    league_name: [sport, league].filter(Boolean).join(' · '),
+    score: formatScore(scoreHome, scoreAway),
+    elapsed: formatElapsed(data.elapsed ?? data.minute),
+    event_kind: data.event_kind || '',
   };
 }
 
@@ -43,9 +92,14 @@ async function enqueueNotificationForMatchEvent({ pg, matchEventId, matchId, eve
       AND t.channel_id = c.channel_id AND t.locale_code = 'ru' AND t.is_active = true
     WHERE mf.match_id = $3 AND mf.follow_status = 'active'
   `, [1, event.notification_type_id, matchId]);
+  const fields = await resolveMatchNotificationFields(pg, {
+    matchId,
+    scoreHome,
+    scoreAway,
+    data: { ...data, event_kind: eventKind },
+  });
   let created = 0;
   for (const follower of followers || []) {
-    const fields = { match_title: '', league_name: '', score: `${scoreHome ?? '-'}:${scoreAway ?? '-'}`, elapsed: '', event_kind: eventKind };
     const rendered = renderTemplate(follower, fields);
     await pg.connection(`
       INSERT INTO notification.delivery

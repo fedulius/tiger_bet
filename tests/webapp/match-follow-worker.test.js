@@ -53,7 +53,8 @@ test('worker enqueues generic notification event and active follower delivery', 
       if (/FROM external\.public_match_status/i.test(query)) return [{ match_status_id: 2, is_live: true, is_finished: false, is_cancelled: false }];
       if (/INSERT INTO public\.match_event/i.test(query)) return [{ match_event_id: 99 }];
       if (/INSERT INTO notification\.event/i.test(query)) return [{ notification_event_id: 100, notification_type_id: 1 }];
-      if (/FROM public\.match_follow mf/i.test(query)) return [{ user_id: 7, recipient_address: 'tg-7', channel_id: 1, notification_template_id: 11, body_template: 'Матч {{score}}', title_template: 'Старт' }];
+      if (/FROM public\.match_follow mf/i.test(query)) return [{ user_id: 7, recipient_address: 'tg-7', channel_id: 1, notification_template_id: 11, body_template: '⚽ Матч начался\\n\\n{{match_title}}\\n{{league_name}}\\n\\n', title_template: 'Старт' }];
+      if (/FROM public\.match m/i.test(query)) return [{ home_team: 'Испания', away_team: 'Бельгия', sport_name: 'Футбол', tournament_name: 'Чемпионат мира' }];
       return [];
     } });
     await processFollowedMatches({ pg, fetcher: async () => ({ game: { id: 55, status: { id: 3 }, score: { home: 0, away: 0 } } }) });
@@ -61,7 +62,7 @@ test('worker enqueues generic notification event and active follower delivery', 
     const delivery = pg.calls.find(({ query }) => /INSERT INTO notification\.delivery/i.test(query));
     assert.ok(delivery);
     assert.equal(delivery.params[1], 7);
-    assert.equal(JSON.parse(delivery.params[5]).text, 'Матч 0:0');
+    assert.equal(JSON.parse(delivery.params[5]).text, '⚽ Матч начался\n\nИспания — Бельгия\nФутбол · Чемпионат мира');
   } finally { restore(); }
 });
 
