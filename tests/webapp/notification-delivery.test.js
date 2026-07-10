@@ -45,3 +45,27 @@ test('template renderer unescapes literal newline sequences and trims empty tail
     html: '⚽ Матч начался<br><br>Испания — Бельгия<br>Футбол · Чемпионат мира',
   });
 });
+
+test('all match follow telegram templates render complete clean text', () => {
+  const fields = {
+    match_title: 'Испания — Бельгия',
+    league_name: 'Футбол · Чемпионат мира',
+    score: '2:1',
+    elapsed: "73'",
+  };
+  const templates = [
+    { title_template: '⚽ Матч начался', body_template: '⚽ Матч начался\\n\\n{{match_title}}\\n{{league_name}}\\n\\n' },
+    { title_template: '⚽ ГООООООЛ!!!', body_template: '⚽ Изменился счёт\\n\\n{{match_title}}\\n{{league_name}}\\n\\nСчёт: {{score}}\\n{{elapsed}}' },
+    { title_template: '🏁 Матч завершён', body_template: '🏁 Матч завершён\\n\\n{{match_title}}\\n{{league_name}}\\n\\nИтоговый счёт: {{score}}' },
+    { title_template: '⚠️ Матч отменён', body_template: '⚠️ Матч отменён или прерван\\n\\n{{match_title}}\\n{{league_name}}' },
+  ];
+
+  for (const template of templates) {
+    const rendered = renderTemplate(template, fields);
+    assert.ok(rendered.text.length > 0);
+    assert.equal(rendered.text, rendered.text.trim());
+    assert.doesNotMatch(rendered.text, /\\n/);
+    assert.doesNotMatch(rendered.text, /{{/);
+    assert.doesNotMatch(rendered.text, /\n{3,}/);
+  }
+});
