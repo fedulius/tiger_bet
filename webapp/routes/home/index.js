@@ -121,6 +121,40 @@ function groupByLeague(matches) {
   return [...groups.values()];
 }
 
+function collectSstatsMatchIds(leagues) {
+  const ids = new Set();
+  for (const league of leagues || []) {
+    for (const match of league.matches || []) {
+      if (match?.id != null) ids.add(String(match.id));
+    }
+  }
+  return [...ids];
+}
+
+async function markFollowedMatches(pg, userId, leagues) {
+  const sstatsIds = collectSstatsMatchIds(leagues);
+  if (!sstatsIds.length) return leagues;
+
+  const rows = await pg.connection(`
+    SELECT epm.system_match_id
+    FROM public.match_follow mf
+    JOIN external.public_match epm
+      ON epm.match_id = mf.match_id
+     AND epm.system_id = 3
+    WHERE mf.user_id = $1
+      AND mf.follow_status = 'active'
+      AND epm.system_match_id = ANY($2::text[])
+  `, [userId, sstatsIds]);
+
+  const followedIds = new Set((rows || []).map((row) => String(row.system_match_id)));
+  for (const league of leagues || []) {
+    for (const match of league.matches || []) {
+      match.isFollowed = followedIds.has(String(match.id));
+    }
+  }
+  return leagues;
+}
+
 // ── Fetch + cache per day ──────────────────────────────────
 async function fetchDay(dayType, leagueIds, dateStr, ended) {
   const key = makeCacheKey(dayType, leagueIds, dateStr);
@@ -211,6 +245,12 @@ async function homeRoutes(fastify) {
       fetchDay('tomorrow', leagueIds, tomorrow, false),
     ]);
 
+    await Promise.all([
+      markFollowedMatches(fastify.pg, userId, yLeagues),
+      markFollowedMatches(fastify.pg, userId, tLeagues),
+      markFollowedMatches(fastify.pg, userId, twLeagues),
+    ]);
+
     // Enrich penalty matches with shootout results
     const allLeagues = [...yLeagues, ...tLeagues, ...twLeagues];
     const penaltyMatchIds = [];
@@ -285,4 +325,6 @@ module.exports.__private = {
   makeCacheKey,
   getDayRange,
   getMoscowDate,
+  collectSstatsMatchIds,
+  markFollowedMatches,
 };

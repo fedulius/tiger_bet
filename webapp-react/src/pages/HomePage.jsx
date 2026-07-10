@@ -89,7 +89,12 @@ function MatchCard({ match, onClick }) {
   const hasScore = match.score?.home != null;
 
   return (
-    <div className="match-card" onClick={onClick}>
+    <div className={`match-card${match.isFollowed ? ' is-followed' : ''}`} onClick={onClick}>
+      {match.isFollowed && (
+        <div className="match-follow-badge" aria-label="Матч отслеживается" title="Матч отслеживается">
+          ✓
+        </div>
+      )}
       <div className="match-teams">
         <TeamRow team={match.home} score={match.score.home} showScore={hasScore} />
         <TeamRow team={match.away} score={match.score.away} showScore={hasScore} />
