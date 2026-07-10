@@ -43,6 +43,12 @@ function makeSplitPg() {
   });
 }
 
+function findCall(pg, pattern) {
+  const call = pg.calls.find(({ query }) => pattern.test(query));
+  assert.ok(call, `Expected SQL call matching ${pattern}`);
+  return call;
+}
+
 // ── buildExternalSourceId ─────────────────────────────────────────────────────
 
 describe('buildExternalSourceId', () => {
@@ -65,22 +71,27 @@ describe('buildExternalSourceId', () => {
 // ── persistBundleSnapshot – SQL call order ───────────────────────────────────
 
 describe('persistBundleSnapshot – SQL call order', () => {
-  it('makes exactly two db calls', async () => {
+  it('checks existing external match before creating match/source', async () => {
     const pg = makeSplitPg();
     await persistBundleSnapshot(pg, { ...BASE_IDS, candidate: makeCandidate(), sourcePayload: makeSourcePayload() });
-    assert.equal(pg.calls.length, 2);
+    assert.equal(pg.calls.length, 3);
+    assert.match(pg.calls[0].query, /external\.public_match/);
+    assert.match(pg.calls[1].query, /match_create/);
+    assert.match(pg.calls[2].query, /match_source_create/);
   });
 
-  it('calls match_create first', async () => {
-    const pg = makeSplitPg();
-    await persistBundleSnapshot(pg, { ...BASE_IDS, candidate: makeCandidate(), sourcePayload: makeSourcePayload() });
-    assert.match(pg.calls[0].query, /match_create/);
-  });
-
-  it('calls match_source_create second', async () => {
-    const pg = makeSplitPg();
-    await persistBundleSnapshot(pg, { ...BASE_IDS, candidate: makeCandidate(), sourcePayload: makeSourcePayload() });
-    assert.match(pg.calls[1].query, /match_source_create/);
+  it('reuses existing external match and skips match_create', async () => {
+    const pg = createFakePg({
+      handler(query) {
+        if (/external\.public_match/.test(query)) return [{ match_id: 'existing-match' }];
+        if (/match_source_create/.test(query)) return [{ id: 'db-src-1' }];
+        if (/match_create/.test(query)) throw new Error('match_create should not be called');
+        return [];
+      },
+    });
+    const result = await persistBundleSnapshot(pg, { ...BASE_IDS, candidate: makeCandidate(), sourcePayload: makeSourcePayload() });
+    assert.equal(result.matchId, 'existing-match');
+    assert.equal(pg.calls.some((call) => /match_create/.test(call.query)), false);
   });
 });
 
@@ -94,7 +105,7 @@ describe('persistBundleSnapshot – parameter mapping', () => {
 
     await persistBundleSnapshot(pg, { ...BASE_IDS, candidate, sourcePayload });
 
-    const { params } = pg.calls[0];
+    const { params } = findCall(pg, /match_create/);
     assert.equal(params[0], 'match-99');                       // in_system_match_id
     assert.equal(params[1], 'team-a-team-b-2026-07-05');      // in_system_match_slug
     assert.equal(params[2], 7);                                // in_system_id
@@ -113,7 +124,7 @@ describe('persistBundleSnapshot – parameter mapping', () => {
 
     await persistBundleSnapshot(pg, { ...BASE_IDS, candidate, sourcePayload });
 
-    const { params } = pg.calls[1];
+    const { params } = findCall(pg, /match_source_create/);
     assert.equal(params[0], 'bundle:7:match-99:deadbeef');    // in_system_match_source_id
     assert.equal(params[1], '');                               // in_system_match_source_url
     assert.equal(params[2], 7);                                // in_system_id
@@ -129,19 +140,19 @@ describe('persistBundleSnapshot – parameter mapping', () => {
 
     await persistBundleSnapshot(pg, { ...BASE_IDS, candidate: makeCandidate(), sourcePayload });
 
-    assert.equal(pg.calls[1].params[1], 'https://example.test/match/99');
+    assert.equal(findCall(pg, /match_source_create/).params[1], 'https://example.test/match/99');
   });
 
   it('uses match_status_name=scheduled by default', async () => {
     const pg = createFakePg({ rows: [{ id: 'x' }] });
     await persistBundleSnapshot(pg, { ...BASE_IDS, candidate: makeCandidate(), sourcePayload: makeSourcePayload() });
-    assert.equal(pg.calls[0].params[7], 'scheduled');
+    assert.equal(findCall(pg, /match_create/).params[7], 'scheduled');
   });
 
   it('uses source_type_name=bundle by default', async () => {
     const pg = createFakePg({ rows: [{ id: 'x' }] });
     await persistBundleSnapshot(pg, { ...BASE_IDS, candidate: makeCandidate(), sourcePayload: makeSourcePayload() });
-    assert.equal(pg.calls[1].params[4], 'bundle');
+    assert.equal(findCall(pg, /match_source_create/).params[4], 'bundle');
   });
 
   it('falls back to candidate.id when match_id is absent', async () => {
@@ -150,8 +161,8 @@ describe('persistBundleSnapshot – parameter mapping', () => {
 
     await persistBundleSnapshot(pg, { ...BASE_IDS, candidate, sourcePayload: makeSourcePayload() });
 
-    assert.equal(pg.calls[0].params[0], 'id-fallback');
-    assert.equal(pg.calls[1].params[3], 'id-fallback');
+    assert.equal(findCall(pg, /match_create/).params[0], 'id-fallback');
+    assert.equal(findCall(pg, /match_source_create/).params[3], 'id-fallback');
   });
 
   it('falls back to candidate.slug when match_slug is absent', async () => {
@@ -160,7 +171,7 @@ describe('persistBundleSnapshot – parameter mapping', () => {
 
     await persistBundleSnapshot(pg, { ...BASE_IDS, candidate, sourcePayload: makeSourcePayload() });
 
-    assert.equal(pg.calls[0].params[1], 'alt-slug');
+    assert.equal(findCall(pg, /match_create/).params[1], 'alt-slug');
   });
 
   it('uses null for matchStartAt when starts_at is absent', async () => {
@@ -169,7 +180,7 @@ describe('persistBundleSnapshot – parameter mapping', () => {
 
     await persistBundleSnapshot(pg, { ...BASE_IDS, candidate, sourcePayload: makeSourcePayload() });
 
-    assert.equal(pg.calls[0].params[8], null);
+    assert.equal(findCall(pg, /match_create/).params[8], null);
   });
 });
 

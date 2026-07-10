@@ -33,6 +33,34 @@ function validateInputs({ systemId, sportId, tournamentId, candidate, sourcePayl
   return { matchId, sourceHash };
 }
 
+function extractMatchId(row, fallback) {
+  return row?.id ?? row?.match_id ?? row?.out_match_id ?? row?.match_create ?? fallback;
+}
+
+async function findExistingMatchByExternalId(pg, { systemId, matchId }) {
+  const rows = await pg.connection(
+    `SELECT match_id
+     FROM external.public_match
+     WHERE system_id = $1
+       AND system_match_id = $2
+     ORDER BY match_id ASC
+     LIMIT 1`,
+    [systemId, matchId],
+  );
+  return rows?.[0]?.match_id ?? null;
+}
+
+async function ensureMatch(pg, { systemId, sportId, tournamentId, matchId, matchSlug, homeTeam, awayTeam, matchStartAt }) {
+  const existingMatchId = await findExistingMatchByExternalId(pg, { systemId, matchId });
+  if (existingMatchId != null) return existingMatchId;
+
+  const [matchRow = {}] = await pg.connection(
+    'SELECT * FROM public.match_create($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+    [matchId, matchSlug, systemId, sportId, tournamentId, homeTeam, awayTeam, MATCH_STATUS_DEFAULT, matchStartAt],
+  );
+  return extractMatchId(matchRow, matchId);
+}
+
 async function persistBundleSnapshot(pg, { systemId, sportId, tournamentId, candidate, sourcePayload }) {
   const { matchId, sourceHash } = validateInputs({ systemId, sportId, tournamentId, candidate, sourcePayload });
 
@@ -41,10 +69,16 @@ async function persistBundleSnapshot(pg, { systemId, sportId, tournamentId, cand
   const awayTeam = candidate.away_team || '';
   const matchStartAt = candidate.starts_at || null;
 
-  const [matchRow = {}] = await pg.connection(
-    'SELECT * FROM public.match_create($1,$2,$3,$4,$5,$6,$7,$8,$9)',
-    [matchId, matchSlug, systemId, sportId, tournamentId, homeTeam, awayTeam, MATCH_STATUS_DEFAULT, matchStartAt],
-  );
+  const internalMatchId = await ensureMatch(pg, {
+    systemId,
+    sportId,
+    tournamentId,
+    matchId,
+    matchSlug,
+    homeTeam,
+    awayTeam,
+    matchStartAt,
+  });
 
   const externalSourceId = buildExternalSourceId(systemId, matchId, sourceHash);
   const sourceUrl = sourcePayload.source_url ?? sourcePayload.sourceUrl ?? '';
@@ -55,7 +89,7 @@ async function persistBundleSnapshot(pg, { systemId, sportId, tournamentId, cand
   );
 
   return {
-    matchId: matchRow.id ?? matchRow.match_id ?? matchRow.out_match_id ?? matchRow.match_create ?? matchId,
+    matchId: internalMatchId,
     sourceId:
       sourceRow.id
       ?? sourceRow.source_id
@@ -120,4 +154,10 @@ async function persistAnalysisSnapshot(pg, { matchSourceId, snapshot }) {
   };
 }
 
-module.exports = { buildExternalSourceId, persistBundleSnapshot, buildAnalysisHash, persistAnalysisSnapshot };
+module.exports = {
+  buildExternalSourceId,
+  persistBundleSnapshot,
+  buildAnalysisHash,
+  persistAnalysisSnapshot,
+  __private: { findExistingMatchByExternalId, ensureMatch, extractMatchId },
+};
