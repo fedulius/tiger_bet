@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { processFollowedMatches } = require('../../webapp/services/matchFollowWorker');
+const { processFollowedMatches, __private } = require('../../webapp/services/matchFollowWorker');
 const { createFakePg } = require('./testHelpers');
 
 function enabled(value = 'true') {
@@ -12,6 +12,10 @@ function enabled(value = 'true') {
 }
 
 const completeSchema = (query) => /to_regclass/i.test(query) ? [{ missing_tables: [] }] : [];
+
+test('score parser reads SStats homeResult and awayResult fields', () => {
+  assert.deepEqual(__private.scoreFromGame({ homeResult: 1, awayResult: 0 }), { home: 1, away: 0 });
+});
 
  test('worker is a no-op when feature flag is disabled', async () => {
   const restore = enabled('false');

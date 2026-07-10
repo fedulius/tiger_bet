@@ -13,8 +13,8 @@ function statusIdFromGame(game) {
 function scoreFromGame(game) {
   const score = game?.score || game?.scores || game?.result || {};
   return {
-    home: score.home ?? score.homeScore ?? score.home_team ?? game?.homeScore ?? null,
-    away: score.away ?? score.awayScore ?? score.away_team ?? game?.awayScore ?? null,
+    home: score.home ?? score.homeScore ?? score.home_team ?? game?.homeScore ?? game?.homeResult ?? null,
+    away: score.away ?? score.awayScore ?? score.away_team ?? game?.awayScore ?? game?.awayResult ?? null,
   };
 }
 
