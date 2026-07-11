@@ -61,6 +61,21 @@ async function ensureMatch(pg, { systemId, sportId, tournamentId, matchId, match
   return extractMatchId(matchRow, matchId);
 }
 
+async function persistExternalMatchMapping(pg, { systemId, internalMatchId, systemMatchId, systemMatchSlug }) {
+  if (systemId == null) throw new Error('systemId is required');
+  if (internalMatchId == null) throw new Error('internalMatchId is required');
+  if (!systemMatchId) throw new Error('systemMatchId is required');
+
+  await pg.connection(
+    `INSERT INTO external.public_match (system_match_id, system_match_slug, match_id, system_id)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (system_id, match_id) DO UPDATE
+       SET system_match_id = EXCLUDED.system_match_id,
+           system_match_slug = EXCLUDED.system_match_slug`,
+    [String(systemMatchId), systemMatchSlug || '', internalMatchId, systemId],
+  );
+}
+
 async function persistBundleSnapshot(pg, { systemId, sportId, tournamentId, candidate, sourcePayload }) {
   const { matchId, sourceHash } = validateInputs({ systemId, sportId, tournamentId, candidate, sourcePayload });
 
@@ -157,6 +172,7 @@ async function persistAnalysisSnapshot(pg, { matchSourceId, snapshot }) {
 module.exports = {
   buildExternalSourceId,
   persistBundleSnapshot,
+  persistExternalMatchMapping,
   buildAnalysisHash,
   persistAnalysisSnapshot,
   __private: { findExistingMatchByExternalId, ensureMatch, extractMatchId },

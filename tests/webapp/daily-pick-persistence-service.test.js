@@ -7,6 +7,7 @@ const { createFakePg } = require('./testHelpers');
 const {
   buildExternalSourceId,
   persistBundleSnapshot,
+  persistExternalMatchMapping,
   buildAnalysisHash,
   persistAnalysisSnapshot,
 } = require('../../webapp/services/dailyPickPersistenceService');
@@ -65,6 +66,26 @@ describe('buildExternalSourceId', () => {
     assert.notEqual(buildExternalSourceId(2, 'x', 'h'), base);
     assert.notEqual(buildExternalSourceId(1, 'y', 'h'), base);
     assert.notEqual(buildExternalSourceId(1, 'x', 'z'), base);
+  });
+});
+
+// ── persistExternalMatchMapping ──────────────────────────────────────────────
+
+describe('persistExternalMatchMapping', () => {
+  it('upserts provider mapping after an internal match id is known', async () => {
+    const pg = createFakePg({ rows: [] });
+
+    await persistExternalMatchMapping(pg, {
+      systemId: 3,
+      internalMatchId: 94,
+      systemMatchId: '1582681',
+      systemMatchSlug: '12-07-2026-argentina-switzerland',
+    });
+
+    assert.equal(pg.calls.length, 1);
+    assert.match(pg.calls[0].query, /INSERT INTO external\.public_match/);
+    assert.match(pg.calls[0].query, /ON CONFLICT \(system_id, match_id\) DO UPDATE/);
+    assert.deepEqual(pg.calls[0].params, ['1582681', '12-07-2026-argentina-switzerland', 94, 3]);
   });
 });
 

@@ -4,8 +4,8 @@ const stavkaApi = require('../lib/stavkaApi');
 const sstatsApi = require('../lib/sstatsApi');
 const { normalizeCandidate, getCandidateMatchesForDate } = require('../webapp/services/dailyPickCandidateService');
 const { rankCandidateMatches } = require('../webapp/services/dailyPickRankingService');
-const { resolveDbContextForCandidate } = require('../webapp/services/dailyPickMappingService');
-const { persistBundleSnapshot, persistAnalysisSnapshot } = require('../webapp/services/dailyPickPersistenceService');
+const { resolveDbContextForCandidate, resolveSystemIdForDailyPickSource } = require('../webapp/services/dailyPickMappingService');
+const { persistBundleSnapshot, persistAnalysisSnapshot, persistExternalMatchMapping } = require('../webapp/services/dailyPickPersistenceService');
 const { getMoscowDate } = require('../webapp/services/dailyPickReadService');
 
 const MATCHES_PER_DAY = 3; // максимум матчей на слот (today + tomorrow)
@@ -359,6 +359,19 @@ async function runDailyPicks(pg, options = {}) {
         systemId, sportId, tournamentId, candidate: match, sourcePayload,
       });
       sourceId = result.sourceId;
+
+      const sstatsGameId = enrichedPayload?.sstats_data?.fixture_id;
+      if (result.matchId != null && sstatsGameId != null) {
+        const sstatsSystemId = await resolveSystemIdForDailyPickSource(pg, { systemName: 'sstats' });
+        if (sstatsSystemId != null) {
+          await persistExternalMatchMapping(pg, {
+            systemId: sstatsSystemId,
+            internalMatchId: result.matchId,
+            systemMatchId: sstatsGameId,
+            systemMatchSlug: match.match_slug || match.slug || '',
+          });
+        }
+      }
     } catch (err) {
       continue;
     }
