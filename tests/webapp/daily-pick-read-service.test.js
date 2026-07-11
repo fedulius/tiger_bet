@@ -191,6 +191,7 @@ test('getDailyPicksFeed: returns today/tomorrow slots and latest updated_at', as
   assert.equal(feed.tomorrow?.headline, 'Завтра');
   assert.equal(feed.updated_at, '2026-07-03T11:10:00.000Z');
   assert.match(pg.calls[0].query, /match_analysis/);
+  assert.match(pg.calls[0].query, /ma\.analysis_create_at ASC/);
   assert.deepEqual(pg.calls[0].params, ['2026-07-03', '2026-07-04']);
 });
 

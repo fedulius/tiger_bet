@@ -116,7 +116,7 @@ async function getDailyPicksByDateRange(pg, { startDate, endDate, favoriteSports
         pm.system_match_id,
         ROW_NUMBER() OVER (
           PARTITION BY to_char(m.match_start_at AT TIME ZONE 'Europe/Moscow', 'YYYY-MM-DD')
-          ORDER BY m.match_start_at ASC, ma.analysis_update_at DESC, ma.match_analysis_id DESC
+          ORDER BY m.match_start_at ASC, ma.analysis_create_at ASC, ma.match_analysis_id ASC
         ) AS row_rank
       FROM public.match_analysis ma
       JOIN public.analysis_status ast ON ast.analysis_status_id = ma.analysis_status_id

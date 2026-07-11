@@ -41,7 +41,7 @@ async function predictionRoutes(fastify) {
           OR pm.system_match_id = $1
           OR ms.source_payload->>'match_slug' = $1
         )
-      ORDER BY ma.analysis_create_at DESC
+      ORDER BY ma.analysis_create_at ASC, ma.match_analysis_id ASC
       LIMIT 1`,
       [slug],
     );

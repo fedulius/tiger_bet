@@ -324,16 +324,15 @@ async function runDailyPicks(pg, options = {}) {
   if (matchIds.length > 0) {
     const placeholders = matchIds.map((_, i) => `$${i + 1}`).join(', ');
     const existing = await pg.connection(
-      `SELECT pm.system_match_id FROM external.public_match pm
-       JOIN public.match_source ms ON ms.match_id = pm.match_id
+      `SELECT DISTINCT ms.source_payload->>'match_id' AS source_match_id
+       FROM public.match_source ms
        JOIN public.match_analysis ma ON ma.match_source_id = ms.match_source_id
-       WHERE pm.system_match_id IN (${placeholders})
-         AND pm.system_id = 3
+       WHERE ms.source_payload->>'match_id' IN (${placeholders})
          AND ma.analysis_status_id = (SELECT analysis_status_id FROM public.analysis_status WHERE analysis_status_name = 'ready')`,
       [...matchIds],
     ).catch(() => []);
     for (const row of existing) {
-      existingSnapshots.set(String(row.system_match_id), true);
+      if (row.source_match_id) existingSnapshots.set(String(row.source_match_id), true);
     }
   }
 
