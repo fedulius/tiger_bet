@@ -256,7 +256,11 @@ async function fetchGlicko(gameId) {
 const MOCK_MATCHES = {
   'fallback-1': {
     id: 'fallback-1', match: 'Arsenal vs Chelsea', league: 'Premier League',
-    starts_at: '2026-04-22T17:30:00.000Z', main_thought: 'Обе забьют',
+    starts_at: '2026-04-22T17:30:00.000Z',
+    main_thought: 'Обе забьют, но Arsenal выглядит сильнее',
+    confidence: 68,
+    basis: 'Последние 5 матчей, xG-тренд и преимущество домашнего поля Arsenal.',
+    source_url: 'https://www.premierleague.com/match/arsenal-chelsea',
     bets: [
       { forecast: 'Обе забьют', coeff: 1.72, probability: 58, confidence: 'средняя', description: '' },
       { forecast: 'Победа Arsenal', coeff: 2.05, probability: 49, confidence: 'средняя', description: '' },

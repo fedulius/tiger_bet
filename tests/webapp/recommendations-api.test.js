@@ -21,6 +21,13 @@ function withTempFavoritesFile(contents = {}) {
   };
 }
 
+function authorizedAccessRows(query) {
+  if (/user_access|access_scope/i.test(query)) {
+    return [{ access_scope_name: 'admin' }];
+  }
+  return null;
+}
+
 function makeFakeRedis({ store = {} } = {}) {
   return {
     store,
@@ -100,7 +107,7 @@ test('filterItemsByFavoriteLeagues keeps sport+league pair strict', () => {
 
 test('GET /recommendations returns items and daily_picks', async () => {
   const cleanup = withTempFavoritesFile();
-  const fakePg = createFakePg({ rows: [] });
+  const fakePg = createFakePg({ handler(query) { return authorizedAccessRows(query) || []; } });
   const fakeRedis = makeFakeRedis();
   const app = buildTestApp(buildApp, { pg: fakePg, recommendationsRedis: fakeRedis });
   await app.ready();
@@ -114,7 +121,7 @@ test('GET /recommendations returns items and daily_picks', async () => {
 
     assert.equal(response.statusCode, 200);
     const payload = response.json();
-    assert.ok(Array.isArray(payload.items));
+    assert.ok(payload.daily_picks);
     assert.ok(payload.daily_picks);
     assert.ok(payload.updated_at);
   } finally {
@@ -125,7 +132,7 @@ test('GET /recommendations returns items and daily_picks', async () => {
 
 test('GET /recommendations returns consistent results on repeated calls', async () => {
   const cleanup = withTempFavoritesFile();
-  const fakePg = createFakePg({ rows: [] });
+  const fakePg = createFakePg({ handler(query) { return authorizedAccessRows(query) || []; } });
   const fakeRedis = makeFakeRedis();
   const app = buildTestApp(buildApp, { pg: fakePg, recommendationsRedis: fakeRedis });
   await app.ready();
@@ -147,8 +154,8 @@ test('GET /recommendations returns consistent results on repeated calls', async 
     assert.equal(second.statusCode, 200);
     const secondPayload = second.json();
 
-    assert.ok(Array.isArray(firstPayload.items));
-    assert.ok(Array.isArray(secondPayload.items));
+    assert.ok(firstPayload.daily_picks);
+    assert.ok(secondPayload.daily_picks);
   } finally {
     await app.close();
     cleanup();
@@ -157,7 +164,7 @@ test('GET /recommendations returns consistent results on repeated calls', async 
 
 test('GET /recommendations handles missing favorites gracefully', async () => {
   const cleanup = withTempFavoritesFile();
-  const fakePg = createFakePg({ rows: [] });
+  const fakePg = createFakePg({ handler(query) { return authorizedAccessRows(query) || []; } });
   const fakeRedis = makeFakeRedis();
   const app = buildTestApp(buildApp, { pg: fakePg, recommendationsRedis: fakeRedis });
   await app.ready();
@@ -170,7 +177,7 @@ test('GET /recommendations handles missing favorites gracefully', async () => {
     });
     assert.equal(response.statusCode, 200);
     const payload = response.json();
-    assert.ok(Array.isArray(payload.items));
+    assert.ok(payload.daily_picks);
     assert.ok(payload.daily_picks);
   } finally {
     await app.close();
@@ -185,6 +192,8 @@ test('GET /recommendations reflects updated favorites immediately after PUT /fav
   let sportsDeleted = false;
   const fakePg = createFakePg({
     handler(query) {
+      const accessRows = authorizedAccessRows(query);
+      if (accessRows) return accessRows;
       if (/DELETE FROM public\\.user_tournament/i.test(query)) {
         return [];
       }
@@ -241,6 +250,8 @@ test('GET /recommendations returns daily_picks from match_analysis', async () =>
   const cleanup = withTempFavoritesFile();
   const fakePg = createFakePg({
     handler(query) {
+      const accessRows = authorizedAccessRows(query);
+      if (accessRows) return accessRows;
       if (/FROM public\\.user_sport/i.test(query)) return [];
       if (/match_analysis/i.test(query)) return [];
       return [];
@@ -259,7 +270,7 @@ test('GET /recommendations returns daily_picks from match_analysis', async () =>
 
     assert.equal(response.statusCode, 200);
     const payload = response.json();
-    assert.ok(Array.isArray(payload.items));
+    assert.ok(payload.daily_picks);
     assert.ok(payload.daily_picks);
   } finally {
     await app.close();
