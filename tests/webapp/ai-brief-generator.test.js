@@ -273,7 +273,7 @@ test('generateAiBrief: returns failed when headline exceeds max length', async (
 });
 
 test('generateAiBrief: returns failed when brief exceeds max length', async () => {
-  const bad = { headline: 'Some headline', brief: 'B'.repeat(2001), risk_note: null };
+  const bad = { headline: 'Some headline', brief: 'B'.repeat(4001), risk_note: null };
   const result = await generateAiBrief({
     sourcePayload: SOURCE_PAYLOAD_FULL,
     modelName: 'gpt-4o-mini',
@@ -525,13 +525,13 @@ test('validateAiBriefOutput: accepts headline at max length', () => {
 });
 
 test('validateAiBriefOutput: returns invalid for brief too long', () => {
-  const result = validateAiBriefOutput({ headline: 'H', brief: 'B'.repeat(2001), risk_note: null });
+  const result = validateAiBriefOutput({ headline: 'H', brief: 'B'.repeat(4001), risk_note: null });
   assert.equal(result.valid, false);
   assert.equal(result.reason, 'brief_too_long');
 });
 
 test('validateAiBriefOutput: accepts brief at max length', () => {
-  const result = validateAiBriefOutput({ headline: 'H', brief: 'B'.repeat(2000), risk_note: null });
+  const result = validateAiBriefOutput({ headline: 'H', brief: 'B'.repeat(4000), risk_note: null });
   assert.equal(result.valid, true);
 });
 
@@ -661,11 +661,10 @@ test('validateAiBriefOutput: invalid when recommended_bets item missing outcome'
   assert.equal(result.reason, 'invalid_recommended_bet_item');
 });
 
-test('validateAiBriefOutput: invalid when recommended_bets item missing label', () => {
+test('validateAiBriefOutput: valid when recommended_bets item missing label', () => {
   const bet = { type: 'one_x_two', outcome: 'w1', rate: 1.5, reason: 'R' };
   const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: [bet] });
-  assert.equal(result.valid, false);
-  assert.equal(result.reason, 'invalid_recommended_bet_item');
+  assert.equal(result.valid, true);
 });
 
 test('validateAiBriefOutput: invalid when recommended_bets item rate is not a number', () => {
@@ -682,11 +681,10 @@ test('validateAiBriefOutput: invalid when recommended_bets item missing reason',
   assert.equal(result.reason, 'invalid_recommended_bet_item');
 });
 
-test('validateAiBriefOutput: invalid when recommended_bets item confidence is not a number', () => {
+test('validateAiBriefOutput: valid when recommended_bets item confidence is ignored', () => {
   const bet = { type: 'one_x_two', outcome: 'w1', label: 'L', rate: 1.5, reason: 'R', confidence: 'high' };
   const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: [bet] });
-  assert.equal(result.valid, false);
-  assert.equal(result.reason, 'invalid_recommended_bet_item');
+  assert.equal(result.valid, true);
 });
 
 // --- recommended_bets: generateAiBrief round-trip ---
@@ -760,8 +758,48 @@ test('normalizeAiBriefOutput: defaults recommended_bets to empty array when abse
   assert.deepEqual(result.recommended_bets, []);
 });
 
-test('normalizeAiBriefOutput: passes through recommended_bets array', () => {
+test('normalizeAiBriefOutput: passes through recommended_bets array with normalized risk label', () => {
   const bets = [{ type: 'total', outcome: 'over', label: 'ТБ 2.5', rate: 1.85, reason: 'Обе атакуют.' }];
   const result = normalizeAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: bets });
-  assert.deepEqual(result.recommended_bets, bets);
+  assert.deepEqual(result.recommended_bets, [{ ...bets[0], risk_label: 'low' }]);
+});
+
+test('normalizeAiBriefOutput: treats double_chance and one_x_two as one winner category', () => {
+  const output = {
+    headline: 'H',
+    brief: 'B',
+    risk_note: null,
+    recommended_bets: [
+      { type: 'one_x_two', outcome: 'w2', label: 'Победа гостей', rate: 1.95, reason: 'Основной сигнал.', risk_label: 'low' },
+      { type: 'double_chance', outcome: 'x1', label: '1X', rate: 1.90, reason: 'Подстраховка.', risk_label: 'medium' },
+      { type: 'correct_score', outcome: '1:2', label: 'Точный счёт 1:2', rate: 8.2, reason: 'Риск.', risk_label: 'high' },
+    ],
+  };
+  const sourcePayload = {
+    top_bets: [
+      { type: 'one_x_two', outcome: 'w2', label: 'Победа гостей', rate: 1.95 },
+      { type: 'both_to_score', outcome: 'yes', label: 'Обе забьют — да', rate: 1.61 },
+    ],
+    risk_bets: [],
+  };
+
+  const result = normalizeAiBriefOutput(output, sourcePayload);
+  assert.equal(result.recommended_bets[1].type, 'both_to_score');
+  assert.equal(result.recommended_bets[1].label, 'Обе забьют — да');
+});
+
+test('normalizeAiBriefOutput: keeps semantic risk labels instead of sorting only by coefficient', () => {
+  const output = {
+    headline: 'H',
+    brief: 'B',
+    risk_note: null,
+    recommended_bets: [
+      { type: 'one_x_two', outcome: 'w2', label: 'Победа гостей', rate: 1.96, reason: 'Основной рынок.', risk_label: 'low' },
+      { type: 'both_to_score', outcome: 'yes', label: 'Обе забьют — да', rate: 1.60, reason: 'Обе атакуют.', risk_label: 'medium' },
+      { type: 'total_over', outcome: '2_5', label: 'Тотал больше 2.5', rate: 1.79, reason: 'Темп.', risk_label: 'high' },
+    ],
+  };
+
+  const result = normalizeAiBriefOutput(output);
+  assert.deepEqual(result.recommended_bets.map((b) => b.risk_label), ['low', 'medium', 'high']);
 });

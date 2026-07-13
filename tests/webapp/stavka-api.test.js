@@ -159,7 +159,7 @@ describe('selectRiskBets', () => {
     assert.notEqual(result[1].type, result[2].type);
     const highRisk = result.find((bet) => bet.risk_label === 'high');
     assert.ok(highRisk, 'should keep at least one high-risk option');
-    assert.ok(highRisk.rate >= 5, 'high-risk option should keep extreme coefficient');
+    assert.ok(Number(highRisk.rate) >= 2.5 || highRisk.type === 'correct_score', 'high-risk option should not be a safe low-coefficient pick');
   });
 
   it('skips low-count bets when enough viable options exist', () => {

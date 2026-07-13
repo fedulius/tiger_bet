@@ -127,12 +127,11 @@ function normalizeAiBriefOutput(output, sourcePayload) {
   if (bets.length > 1 && sourcePayload) {
     function betCategory(b) {
       const t = (b.type || '').toLowerCase();
-      if (t === 'one_x_two' || t === 'match_qualify' || t === 'winner' || t === 'match_result') return 'winner';
+      if (t === 'one_x_two' || t === 'match_qualify' || t === 'winner' || t === 'match_result' || t === 'double_chance') return 'winner';
       if (t.includes('total') || t.includes('totals')) return 'total';
       if (t.includes('both') || t.includes('btts') || t === 'both_to_score') return 'btts';
       if (t.includes('handicap')) return 'handicap';
       if (t === 'correct_score') return 'correct_score';
-      if (t === 'double_chance') return 'double_chance';
       if (t.includes('corner')) return 'corner';
       if (t.includes('yellow')) return 'yellow';
       return t;
@@ -144,43 +143,46 @@ function normalizeAiBriefOutput(output, sourcePayload) {
       ...(sourcePayload.risk_bets || []),
     ].filter(b => b.rate != null && b.label);
 
-    const usedCats = new Set(bets.map(betCategory));
     for (let i = bets.length - 1; i >= 0; i--) {
       const cat = betCategory(bets[i]);
-      const sameCatCount = bets.filter((x, j) => j !== i && betCategory(x) === cat).length;
-      if (sameCatCount > 0) {
+      const otherCats = new Set(bets.filter((_, j) => j !== i).map(betCategory));
+      if (otherCats.has(cat)) {
         // Find a real payload bet from a different category
-        const alt = payloadBets.find(pb => !usedCats.has(betCategory(pb)));
+        const alt = payloadBets.find(pb => !otherCats.has(betCategory(pb)));
         if (alt) {
-          usedCats.delete(cat);
           bets[i] = {
             ...bets[i],
             type: alt.type,
             outcome: alt.outcome,
             label: alt.label,
             rate: alt.rate,
-            risk_label: bets[i].risk_label,
+            reason: alt.reason || 'Альтернативный рынок из входного payload: ставка заменена, чтобы не показывать два взаимоисключающих исхода победителя.',
+            risk_label: alt.risk_label || bets[i].risk_label,
           };
-          usedCats.add(betCategory(bets[i]));
         }
       }
     }
   }
 
-  // Assign risk labels based on actual coefficients: lowest = safe, highest = risky
-  if (bets.length >= 3) {
-    const sorted = [...bets].sort((a, b) => (a.rate || 0) - (b.rate || 0));
-    const rateToLabel = ['low', 'medium', 'high'];
-    for (let i = 0; i < sorted.length; i++) {
-      const idx = bets.indexOf(sorted[i]);
-      if (idx !== -1) bets[idx].risk_label = rateToLabel[i] || 'medium';
+  // Keep semantic risk labels. Prefer the deterministic source `risk_bets`
+  // labels when the LLM returned the same concrete market/outcome.
+  if (bets.length > 0) {
+    const allowed = new Set(['low', 'medium', 'high']);
+    const fallbackOrder = ['low', 'medium', 'high'];
+    const used = new Set();
+    for (let i = 0; i < bets.length; i++) {
+      const sourceRiskBet = sourcePayload && Array.isArray(sourcePayload.risk_bets)
+        ? sourcePayload.risk_bets.find((pb) => pb && pb.type === bets[i].type && pb.outcome === bets[i].outcome)
+        : null;
+      let label = allowed.has(sourceRiskBet && sourceRiskBet.risk_label)
+        ? sourceRiskBet.risk_label
+        : (allowed.has(bets[i].risk_label) ? bets[i].risk_label : null);
+      if (!label || used.has(label)) {
+        label = fallbackOrder.find((x) => !used.has(x)) || 'medium';
+      }
+      bets[i].risk_label = label;
+      used.add(label);
     }
-  } else if (bets.length === 2) {
-    const sorted = [...bets].sort((a, b) => (a.rate || 0) - (b.rate || 0));
-    const idx0 = bets.indexOf(sorted[0]);
-    const idx1 = bets.indexOf(sorted[1]);
-    if (idx0 !== -1) bets[idx0].risk_label = 'low';
-    if (idx1 !== -1) bets[idx1].risk_label = 'high';
   }
 
   return {
