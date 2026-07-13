@@ -5,9 +5,17 @@
 /webapp-react/dist/
 /webapp-react/public/league-logos/
 /webapp-react/public/country-flags/
-/.gitignore
 /config
 .env
 .env.*
 !.env.example
 
+# Local IDE / agent scratch artifacts
+/.idea/
+/.hermes/
+/.superpowers/
+/.hermes_phase*_prompt.txt
+/sketches/
+/redesign-mockup.html
+# Source asset duplicates; public assets are served from webapp-react/public/
+/webapp-react/src/assets/
