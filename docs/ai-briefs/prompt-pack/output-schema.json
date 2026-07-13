@@ -4,11 +4,7 @@
   "title": "AiBriefOutput",
   "type": "object",
   "additionalProperties": false,
-  "required": ["headline", "brief", "risk_note"],
-  "anyOf": [
-    { "required": ["bet_explanations"] },
-    { "required": ["recommended_bets"] }
-  ],
+  "required": ["headline", "brief", "risk_note", "bet_explanations"],
   "properties": {
     "headline": {
       "type": "string",
@@ -35,25 +31,6 @@
         "properties": {
           "market_key": { "type": "string", "minLength": 1 },
           "reason": { "type": "string", "minLength": 1 }
-        }
-      }
-    },
-    "recommended_bets": {
-      "type": "array",
-      "minItems": 0,
-      "maxItems": 3,
-      "items": {
-        "type": "object",
-        "required": ["type", "outcome", "label", "rate", "reason", "risk_label"],
-        "additionalProperties": false,
-        "properties": {
-          "type": { "type": "string", "minLength": 1 },
-          "outcome": { "type": "string", "minLength": 1 },
-          "label": { "type": "string", "minLength": 1 },
-          "rate": { "type": "number" },
-          "reason": { "type": "string", "minLength": 1 },
-          "risk_label": { "type": "string", "enum": ["low", "medium", "high"] },
-          "confidence": { "type": "number" }
         }
       }
     }

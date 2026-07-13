@@ -149,6 +149,31 @@ function validateAiBriefOutput(output) {
   return { valid: true };
 }
 
+function validateAnalyticsLlmContract(output, sourcePayload) {
+  const selectedBets = sourcePayload && sourcePayload.market_fit && Array.isArray(sourcePayload.market_fit.selected_bets)
+    ? sourcePayload.market_fit.selected_bets
+    : null;
+  if (!selectedBets) return null;
+  if (Object.prototype.hasOwnProperty.call(output, 'recommended_bets')) {
+    return { valid: false, reason: 'analytics_legacy_recommended_bets_forbidden' };
+  }
+  if (!Array.isArray(output.bet_explanations)) {
+    return { valid: false, reason: 'analytics_bet_explanations_required' };
+  }
+  const selectedKeys = new Set(selectedBets.map(bet => String(bet.market_key || `${bet.type}:${bet.outcome}`)));
+  const explanationKeys = new Set();
+  for (const item of output.bet_explanations) {
+    const key = String(item && item.market_key || '');
+    if (!selectedKeys.has(key)) return { valid: false, reason: 'analytics_unknown_bet_explanation' };
+    if (explanationKeys.has(key)) return { valid: false, reason: 'analytics_duplicate_bet_explanation' };
+    explanationKeys.add(key);
+  }
+  if (explanationKeys.size !== selectedKeys.size) {
+    return { valid: false, reason: 'analytics_missing_bet_explanation' };
+  }
+  return { valid: true };
+}
+
 function isTechnicalBetLabel(label) {
   const normalized = String(label || '').trim();
   const lower = normalized.toLowerCase();
@@ -392,6 +417,11 @@ async function generateAiBrief({ sourcePayload, modelName, promptVersion, provid
       status: 'failed',
       error: 'invalid_json_output',
     };
+  }
+
+  const analyticsContract = validateAnalyticsLlmContract(parsed, sourcePayload);
+  if (analyticsContract && !analyticsContract.valid) {
+    return { status: 'failed', error: analyticsContract.reason };
   }
 
   const validation = validateAiBriefOutput(parsed);

@@ -254,15 +254,33 @@ async function enrichPayloadWithSStatsData(payload, pg) {
 // ── Build analytics-first payload ──────────────────────────
 function buildAnalyticsFirstPayload(payload) {
   if (!payload || payload.source_mode === 'skip') return payload;
+  const crypto = require('crypto');
+  const buildAnalyticsSourceHash = ({ analyticsFeatures = null, matchAnalytics = null, marketFit = null, skipReason = null } = {}) => crypto.createHash('sha256').update(JSON.stringify({
+    algorithm_version: 'daily-picks-analytics-v1',
+    config: { sport: payload.sport_slug, max_selected_bets: 3 },
+    analytics_input: {
+      sport_slug: payload.sport_slug || null,
+      sstats_data: payload.sstats_data || null,
+      market_catalog: payload.market_catalog || null,
+    },
+    analytics_result: {
+      analytics_features: analyticsFeatures,
+      match_analytics: matchAnalytics,
+      market_fit: marketFit,
+      skip_reason: skipReason,
+    },
+  })).digest('hex');
   if (payload.sport_slug !== 'soccer') return {
     ...payload,
     source_mode: 'skip',
     skip_reason: 'analytics_not_supported_for_sport',
+    source_hash: buildAnalyticsSourceHash({ skipReason: 'analytics_not_supported_for_sport' }),
   };
   if (!payload.sstats_data) return {
     ...payload,
     source_mode: 'skip',
     skip_reason: 'analytics_sstats_fixture_unresolved',
+    source_hash: buildAnalyticsSourceHash({ skipReason: 'analytics_sstats_fixture_unresolved' }),
   };
 
   const analyticsFeatures = extractAnalyticsFeatures({ sport: payload.sport_slug, sstatsData: payload.sstats_data });
@@ -276,6 +294,7 @@ function buildAnalyticsFirstPayload(payload) {
       market_fit: marketFit,
       source_mode: 'skip',
       skip_reason: matchAnalytics.eligibility.reasons[0] || 'analytics_insufficient_data',
+      source_hash: buildAnalyticsSourceHash({ analyticsFeatures, matchAnalytics, marketFit, skipReason: matchAnalytics.eligibility.reasons[0] || 'analytics_insufficient_data' }),
     };
   }
   if (!marketFit.selected_bets.length) {
@@ -286,18 +305,11 @@ function buildAnalyticsFirstPayload(payload) {
       market_fit: marketFit,
       source_mode: 'skip',
       skip_reason: 'analytics_no_market_fit',
+      source_hash: buildAnalyticsSourceHash({ analyticsFeatures, matchAnalytics, marketFit, skipReason: 'analytics_no_market_fit' }),
     };
   }
 
-  const crypto = require('crypto');
-  const sourceHash = crypto.createHash('sha256').update(JSON.stringify({
-    previous_source_hash: payload.source_hash,
-    analytics_features_version: analyticsFeatures.version,
-    match_analytics_model_version: matchAnalytics.model_version,
-    market_fit_version: marketFit.version,
-    catalog_coverage: payload.market_catalog && payload.market_catalog.catalog_coverage,
-    selected_bets: marketFit.selected_bets.map(b => ({ market_key: b.market_key, rate: b.rate, risk_label: b.risk_label })),
-  })).digest('hex');
+  const sourceHash = buildAnalyticsSourceHash({ analyticsFeatures, matchAnalytics, marketFit });
 
   return {
     ...payload,

@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { extractAnalyticsFeatures } = require('../../webapp/services/matchAnalyticsFeatureService');
+const { scoreMatch } = require('../../webapp/services/matchAnalyticsScoringService');
 
 const sstatsData = {
   lineups: {
@@ -77,4 +78,20 @@ test('extractAnalyticsFeatures handles missing optional fields without NaN', () 
   assert.equal(features.away.form_points_per_game, null);
   assert.ok(Object.values(features.home).every(v => v === null || Number.isFinite(v)));
   assert.ok(Object.values(features.away).every(v => v === null || Number.isFinite(v)));
+});
+
+test('sparse null SStats payload is not eligible and does not create strong null-derived signals', () => {
+  const features = extractAnalyticsFeatures({
+    sport: 'soccer',
+    sstatsData: {
+      team_stats: { home: { avg_scored: null, xG: null }, away: {} },
+      recent_form: { home: [], away: [] },
+    },
+  });
+  const analytics = scoreMatch(features);
+
+  assert.equal(analytics.eligibility.status, 'ineligible');
+  assert.ok(analytics.confidence.score < 65);
+  assert.ok(analytics.scores.under_2_5 < 100);
+  assert.ok(analytics.scores.btts_no < 100);
 });

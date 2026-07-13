@@ -21,18 +21,11 @@
    - `prompt_version`
    - `model_name`
    - raw token usage
-   - `recommended_bets` (массив, может быть пустым)
+   - `bet_explanations` (объяснения для выбранных runtime ставок)
 
-## Поле recommended_bets
-Опциональный массив рекомендованных ставок. Каждый элемент содержит:
-- `type` — тип ставки
-- `outcome` — конкретный исход
-- `label` — читаемый ярлык
-- `rate` — коэффициент (число)
-- `reason` — обоснование в одном предложении
-- `confidence` — уверенность 0–1 (необязательно)
-
-Если LLM не вернул `recommended_bets`, нормализатор подставляет `[]`.
+## Поле bet_explanations
+Массив объяснений, по одному на каждый `market_key` из `market_fit.selected_bets`.
+LLM не выбирает и не изменяет ставки: итоговый `recommended_bets` собирается runtime из deterministic analytics.
 
 ## Версионирование
 Рекомендуемый старт:

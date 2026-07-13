@@ -57,6 +57,30 @@ const VALID_OUTPUT_WITHOUT_BETS = {
   risk_note: 'Уругвай может удивить в контратаках.',
 };
 
+const ANALYTICS_SOURCE_PAYLOAD = {
+  ...SOURCE_PAYLOAD_FULL,
+  market_catalog: {
+    markets: [
+      { market_key: 'one_x_two:w1', type: 'one_x_two', outcome: 'w1', label: 'Победа хозяев', rate: 1.72 },
+    ],
+  },
+  market_fit: {
+    selected_bets: [
+      { market_key: 'one_x_two:w1', type: 'one_x_two', outcome: 'w1', label: 'Победа хозяев', rate: 1.72, risk_label: 'low' },
+    ],
+  },
+};
+
+function analyticsOutput(extra = {}) {
+  return {
+    headline: 'Хозяева выглядят сильнее',
+    brief: 'Статистические сигналы поддерживают хозяев, но итог зависит от состава и реализации моментов.',
+    risk_note: null,
+    bet_explanations: [{ market_key: 'one_x_two:w1', reason: 'Форма и xG поддерживают победу хозяев.' }],
+    ...extra,
+  };
+}
+
 function makeProvider(text, opts = {}) {
   return async () => ({
     text,
@@ -329,6 +353,44 @@ test('generateAiBrief: returns ready with normalized output on valid response', 
   assert.equal(result.prompt_version, 'v1');
 });
 
+test('analytics mode rejects legacy recommended_bets even when empty', async () => {
+  const result = await generateAiBrief({
+    sourcePayload: ANALYTICS_SOURCE_PAYLOAD,
+    provider: makeProvider(JSON.stringify(analyticsOutput({ bet_explanations: undefined, recommended_bets: [] }))),
+    promptPackDir: makePromptPackDir(),
+  });
+  assert.equal(result.status, 'failed');
+});
+
+test('analytics mode requires exactly one explanation per selected market', async () => {
+  for (const explanations of [
+    [],
+    [{ market_key: 'unknown', reason: 'Неизвестный рынок.' }],
+    [
+      { market_key: 'one_x_two:w1', reason: 'Первое объяснение.' },
+      { market_key: 'one_x_two:w1', reason: 'Дубликат.' },
+    ],
+  ]) {
+    const result = await generateAiBrief({
+      sourcePayload: ANALYTICS_SOURCE_PAYLOAD,
+      provider: makeProvider(JSON.stringify(analyticsOutput({ bet_explanations: explanations }))),
+      promptPackDir: makePromptPackDir(),
+    });
+    assert.equal(result.status, 'failed');
+  }
+});
+
+test('analytics mode preserves deterministic selected bets with valid explanations', async () => {
+  const result = await generateAiBrief({
+    sourcePayload: ANALYTICS_SOURCE_PAYLOAD,
+    provider: makeProvider(JSON.stringify(analyticsOutput())),
+    promptPackDir: makePromptPackDir(),
+  });
+  assert.equal(result.status, 'ready');
+  assert.equal(result.output.recommended_bets.length, 1);
+  assert.equal(result.output.recommended_bets[0].rate, 1.72);
+});
+
 test('generateAiBrief: defaults prompt version when omitted', async () => {
   const result = await generateAiBrief({
     sourcePayload: SOURCE_PAYLOAD_LIGHT,
@@ -474,6 +536,18 @@ test('loadPromptPack: loads and parses prompt pack files', () => {
   assert.equal(pack.userPromptTemplate, 'USER {{SOURCE_PAYLOAD_JSON}}');
   assert.deepEqual(pack.outputSchema, { type: 'object', properties: { headline: { type: 'string' } } });
   assert.deepEqual(pack.fewShots, [{ id: 'shot-x' }]);
+});
+
+test('default prompt pack uses analytics writer-only output contract', () => {
+  const pack = loadPromptPack();
+
+  assert.deepEqual(pack.outputSchema.required, ['headline', 'brief', 'risk_note', 'bet_explanations']);
+  assert.equal(Object.prototype.hasOwnProperty.call(pack.outputSchema.properties, 'recommended_bets'), false);
+  for (const shot of pack.fewShots) {
+    if (!shot.expected_output) continue;
+    assert.equal(Object.prototype.hasOwnProperty.call(shot.expected_output, 'recommended_bets'), false);
+    assert.ok(Array.isArray(shot.expected_output.bet_explanations));
+  }
 });
 
 test('buildUserPrompt: injects formatted payload into template', () => {

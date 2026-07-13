@@ -5,6 +5,7 @@ const MIN_CONFIDENCE = 65;
 const HOME_ADVANTAGE = 3;
 
 function finite(value, fallback = 0) {
+  if (value == null || value === '') return fallback;
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
 }
@@ -83,7 +84,11 @@ function dataCompleteness(features) {
   const home = features.home || {};
   const away = features.away || {};
   const needed = ['avg_scored', 'avg_conceded', 'xg_for', 'xg_against'];
-  const present = needed.reduce((acc, key) => acc + (Number.isFinite(Number(home[key])) ? 1 : 0) + (Number.isFinite(Number(away[key])) ? 1 : 0), 0);
+  const hasRealValue = value => value != null && value !== '' && Number.isFinite(Number(value));
+  const homePresent = needed.filter(key => hasRealValue(home[key])).length;
+  const awayPresent = needed.filter(key => hasRealValue(away[key])).length;
+  const present = homePresent + awayPresent;
+  if (homePresent < 2 || awayPresent < 2 || present < 6) return 0;
   score = (score * 0.45) + ((present / (needed.length * 2)) * 0.55);
   return clamp(score, 0, 1);
 }

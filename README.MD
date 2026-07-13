@@ -51,7 +51,6 @@ HTTP API (`fastify.listen`) по-прежнему выключен в текущ
 - `lib/forecastAnalyzer.js` — извлечение мысли прогноза и fallback-анализ
 - `DataBase/Postgres.js` — обертка SQL-запросов к PostgreSQL
 - `lib/categoryEndpoint.js` — маппинг `sport_id -> endpoint`
-- `docs/plans/` — проектные планы и чеклисты
 
 ## Требования
 
@@ -101,12 +100,6 @@ npm test
 - Для надежной работы прогноза важна структура страницы на stavka.tv; при изменении верстки может потребоваться адаптация парсинга.
 
 ## Планы развития
-
-Документы в `docs/plans/`:
-
-- `stage-0-start-checklist.md`
-- `stavka-match-most-probable-outcome-plan.md`
-- `test-matches-template.csv`
 
 Ближайшие шаги:
 

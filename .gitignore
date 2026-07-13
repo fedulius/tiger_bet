@@ -17,5 +17,5 @@
 /.hermes_phase*_prompt.txt
 /sketches/
 /redesign-mockup.html
-# Source asset duplicates; public assets are served from webapp-react/public/
-/webapp-react/src/assets/
+# Known duplicate source asset; public assets are served from webapp-react/public/
+/webapp-react/src/assets/sport-icons/

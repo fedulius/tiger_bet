@@ -11,7 +11,7 @@
 3. Для analytics-first payload верни `bet_explanations`: по одному объяснению на `market_key` из `market_fit.selected_bets`.
 4. Не меняй `type`, `outcome`, `label`, `rate`, `risk_label` и количество ставок.
 5. В `headline`, `brief`, `risk_note` опирайся только на `analytics_features`, `match_analytics`, `market_fit` и разрешённые факты payload.
-6. Если `market_fit.selected_bets` отсутствует, используй legacy contract `recommended_bets`, но только из source-backed `risk_bets`/`top_bets`.
+6. Для analytics-first payload контракт всегда writer-only: не возвращай `recommended_bets`; runtime сам сохраняет выбранные ставки.
 7. Не ссылайся на H2H, Glicko, травмы или погоду, если в payload нет явных данных.
 8. Верни только JSON по контракту.
 
