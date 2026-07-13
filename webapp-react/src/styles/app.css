@@ -923,7 +923,7 @@ a {
 .detail-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: center;
+  align-items: start;
   column-gap: 22px;
   padding: 18px 20px 8px;
 }
@@ -946,7 +946,23 @@ a {
 .detail-team-name { font-size: 15px; font-weight: 600; color: var(--text); }
 .detail-hero > .detail-team:first-child { justify-self: end; }
 .detail-hero > .detail-team:last-child { justify-self: start; }
-.detail-score { font-size: 30px; font-weight: 800; color: var(--text); flex-shrink: 0; letter-spacing: -0.5px; text-align: center; }
+.detail-score {
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 92px;
+  margin-top: 16px;
+  font-size: 30px;
+  font-weight: 800;
+  color: var(--text);
+  flex-shrink: 0;
+  letter-spacing: -0.5px;
+  text-align: center;
+}
+.detail-score.is-live { margin-top: -2px; }
+.detail-score-number { line-height: 1; }
 .detail-meta { text-align: center; font-size: 13px; color: var(--text-2); padding-bottom: 4px; }
 
 /* Quick bets */

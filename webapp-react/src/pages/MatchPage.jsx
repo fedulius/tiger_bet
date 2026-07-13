@@ -373,7 +373,7 @@ export function MatchPage() {
               </div>
               <div className="detail-team-name">{team1Name}</div>
             </div>
-            <div className="detail-score" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minWidth: '92px', textAlign: 'center' }}>
+            <div className={`detail-score ${item.isLive ? 'is-live' : ''}`}>
               {item.isLive && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px', minHeight: '14px', marginBottom: '4px', fontSize: '11px', fontWeight: 600, color: 'var(--text-3)' }}>
                   <span className="live-dot" />
@@ -382,7 +382,7 @@ export function MatchPage() {
                   </span>
                 </div>
               )}
-              <div style={{ lineHeight: 1 }}>
+              <div className="detail-score-number">
                 {item.score || '—'}
               </div>
               {item.penaltyResult && (
