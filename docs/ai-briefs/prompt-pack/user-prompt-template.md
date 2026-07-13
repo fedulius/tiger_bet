@@ -2,16 +2,18 @@
 
 ## Контекст продукта
 - Это предвычисленный текст для UI.
-- Пользователь должен быстро понять идею основного выбора.
+- Пользователь должен быстро понять идею выбранных рынков.
 - Важнее точность и дисциплина формулировки, чем креативность.
 
 ## Инструкция
 1. Используй только данные из payload ниже.
-2. Сохрани главный смысл `primary_signal`.
-3. Если данных мало, пиши осторожно и без выдумывания причин.
-4. `risk_note` должен отражать настоящий риск, а не повторять `brief`.
-5. В `recommended_bets` включай только ставки, прямо поддержанные `top_bets` или `risk_bets`. Если таких нет — верни пустой массив `[]`.
-6. Верни только JSON по контракту.
+2. Если в payload есть `market_fit.selected_bets`, НЕ выбирай ставки сам: эти ставки уже выбрал аналитический слой Tiger Bet.
+3. Для analytics-first payload верни `bet_explanations`: по одному объяснению на `market_key` из `market_fit.selected_bets`.
+4. Не меняй `type`, `outcome`, `label`, `rate`, `risk_label` и количество ставок.
+5. В `headline`, `brief`, `risk_note` опирайся только на `analytics_features`, `match_analytics`, `market_fit` и разрешённые факты payload.
+6. Если `market_fit.selected_bets` отсутствует, используй legacy contract `recommended_bets`, но только из source-backed `risk_bets`/`top_bets`.
+7. Не ссылайся на H2H, Glicko, травмы или погоду, если в payload нет явных данных.
+8. Верни только JSON по контракту.
 
 ## Payload
 ```json

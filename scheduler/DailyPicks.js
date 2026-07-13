@@ -7,6 +7,9 @@ const { rankCandidateMatches } = require('../webapp/services/dailyPickRankingSer
 const { resolveDbContextForCandidate, resolveSystemIdForDailyPickSource } = require('../webapp/services/dailyPickMappingService');
 const { persistBundleSnapshot, persistAnalysisSnapshot, persistExternalMatchMapping } = require('../webapp/services/dailyPickPersistenceService');
 const { getMoscowDate } = require('../webapp/services/dailyPickReadService');
+const { extractAnalyticsFeatures } = require('../webapp/services/matchAnalyticsFeatureService');
+const { scoreMatch } = require('../webapp/services/matchAnalyticsScoringService');
+const { buildPartialMarketCatalog, selectMarketFits } = require('../webapp/services/marketFitService');
 
 const MATCHES_PER_DAY = 3; // максимум матчей на слот (today + tomorrow)
 
@@ -122,6 +125,8 @@ async function buildSourcePayload(match, popularBetsLoader, matchDetailLoader, r
     label: topBets[0].label,
   } : null;
 
+  const marketCatalog = buildPartialMarketCatalog({ popularBetsData, match });
+
   const crypto = require('crypto');
   const hashInput = JSON.stringify({
     match_slug: slug,
@@ -135,6 +140,7 @@ async function buildSourcePayload(match, popularBetsLoader, matchDetailLoader, r
     top_bets: topBets.map(b => ({
       type: b.type, outcome: b.outcome, count: b.count, rate: b.rate,
     })),
+    market_catalog: marketCatalog.markets.map(m => ({ type: m.type, outcome: m.outcome, rate: m.rate })),
     summary_snippet: summarySnippet || null,
   });
   const sourceHash = crypto.createHash('sha256').update(hashInput).digest('hex');
@@ -145,6 +151,7 @@ async function buildSourcePayload(match, popularBetsLoader, matchDetailLoader, r
     sport_slug: match.sport_slug || match.sportSlug || null,
     source_mode: sourceMode,
     source_url: 'https://stavka.tv/matches/' + (match.sport_slug || 'soccer') + '/' + slug,
+    market_catalog: marketCatalog,
     top_bets: topBets,
     risk_bets: normalizedRiskBets,
     primary_signal: primarySignal,
@@ -242,6 +249,73 @@ async function enrichPayloadWithSStatsData(payload, pg) {
   } catch {
     return payload;
   }
+}
+
+// ── Build analytics-first payload ──────────────────────────
+function buildAnalyticsFirstPayload(payload) {
+  if (!payload || payload.source_mode === 'skip') return payload;
+  if (payload.sport_slug !== 'soccer') return {
+    ...payload,
+    source_mode: 'skip',
+    skip_reason: 'analytics_not_supported_for_sport',
+  };
+  if (!payload.sstats_data) return {
+    ...payload,
+    source_mode: 'skip',
+    skip_reason: 'analytics_sstats_fixture_unresolved',
+  };
+
+  const analyticsFeatures = extractAnalyticsFeatures({ sport: payload.sport_slug, sstatsData: payload.sstats_data });
+  const matchAnalytics = scoreMatch(analyticsFeatures);
+  const marketFit = selectMarketFits({ analytics: matchAnalytics, marketCatalog: payload.market_catalog });
+  if (matchAnalytics.eligibility.status !== 'eligible') {
+    return {
+      ...payload,
+      analytics_features: analyticsFeatures,
+      match_analytics: matchAnalytics,
+      market_fit: marketFit,
+      source_mode: 'skip',
+      skip_reason: matchAnalytics.eligibility.reasons[0] || 'analytics_insufficient_data',
+    };
+  }
+  if (!marketFit.selected_bets.length) {
+    return {
+      ...payload,
+      analytics_features: analyticsFeatures,
+      match_analytics: matchAnalytics,
+      market_fit: marketFit,
+      source_mode: 'skip',
+      skip_reason: 'analytics_no_market_fit',
+    };
+  }
+
+  const crypto = require('crypto');
+  const sourceHash = crypto.createHash('sha256').update(JSON.stringify({
+    previous_source_hash: payload.source_hash,
+    analytics_features_version: analyticsFeatures.version,
+    match_analytics_model_version: matchAnalytics.model_version,
+    market_fit_version: marketFit.version,
+    catalog_coverage: payload.market_catalog && payload.market_catalog.catalog_coverage,
+    selected_bets: marketFit.selected_bets.map(b => ({ market_key: b.market_key, rate: b.rate, risk_label: b.risk_label })),
+  })).digest('hex');
+
+  return {
+    ...payload,
+    analytics_features: analyticsFeatures,
+    match_analytics: matchAnalytics,
+    market_fit: marketFit,
+    risk_bets: marketFit.selected_bets.map(b => ({
+      type: b.type,
+      outcome: b.outcome,
+      rate: b.rate,
+      label: b.label,
+      risk_order: b.risk_order,
+      risk_label: b.risk_label,
+      risk_name: b.risk_label === 'low' ? 'Низкий риск' : b.risk_label === 'medium' ? 'Средний риск' : 'Высокий риск',
+      market_key: b.market_key,
+    })),
+    source_hash: sourceHash,
+  };
 }
 
 // ── Main orchestrator ──────────────────────────────────────
@@ -344,8 +418,8 @@ async function runDailyPicks(pg, options = {}) {
     const sourcePayload = await buildSourcePayload(match, popularBetsLoader, matchDetailLoader, riskBetsSelector);
     if (!sourcePayload || sourcePayload.source_mode === 'skip') continue;
 
-    // Enrich with SStats data (lineups, form, statistics)
-    const enrichedPayload = await enrichPayloadWithSStatsData(sourcePayload, pg);
+    // Enrich with SStats data (lineups, form, statistics), then build deterministic analytics/market-fit payload.
+    const enrichedPayload = buildAnalyticsFirstPayload(await enrichPayloadWithSStatsData(sourcePayload, pg));
 
     // Resolve DB context (match is already normalized from getCandidateMatchesForDate)
     const { systemId, sportId, tournamentId } = await resolveDbContextForCandidate(pg, { systemName: 'stavka', candidate: match });
@@ -355,7 +429,7 @@ async function runDailyPicks(pg, options = {}) {
     let sourceId;
     try {
       const result = await persistBundleSnapshot(pg, {
-        systemId, sportId, tournamentId, candidate: match, sourcePayload,
+        systemId, sportId, tournamentId, candidate: match, sourcePayload: enrichedPayload,
       });
       sourceId = result.sourceId;
 
@@ -410,4 +484,4 @@ async function runDailyPicks(pg, options = {}) {
   };
 }
 
-module.exports = { runDailyPicks, loadUsersWithFavorites, loadUserLeagueScope, buildSourcePayload, enrichPayloadWithSStatsData };
+module.exports = { runDailyPicks, loadUsersWithFavorites, loadUserLeagueScope, buildSourcePayload, enrichPayloadWithSStatsData, buildAnalyticsFirstPayload };

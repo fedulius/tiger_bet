@@ -8,6 +8,8 @@ const MAX_BRIEF_LENGTH = 4000;
 const MAX_RISK_NOTE_LENGTH = 500;
 const DEFAULT_PROMPT_PACK_DIR = path.resolve(__dirname, '../../docs/ai-briefs/prompt-pack');
 const DEFAULT_PROMPT_VERSION = 'ai-brief-v1';
+const { assembleAiBrief } = require('./aiBriefAssembler');
+const { validateRecommendedBets } = require('./recommendedBetQualityGate');
 
 function parseJsonFromText(text) {
   const raw = String(text || '').trim();
@@ -34,7 +36,7 @@ function validateAiBriefOutput(output) {
     return { valid: false, reason: 'not_an_object' };
   }
 
-  const allowedTopLevelKeys = new Set(['headline', 'brief', 'risk_note', 'recommended_bets']);
+  const allowedTopLevelKeys = new Set(['headline', 'brief', 'risk_note', 'recommended_bets', 'bet_explanations']);
   for (const key of Object.keys(output)) {
     if (!allowedTopLevelKeys.has(key)) {
       return { valid: false, reason: 'unexpected_output_property' };
@@ -74,11 +76,31 @@ function validateAiBriefOutput(output) {
     return { valid: false, reason: 'risk_note_too_long' };
   }
 
-  if (output.recommended_bets === undefined || output.recommended_bets === null) {
+  const hasRecommendedBets = output.recommended_bets !== undefined && output.recommended_bets !== null;
+  const hasBetExplanations = output.bet_explanations !== undefined && output.bet_explanations !== null;
+  if (!hasRecommendedBets && !hasBetExplanations) {
     return { valid: false, reason: 'missing_recommended_bets' };
   }
 
-  if (output.recommended_bets !== undefined && output.recommended_bets !== null) {
+  if (hasBetExplanations) {
+    if (!Array.isArray(output.bet_explanations)) {
+      return { valid: false, reason: 'invalid_bet_explanations_type' };
+    }
+    if (output.bet_explanations.length > 3) {
+      return { valid: false, reason: 'too_many_bet_explanations' };
+    }
+    for (const item of output.bet_explanations) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return { valid: false, reason: 'invalid_bet_explanation_item' };
+      const allowedExplanationKeys = new Set(['market_key', 'reason']);
+      for (const key of Object.keys(item)) {
+        if (!allowedExplanationKeys.has(key)) return { valid: false, reason: 'unexpected_bet_explanation_property' };
+      }
+      if (typeof item.market_key !== 'string' || !item.market_key.trim()) return { valid: false, reason: 'invalid_bet_explanation_item' };
+      if (typeof item.reason !== 'string' || !item.reason.trim()) return { valid: false, reason: 'invalid_bet_explanation_item' };
+    }
+  }
+
+  if (hasRecommendedBets) {
     if (!Array.isArray(output.recommended_bets)) {
       return { valid: false, reason: 'invalid_recommended_bets_type' };
     }
@@ -380,7 +402,23 @@ async function generateAiBrief({ sourcePayload, modelName, promptVersion, provid
     };
   }
 
-  const normalized = normalizeAiBriefOutput(parsed, sourcePayload);
+  let normalized;
+  if (Array.isArray(parsed.bet_explanations) && sourcePayload.market_fit && Array.isArray(sourcePayload.market_fit.selected_bets)) {
+    normalized = assembleAiBrief({ llmOutput: parsed, selectedBets: sourcePayload.market_fit.selected_bets });
+    const gate = validateRecommendedBets({
+      recommendedBets: normalized.recommended_bets,
+      marketCatalog: sourcePayload.market_catalog,
+      marketFit: sourcePayload.market_fit,
+    });
+    if (!gate.valid) {
+      return {
+        status: 'failed',
+        error: gate.reason,
+      };
+    }
+  } else {
+    normalized = normalizeAiBriefOutput(parsed, sourcePayload);
+  }
 
   return {
     status: 'ready',
