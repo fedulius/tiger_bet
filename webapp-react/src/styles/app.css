@@ -923,7 +923,7 @@ a {
 .detail-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: start;
+  align-items: center;
   column-gap: 22px;
   padding: 18px 20px 8px;
 }
