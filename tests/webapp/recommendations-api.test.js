@@ -122,7 +122,6 @@ test('GET /recommendations returns items and daily_picks', async () => {
     assert.equal(response.statusCode, 200);
     const payload = response.json();
     assert.ok(payload.daily_picks);
-    assert.ok(payload.daily_picks);
     assert.ok(payload.updated_at);
   } finally {
     await app.close();
@@ -177,7 +176,6 @@ test('GET /recommendations handles missing favorites gracefully', async () => {
     });
     assert.equal(response.statusCode, 200);
     const payload = response.json();
-    assert.ok(payload.daily_picks);
     assert.ok(payload.daily_picks);
   } finally {
     await app.close();
@@ -270,7 +268,6 @@ test('GET /recommendations returns daily_picks from match_analysis', async () =>
 
     assert.equal(response.statusCode, 200);
     const payload = response.json();
-    assert.ok(payload.daily_picks);
     assert.ok(payload.daily_picks);
   } finally {
     await app.close();

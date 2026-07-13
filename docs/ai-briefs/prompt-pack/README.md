@@ -10,7 +10,7 @@
 - `validation-rules.md` — правила локальной пост-проверки
 
 ## Как использовать в коде
-1. `aiBriefSourceService` готовит компактный `sourcePayload`.
+1. Runtime pipeline готовит компактный `sourcePayload`.
 2. `aiBriefGenerator`:
    - загружает `system-prompt.md`
    - подставляет `user-prompt-template.md`

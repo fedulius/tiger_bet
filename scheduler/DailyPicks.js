@@ -62,7 +62,7 @@ async function loadCandidatesForUser({ pg, user, targetDate, allMatches }) {
   return candidates;
 }
 
-// ── Build source payload for LLM (reuses aiBriefSourceService logic) ─────────
+// ── Build source payload for LLM ─────────────────────────────────────────────
 async function buildSourcePayload(match, popularBetsLoader, matchDetailLoader, riskBetsSelector) {
   const slug = match.match_slug || match.slug;
   if (!slug) return null;
