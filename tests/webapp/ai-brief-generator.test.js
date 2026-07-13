@@ -48,6 +48,13 @@ const VALID_OUTPUT = {
   headline: 'Испания — явный фаворит',
   brief: 'Большинство ставок идёт на победу Испании с коэффициентом 1.72.',
   risk_note: 'Уругвай может удивить в контратаках.',
+  recommended_bets: [],
+};
+
+const VALID_OUTPUT_WITHOUT_BETS = {
+  headline: 'Испания — явный фаворит',
+  brief: 'Большинство ставок идёт на победу Испании с коэффициентом 1.72.',
+  risk_note: 'Уругвай может удивить в контратаках.',
 };
 
 function makeProvider(text, opts = {}) {
@@ -259,7 +266,7 @@ test('generateAiBrief: returns failed when output missing brief', async () => {
 });
 
 test('generateAiBrief: returns failed when headline exceeds max length', async () => {
-  const bad = { headline: 'A'.repeat(201), brief: 'Some brief', risk_note: null };
+  const bad = { headline: 'A'.repeat(201), brief: 'Brief text long enough for validation checks.', risk_note: null, recommended_bets: [] };
   const result = await generateAiBrief({
     sourcePayload: SOURCE_PAYLOAD_FULL,
     modelName: 'gpt-4o-mini',
@@ -273,7 +280,7 @@ test('generateAiBrief: returns failed when headline exceeds max length', async (
 });
 
 test('generateAiBrief: returns failed when brief exceeds max length', async () => {
-  const bad = { headline: 'Some headline', brief: 'B'.repeat(4001), risk_note: null };
+  const bad = { headline: 'Some headline', brief: 'Brief text long enough for validation checks.'.repeat(4001), risk_note: null };
   const result = await generateAiBrief({
     sourcePayload: SOURCE_PAYLOAD_FULL,
     modelName: 'gpt-4o-mini',
@@ -287,7 +294,7 @@ test('generateAiBrief: returns failed when brief exceeds max length', async () =
 });
 
 test('generateAiBrief: returns failed when risk_note exceeds max length', async () => {
-  const bad = { headline: 'Some headline', brief: 'Some brief', risk_note: 'R'.repeat(501) };
+  const bad = { headline: 'Some headline', brief: 'Brief text long enough for validation checks.', risk_note: 'R'.repeat(501), recommended_bets: [] };
   const result = await generateAiBrief({
     sourcePayload: SOURCE_PAYLOAD_FULL,
     modelName: 'gpt-4o-mini',
@@ -377,7 +384,7 @@ test('generateAiBrief: null token counts when provider omits them', async () => 
 });
 
 test('generateAiBrief: ready when risk_note is null', async () => {
-  const output = { headline: 'Headline', brief: 'Brief text', risk_note: null };
+  const output = { headline: 'Headline', brief: 'Brief text long enough for validation checks.', risk_note: null, recommended_bets: [] };
   const result = await generateAiBrief({
     sourcePayload: SOURCE_PAYLOAD_FULL,
     modelName: 'gpt-4o-mini',
@@ -390,8 +397,8 @@ test('generateAiBrief: ready when risk_note is null', async () => {
   assert.equal(result.output.risk_note, null);
 });
 
-test('generateAiBrief: ready when risk_note is absent from output', async () => {
-  const output = { headline: 'Headline', brief: 'Brief text' };
+test('generateAiBrief: fails when risk_note is absent from output', async () => {
+  const output = { headline: 'Headline', brief: 'Brief text long enough for validation checks.', recommended_bets: [] };
   const result = await generateAiBrief({
     sourcePayload: SOURCE_PAYLOAD_FULL,
     modelName: 'gpt-4o-mini',
@@ -400,8 +407,8 @@ test('generateAiBrief: ready when risk_note is absent from output', async () => 
     promptPackDir: makePromptPackDir(),
   });
 
-  assert.equal(result.status, 'ready');
-  assert.equal(result.output.risk_note, null);
+  assert.equal(result.status, 'failed');
+  assert.equal(result.error, 'missing_risk_note');
 });
 
 test('generateAiBrief: extracts JSON embedded in surrounding text', async () => {
@@ -514,40 +521,40 @@ test('validateAiBriefOutput: returns invalid for missing brief', () => {
 });
 
 test('validateAiBriefOutput: returns invalid for headline too long', () => {
-  const result = validateAiBriefOutput({ headline: 'A'.repeat(201), brief: 'Brief', risk_note: null });
+  const result = validateAiBriefOutput({ headline: 'A'.repeat(201), brief: 'Brief text long enough for validation checks.', risk_note: null, recommended_bets: [] });
   assert.equal(result.valid, false);
   assert.equal(result.reason, 'headline_too_long');
 });
 
 test('validateAiBriefOutput: accepts headline at max length', () => {
-  const result = validateAiBriefOutput({ headline: 'A'.repeat(200), brief: 'Brief', risk_note: null });
+  const result = validateAiBriefOutput({ headline: 'A'.repeat(200), brief: 'Brief text long enough for validation checks.', risk_note: null, recommended_bets: [] });
   assert.equal(result.valid, true);
 });
 
 test('validateAiBriefOutput: returns invalid for brief too long', () => {
-  const result = validateAiBriefOutput({ headline: 'H', brief: 'B'.repeat(4001), risk_note: null });
+  const result = validateAiBriefOutput({ headline: 'Headline', brief: 'B'.repeat(4001), risk_note: null, recommended_bets: [] });
   assert.equal(result.valid, false);
   assert.equal(result.reason, 'brief_too_long');
 });
 
 test('validateAiBriefOutput: accepts brief at max length', () => {
-  const result = validateAiBriefOutput({ headline: 'H', brief: 'B'.repeat(4000), risk_note: null });
+  const result = validateAiBriefOutput({ headline: 'Headline', brief: 'B'.repeat(4000), risk_note: null, recommended_bets: [] });
   assert.equal(result.valid, true);
 });
 
 test('validateAiBriefOutput: returns invalid for risk_note too long', () => {
-  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: 'R'.repeat(501) });
+  const result = validateAiBriefOutput({ headline: 'Headline', brief: 'Brief text long enough for validation checks.', risk_note: 'R'.repeat(501), recommended_bets: [] });
   assert.equal(result.valid, false);
   assert.equal(result.reason, 'risk_note_too_long');
 });
 
 test('validateAiBriefOutput: accepts risk_note at max length', () => {
-  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: 'R'.repeat(500) });
+  const result = validateAiBriefOutput({ headline: 'Headline', brief: 'Brief text long enough for validation checks.', risk_note: 'R'.repeat(500), recommended_bets: [] });
   assert.equal(result.valid, true);
 });
 
 test('validateAiBriefOutput: returns invalid when risk_note is non-string non-null', () => {
-  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: 42 });
+  const result = validateAiBriefOutput({ headline: 'Headline', brief: 'Brief text long enough for validation checks.', risk_note: 42 });
   assert.equal(result.valid, false);
   assert.equal(result.reason, 'invalid_risk_note_type');
 });
@@ -558,13 +565,14 @@ test('validateAiBriefOutput: valid for complete correct object', () => {
 });
 
 test('validateAiBriefOutput: valid when risk_note is null', () => {
-  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null });
+  const result = validateAiBriefOutput({ headline: 'Headline', brief: 'Brief text long enough for validation checks.', risk_note: null, recommended_bets: [] });
   assert.equal(result.valid, true);
 });
 
-test('validateAiBriefOutput: valid when risk_note is absent', () => {
-  const result = validateAiBriefOutput({ headline: 'H', brief: 'B' });
-  assert.equal(result.valid, true);
+test('validateAiBriefOutput: invalid when risk_note is absent', () => {
+  const result = validateAiBriefOutput({ headline: 'Headline', brief: 'Brief text long enough for validation checks.', recommended_bets: [] });
+  assert.equal(result.valid, false);
+  assert.equal(result.reason, 'missing_risk_note');
 });
 
 // --- normalizeAiBriefOutput ---
@@ -576,27 +584,27 @@ test('normalizeAiBriefOutput: trims whitespace from headline and brief', () => {
 });
 
 test('normalizeAiBriefOutput: trims whitespace from risk_note', () => {
-  const result = normalizeAiBriefOutput({ headline: 'H', brief: 'B', risk_note: '  Note  ' });
+  const result = normalizeAiBriefOutput({ headline: 'Headline', brief: 'Brief text long enough for validation checks.', risk_note: '  Note  ' });
   assert.equal(result.risk_note, 'Note');
 });
 
 test('normalizeAiBriefOutput: coerces undefined risk_note to null', () => {
-  const result = normalizeAiBriefOutput({ headline: 'H', brief: 'B' });
+  const result = normalizeAiBriefOutput({ headline: 'Headline', brief: 'Brief text long enough for validation checks.' });
   assert.equal(result.risk_note, null);
 });
 
 test('normalizeAiBriefOutput: coerces empty-string risk_note to null', () => {
-  const result = normalizeAiBriefOutput({ headline: 'H', brief: 'B', risk_note: '' });
+  const result = normalizeAiBriefOutput({ headline: 'Headline', brief: 'Brief text long enough for validation checks.', risk_note: '' });
   assert.equal(result.risk_note, null);
 });
 
 test('normalizeAiBriefOutput: coerces whitespace-only risk_note to null', () => {
-  const result = normalizeAiBriefOutput({ headline: 'H', brief: 'B', risk_note: '   ' });
+  const result = normalizeAiBriefOutput({ headline: 'Headline', brief: 'Brief text long enough for validation checks.', risk_note: '   ' });
   assert.equal(result.risk_note, null);
 });
 
 test('normalizeAiBriefOutput: preserves non-empty risk_note', () => {
-  const result = normalizeAiBriefOutput({ headline: 'H', brief: 'B', risk_note: 'Real note' });
+  const result = normalizeAiBriefOutput({ headline: 'Headline', brief: 'Brief text long enough for validation checks.', risk_note: 'Real note' });
   assert.equal(result.risk_note, 'Real note');
 });
 
@@ -607,84 +615,94 @@ test('normalizeAiBriefOutput: result has exactly the expected keys', () => {
 
 // --- recommended_bets: validateAiBriefOutput ---
 
-test('validateAiBriefOutput: valid when recommended_bets is absent', () => {
-  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null });
-  assert.equal(result.valid, true);
+test('validateAiBriefOutput: invalid when recommended_bets is absent', () => {
+  const result = validateAiBriefOutput({ headline: 'Headline', brief: 'Brief text long enough for validation checks.', risk_note: null });
+  assert.equal(result.valid, false);
+  assert.equal(result.reason, 'missing_recommended_bets');
 });
 
 test('validateAiBriefOutput: valid when recommended_bets is empty array', () => {
-  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: [] });
+  const result = validateAiBriefOutput({ headline: 'Headline', brief: 'Brief text long enough for validation checks.', risk_note: null, recommended_bets: [] });
   assert.equal(result.valid, true);
 });
 
 test('validateAiBriefOutput: valid when recommended_bets has a complete item', () => {
-  const bets = [{ type: 'one_x_two', outcome: 'w1', label: 'Победа хозяев', rate: 1.72, reason: 'Фаворит матча.' }];
-  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: bets });
+  const bets = [{ type: 'one_x_two', outcome: 'w1', label: 'Победа хозяев', rate: 1.72, reason: 'Фаворит матча.', risk_label: 'low' }];
+  const result = validateAiBriefOutput({ headline: 'Headline', brief: 'Brief text long enough for validation checks.', risk_note: null, recommended_bets: bets });
   assert.equal(result.valid, true);
 });
 
 test('validateAiBriefOutput: valid when recommended_bets item includes confidence', () => {
-  const bets = [{ type: 'total', outcome: 'over', label: 'Тотал больше 2.5', rate: 1.85, reason: 'Обе команды атакуют.', confidence: 0.75 }];
-  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: bets });
+  const bets = [{ type: 'total', outcome: 'over', label: 'Тотал больше 2.5', rate: 1.85, reason: 'Обе команды атакуют.', risk_label: 'medium', confidence: 0.75 }];
+  const result = validateAiBriefOutput({ headline: 'Headline', brief: 'Brief text long enough for validation checks.', risk_note: null, recommended_bets: bets });
   assert.equal(result.valid, true);
 });
 
 test('validateAiBriefOutput: invalid when recommended_bets is not an array', () => {
-  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: 'not-array' });
+  const result = validateAiBriefOutput({ headline: 'Headline', brief: 'Brief text long enough for validation checks.', risk_note: null, recommended_bets: 'not-array' });
   assert.equal(result.valid, false);
   assert.equal(result.reason, 'invalid_recommended_bets_type');
 });
 
+test('validateAiBriefOutput: invalid when recommended_bets has more than three items', () => {
+  const bet = { type: 'one_x_two', outcome: 'w1', label: 'L', rate: 1.5, reason: 'R' };
+  const result = validateAiBriefOutput({ headline: 'Headline', brief: 'Brief text long enough for validation checks.', risk_note: null, recommended_bets: [bet, bet, bet, bet] });
+  assert.equal(result.valid, false);
+  assert.equal(result.reason, 'too_many_recommended_bets');
+});
+
 test('validateAiBriefOutput: invalid when recommended_bets item is not an object', () => {
-  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: ['bad'] });
+  const result = validateAiBriefOutput({ headline: 'Headline', brief: 'Brief text long enough for validation checks.', risk_note: null, recommended_bets: ['bad'] });
   assert.equal(result.valid, false);
   assert.equal(result.reason, 'invalid_recommended_bet_item');
 });
 
 test('validateAiBriefOutput: invalid when recommended_bets item is an array', () => {
-  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: [[]] });
+  const result = validateAiBriefOutput({ headline: 'Headline', brief: 'Brief text long enough for validation checks.', risk_note: null, recommended_bets: [[]] });
   assert.equal(result.valid, false);
   assert.equal(result.reason, 'invalid_recommended_bet_item');
 });
 
 test('validateAiBriefOutput: invalid when recommended_bets item missing type', () => {
   const bet = { outcome: 'w1', label: 'L', rate: 1.5, reason: 'R' };
-  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: [bet] });
+  const result = validateAiBriefOutput({ headline: 'Headline', brief: 'Brief text long enough for validation checks.', risk_note: null, recommended_bets: [bet] });
   assert.equal(result.valid, false);
   assert.equal(result.reason, 'invalid_recommended_bet_item');
 });
 
 test('validateAiBriefOutput: invalid when recommended_bets item missing outcome', () => {
   const bet = { type: 'one_x_two', label: 'L', rate: 1.5, reason: 'R' };
-  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: [bet] });
+  const result = validateAiBriefOutput({ headline: 'Headline', brief: 'Brief text long enough for validation checks.', risk_note: null, recommended_bets: [bet] });
   assert.equal(result.valid, false);
   assert.equal(result.reason, 'invalid_recommended_bet_item');
 });
 
-test('validateAiBriefOutput: valid when recommended_bets item missing label', () => {
+test('validateAiBriefOutput: invalid when recommended_bets item missing label', () => {
   const bet = { type: 'one_x_two', outcome: 'w1', rate: 1.5, reason: 'R' };
-  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: [bet] });
-  assert.equal(result.valid, true);
+  const result = validateAiBriefOutput({ headline: 'Headline', brief: 'Brief text long enough for validation checks.', risk_note: null, recommended_bets: [bet] });
+  assert.equal(result.valid, false);
+  assert.equal(result.reason, 'invalid_recommended_bet_item');
 });
 
 test('validateAiBriefOutput: invalid when recommended_bets item rate is not a number', () => {
   const bet = { type: 'one_x_two', outcome: 'w1', label: 'L', rate: '1.5', reason: 'R' };
-  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: [bet] });
+  const result = validateAiBriefOutput({ headline: 'Headline', brief: 'Brief text long enough for validation checks.', risk_note: null, recommended_bets: [bet] });
   assert.equal(result.valid, false);
   assert.equal(result.reason, 'invalid_recommended_bet_item');
 });
 
 test('validateAiBriefOutput: invalid when recommended_bets item missing reason', () => {
   const bet = { type: 'one_x_two', outcome: 'w1', label: 'L', rate: 1.5 };
-  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: [bet] });
+  const result = validateAiBriefOutput({ headline: 'Headline', brief: 'Brief text long enough for validation checks.', risk_note: null, recommended_bets: [bet] });
   assert.equal(result.valid, false);
   assert.equal(result.reason, 'invalid_recommended_bet_item');
 });
 
-test('validateAiBriefOutput: valid when recommended_bets item confidence is ignored', () => {
-  const bet = { type: 'one_x_two', outcome: 'w1', label: 'L', rate: 1.5, reason: 'R', confidence: 'high' };
-  const result = validateAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: [bet] });
-  assert.equal(result.valid, true);
+test('validateAiBriefOutput: invalid when recommended_bets item missing risk_label', () => {
+  const bet = { type: 'one_x_two', outcome: 'w1', label: 'L', rate: 1.5, reason: 'R' };
+  const result = validateAiBriefOutput({ headline: 'Headline', brief: 'Brief text long enough for validation checks.', risk_note: null, recommended_bets: [bet] });
+  assert.equal(result.valid, false);
+  assert.equal(result.reason, 'invalid_risk_label');
 });
 
 // --- recommended_bets: generateAiBrief round-trip ---
@@ -693,7 +711,7 @@ test('generateAiBrief: ready output includes recommended_bets from LLM response'
   const outputWithBets = {
     ...VALID_OUTPUT,
     recommended_bets: [
-      { type: 'one_x_two', outcome: 'w1', label: 'Победа хозяев', rate: 1.72, reason: 'Фаворит матча.' },
+      { type: 'one_x_two', outcome: 'w1', label: 'Победа хозяев', rate: 1.72, reason: 'Фаворит матча.', risk_label: 'low' },
     ],
   };
   const result = await generateAiBrief({
@@ -710,17 +728,17 @@ test('generateAiBrief: ready output includes recommended_bets from LLM response'
   assert.equal(result.output.recommended_bets[0].rate, 1.72);
 });
 
-test('generateAiBrief: ready output defaults recommended_bets to empty array when absent', async () => {
+test('generateAiBrief: fails when recommended_bets is absent', async () => {
   const result = await generateAiBrief({
     sourcePayload: SOURCE_PAYLOAD_FULL,
     modelName: 'gpt-4o-mini',
     promptVersion: 'v1',
-    provider: makeProvider(JSON.stringify(VALID_OUTPUT)),
+    provider: makeProvider(JSON.stringify(VALID_OUTPUT_WITHOUT_BETS)),
     promptPackDir: makePromptPackDir(),
   });
 
-  assert.equal(result.status, 'ready');
-  assert.deepEqual(result.output.recommended_bets, []);
+  assert.equal(result.status, 'failed');
+  assert.equal(result.error, 'missing_recommended_bets');
 });
 
 test('generateAiBrief: fails when recommended_bets is not an array', async () => {
@@ -754,20 +772,20 @@ test('generateAiBrief: fails when a recommended_bet item has wrong shape', async
 // --- recommended_bets: normalizeAiBriefOutput ---
 
 test('normalizeAiBriefOutput: defaults recommended_bets to empty array when absent', () => {
-  const result = normalizeAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null });
+  const result = normalizeAiBriefOutput({ headline: 'Headline', brief: 'Brief text long enough for validation checks.', risk_note: null });
   assert.deepEqual(result.recommended_bets, []);
 });
 
 test('normalizeAiBriefOutput: passes through recommended_bets array with normalized risk label', () => {
-  const bets = [{ type: 'total', outcome: 'over', label: 'ТБ 2.5', rate: 1.85, reason: 'Обе атакуют.' }];
-  const result = normalizeAiBriefOutput({ headline: 'H', brief: 'B', risk_note: null, recommended_bets: bets });
+  const bets = [{ type: 'total', outcome: 'over', label: 'ТБ 2.5', rate: 1.85, reason: 'Обе атакуют.', risk_label: 'low' }];
+  const result = normalizeAiBriefOutput({ headline: 'Headline', brief: 'Brief text long enough for validation checks.', risk_note: null, recommended_bets: bets });
   assert.deepEqual(result.recommended_bets, [{ ...bets[0], risk_label: 'low' }]);
 });
 
 test('normalizeAiBriefOutput: treats double_chance and one_x_two as one winner category', () => {
   const output = {
-    headline: 'H',
-    brief: 'B',
+    headline: 'Headline',
+    brief: 'Brief text long enough for validation checks.',
     risk_note: null,
     recommended_bets: [
       { type: 'one_x_two', outcome: 'w2', label: 'Победа гостей', rate: 1.95, reason: 'Основной сигнал.', risk_label: 'low' },
@@ -779,6 +797,7 @@ test('normalizeAiBriefOutput: treats double_chance and one_x_two as one winner c
     top_bets: [
       { type: 'one_x_two', outcome: 'w2', label: 'Победа гостей', rate: 1.95 },
       { type: 'both_to_score', outcome: 'yes', label: 'Обе забьют — да', rate: 1.61 },
+      { type: 'correct_score', outcome: '1:2', label: 'Точный счёт 1:2', rate: 8.2 },
     ],
     risk_bets: [],
   };
@@ -788,10 +807,71 @@ test('normalizeAiBriefOutput: treats double_chance and one_x_two as one winner c
   assert.equal(result.recommended_bets[1].label, 'Обе забьют — да');
 });
 
+test('normalizeAiBriefOutput: drops duplicate winner bets when no alternative category exists', () => {
+  const output = {
+    headline: 'Headline',
+    brief: 'Brief text long enough for validation checks.',
+    risk_note: null,
+    recommended_bets: [
+      { type: 'one_x_two', outcome: 'w1', label: 'Победа хозяев', rate: 1.7, reason: 'A', risk_label: 'low' },
+      { type: 'double_chance', outcome: 'x1', label: '1X', rate: 1.4, reason: 'B', risk_label: 'medium' },
+    ],
+  };
+  const sourcePayload = {
+    top_bets: [
+      { type: 'one_x_two', outcome: 'w1', label: 'Победа хозяев', rate: 1.7 },
+      { type: 'double_chance', outcome: 'x1', label: '1X', rate: 1.4 },
+    ],
+    risk_bets: [],
+  };
+
+  const result = normalizeAiBriefOutput(output, sourcePayload);
+  assert.equal(result.recommended_bets.length, 1);
+  assert.equal(result.recommended_bets[0].type, 'one_x_two');
+});
+
+test('normalizeAiBriefOutput: replaces unsupported template exact score with source-backed market', () => {
+  const output = {
+    headline: 'Headline',
+    brief: 'Brief text long enough for validation checks.',
+    risk_note: null,
+    recommended_bets: [
+      { type: 'one_x_two', outcome: 'w1', label: 'Победа хозяев', rate: 1.7, reason: 'A', risk_label: 'low' },
+      { type: 'correct_score', outcome: '2:1', label: 'Точный счёт 2:1', rate: 8.5, reason: 'Шаблон.', risk_label: 'high' },
+    ],
+  };
+  const sourcePayload = {
+    top_bets: [
+      { type: 'one_x_two', outcome: 'w1', label: 'Победа хозяев', rate: 1.7 },
+      { type: 'total_over', outcome: '2_5', label: 'Тотал больше 2.5', rate: 2.1 },
+    ],
+    risk_bets: [],
+  };
+
+  const result = normalizeAiBriefOutput(output, sourcePayload);
+  assert.equal(result.recommended_bets[1].type, 'total_over');
+  assert.equal(result.recommended_bets[1].outcome, '2_5');
+});
+
+test('normalizeAiBriefOutput: removes unsupported exact score when no replacement exists', () => {
+  const output = {
+    headline: 'Headline',
+    brief: 'Brief text long enough for validation checks.',
+    risk_note: null,
+    recommended_bets: [
+      { type: 'correct_score', outcome: '2:1', label: 'Точный счёт 2:1', rate: 8.5, reason: 'Шаблон.', risk_label: 'high' },
+    ],
+  };
+  const sourcePayload = { top_bets: [], risk_bets: [] };
+
+  const result = normalizeAiBriefOutput(output, sourcePayload);
+  assert.deepEqual(result.recommended_bets, []);
+});
+
 test('normalizeAiBriefOutput: keeps semantic risk labels instead of sorting only by coefficient', () => {
   const output = {
-    headline: 'H',
-    brief: 'B',
+    headline: 'Headline',
+    brief: 'Brief text long enough for validation checks.',
     risk_note: null,
     recommended_bets: [
       { type: 'one_x_two', outcome: 'w2', label: 'Победа гостей', rate: 1.96, reason: 'Основной рынок.', risk_label: 'low' },
