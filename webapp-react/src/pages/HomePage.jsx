@@ -131,21 +131,16 @@ function EmptyDay({ message }) {
   );
 }
 
-function countDayMatches(data, dayKey) {
-  return (data?.[dayKey] || []).reduce(
-    (sum, league) => sum + (Array.isArray(league.matches) ? league.matches.length : 0),
-    0,
-  );
-}
+let currentHomeTab = 'today';
 
-function pickFirstNonEmptyDay(data) {
-  return ['today', 'tomorrow', 'yesterday'].find((dayKey) => countDayMatches(data, dayKey) > 0) || null;
+function rememberHomeTab(dayKey) {
+  if (DATE_TABS.some((tab) => tab.key === dayKey)) {
+    currentHomeTab = dayKey;
+  }
 }
 
 export function HomePage() {
-  const [activeTab, setActiveTab] = useState(() => {
-    try { return sessionStorage.getItem('homeTab') || 'today'; } catch { return 'today'; }
-  });
+  const [activeTab, setActiveTab] = useState(() => currentHomeTab);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authState, setAuthState] = useState('pending');
@@ -177,17 +172,6 @@ export function HomePage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
-
-  useEffect(() => {
-    if (!data) return;
-    if (countDayMatches(data, activeTab) > 0) return;
-
-    const nextTab = pickFirstNonEmptyDay(data);
-    if (!nextTab || nextTab === activeTab) return;
-
-    try { sessionStorage.setItem('homeTab', nextTab); } catch {}
-    setActiveTab(nextTab);
-  }, [activeTab, data]);
 
   // Auto-refresh when there are live matches
   useEffect(() => {
@@ -362,7 +346,7 @@ export function HomePage() {
               <button
                 key={key}
                 className={`date-pill${key === activeTab ? ' active' : ''}`}
-                onClick={() => { try { sessionStorage.setItem('homeTab', key); } catch {} setActiveTab(key); }}
+                onClick={() => { rememberHomeTab(key); setActiveTab(key); }}
               >
                 {label}
               </button>
