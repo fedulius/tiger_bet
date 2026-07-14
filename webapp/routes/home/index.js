@@ -3,6 +3,7 @@ const { resolveLeague, resolveRound, resolveTeamName, resolveTeamCode } = requir
 const { getDailyPicksFeed } = require('../../services/dailyPickReadService');
 const { logUserEvent } = require('../../services/eventLogService');
 const { checkHeavyRouteAccess } = require('../../services/accessCheck');
+const { rememberSstatsListMatches } = require('../../services/sstatsMatchListCache');
 
 // ── Cache ──────────────────────────────────────────────────
 // In-memory cache, shared across ALL users.
@@ -169,6 +170,7 @@ async function fetchDay(dayType, leagueIds, dateStr, ended) {
   );
   const results = await Promise.all(batches);
   for (const matches of results) {
+    rememberSstatsListMatches(matches, CACHE_TTL[dayType] || CACHE_TTL.today);
     allMatches.push(...matches.map(formatMatch));
   }
 

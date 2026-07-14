@@ -1,6 +1,7 @@
 const SSTATS_BASE = 'https://api.sstats.net';
 const { resolveLeague, resolveRound, resolveTeamName, resolveTeamCode } = require('../../services/locale');
 const { logUserEvent } = require('../../services/eventLogService');
+const { getSstatsListMatch, rememberSstatsListMatches } = require('../../services/sstatsMatchListCache');
 
 // ── Cache ──────────────────────────────────────────────────
 // Shared across all users. Live=60s, finished=24h.
@@ -57,6 +58,11 @@ function getDayRange(dateStr) {
 }
 
 async function fetchSstatsMatchFromList(gameId) {
+  const cachedGame = getSstatsListMatch(gameId);
+  if (cachedGame) {
+    return { game: cachedGame, statistics: {}, events: [], fallbackSource: 'home-list-cache' };
+  }
+
   const dayOffsets = [-1, 0, 1, 2];
   const requests = dayOffsets.map(async (offset) => {
     const { from, to } = getDayRange(getMoscowDate(offset));
@@ -69,7 +75,9 @@ async function fetchSstatsMatchFromList(gameId) {
     const resp = await fetchWithRetry(`${SSTATS_BASE}/Games/list?${params.toString()}`, 1);
     if (!resp || !resp.ok) return null;
     const json = await resp.json();
-    return (json.data || []).find((game) => String(game.id) === String(gameId)) || null;
+    const game = (json.data || []).find((item) => String(item.id) === String(gameId)) || null;
+    if (game) rememberSstatsListMatches([game]);
+    return game;
   });
 
   const results = await Promise.all(requests.map((request) => request.catch(() => null)));
@@ -99,7 +107,7 @@ async function fetchSstatsMatch(gameId, retries = 2) {
 async function fetchWithRetry(url, retries = 2) {
   for (let attempt = 0; attempt <= retries; attempt++) {
     const resp = await fetch(url);
-    const shouldRetry = resp.status === 429 || resp.status === 404 || resp.status >= 500;
+    const shouldRetry = resp.status === 429 || resp.status >= 500;
     if (shouldRetry && attempt < retries) {
       await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
       continue;
@@ -407,6 +415,7 @@ async function matchRoutes(fastify) {
         events,
         penaltyResult,
         source: 'sstats',
+        fallbackSource: result.fallbackSource || null,
       };
 
       // Fetch analytics data in parallel
