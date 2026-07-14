@@ -55,8 +55,9 @@ async function fetchSstatsMatch(gameId, retries = 2) {
 async function fetchWithRetry(url, retries = 2) {
   for (let attempt = 0; attempt <= retries; attempt++) {
     const resp = await fetch(url);
-    if (resp.status === 429 && attempt < retries) {
-      await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+    const shouldRetry = resp.status === 429 || resp.status === 404 || resp.status >= 500;
+    if (shouldRetry && attempt < retries) {
+      await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
       continue;
     }
     return resp;
