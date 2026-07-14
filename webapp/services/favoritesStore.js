@@ -93,15 +93,12 @@ async function loadResolvedFavoriteSports(pg, userId) {
       t.tournament_id,
       t.tournament_name,
       t.tournament_name_en
-    FROM public.user_sport us
-    JOIN public.sport s ON s.sport_id = us.sport_id
-    LEFT JOIN public.user_tournament ut ON ut.user_id = us.user_id
-    LEFT JOIN public.tournament t
-      ON t.tournament_id = ut.tournament_id
-     AND t.sport_id = us.sport_id
-    WHERE us.user_id = $1
+    FROM public.user_tournament ut
+    JOIN public.tournament t ON t.tournament_id = ut.tournament_id
+    JOIN public.sport s ON s.sport_id = t.sport_id
+    WHERE ut.user_id = $1
       AND COALESCE(s.is_active, 0) = 1
-    ORDER BY us.sport_id, t.tournament_name_en, t.tournament_name
+    ORDER BY s.sport_id, t.tournament_name_en, t.tournament_name
   `, [userId]);
 
   const bySportId = new Map();

@@ -3,11 +3,12 @@ const { logUserEvent } = require('../../services/eventLogService');
 
 async function loadFavoriteSports(fastify, userId) {
   return await fastify.pg.connection(`
-    SELECT s.sport_id, s.sport_name, s.sport_url
-    FROM public.user_sport fs
-    JOIN public.sport s ON s.sport_id = fs.sport_id
-    WHERE fs.user_id = $1
-    ORDER BY fs.sport_id
+    SELECT DISTINCT s.sport_id, s.sport_name, s.sport_url
+    FROM public.user_tournament ut
+    JOIN public.tournament t ON t.tournament_id = ut.tournament_id
+    JOIN public.sport s ON s.sport_id = t.sport_id
+    WHERE ut.user_id = $1
+    ORDER BY s.sport_id
   `, [userId]);
 }
 

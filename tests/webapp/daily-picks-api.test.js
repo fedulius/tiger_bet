@@ -22,7 +22,7 @@ test('GET /home/daily-picks returns today/tomorrow picks from DB-backed feed', a
       if (/user_access|access_scope/i.test(query)) {
         return [{ access_scope_name: 'admin' }];
       }
-      if (/FROM public\.user_sport us/i.test(query)) {
+      if (/FROM public\.user_tournament ut/i.test(query)) {
         return [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer', tournament_id: 16, tournament_name: 'Чемпионат мира', tournament_name_en: 'World Cup' }];
       }
       return [
@@ -91,7 +91,7 @@ test('GET /home/daily-picks returns today/tomorrow picks from DB-backed feed', a
     assert.equal(payload.today?.match, 'Alpha FC — Beta FC');
     assert.equal(payload.tomorrow?.match_slug, 'gamma-delta');
     assert.ok(payload.updated_at);
-    assert.match(fakePg.calls[1].query, /user_sport/);
+    assert.match(fakePg.calls[1].query, /user_tournament/);
     assert.match(fakePg.calls[2].query, /match_analysis/);
   } finally {
     await app.close();
@@ -104,7 +104,7 @@ test('GET /home/daily-picks filters to selected league from user_tournament', as
       if (/user_access|access_scope/i.test(query)) {
         return [{ access_scope_name: 'admin' }];
       }
-      if (/FROM public\.user_sport us/i.test(query)) {
+      if (/FROM public\.user_tournament ut/i.test(query)) {
         return [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer', tournament_id: 16, tournament_name: 'Чемпионат мира', tournament_name_en: 'World Cup' }];
       }
       return [

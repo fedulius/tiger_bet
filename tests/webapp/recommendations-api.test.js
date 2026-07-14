@@ -187,7 +187,6 @@ test('GET /recommendations reflects updated favorites immediately after PUT /fav
   const cleanup = withTempFavoritesFile();
 
   const fakeRedis = { async del() {} };
-  let sportsDeleted = false;
   const fakePg = createFakePg({
     handler(query) {
       const accessRows = authorizedAccessRows(query);
@@ -195,14 +194,8 @@ test('GET /recommendations reflects updated favorites immediately after PUT /fav
       if (/DELETE FROM public\\.user_tournament/i.test(query)) {
         return [];
       }
-      if (/DELETE FROM public\\.user_sport/i.test(query)) {
-        sportsDeleted = true;
+      if (/FROM public\\.user_tournament ut/i.test(query)) {
         return [];
-      }
-      if (/FROM public\\.user_sport us/i.test(query)) {
-        return sportsDeleted
-          ? []
-          : [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer', tournament_id: null, tournament_name: null, tournament_name_en: null }];
       }
       if (/FROM public\\.sport/i.test(query)) {
         return [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' }];
@@ -250,7 +243,7 @@ test('GET /recommendations returns daily_picks from match_analysis', async () =>
     handler(query) {
       const accessRows = authorizedAccessRows(query);
       if (accessRows) return accessRows;
-      if (/FROM public\\.user_sport/i.test(query)) return [];
+      if (/FROM public\\.user_tournament/i.test(query)) return [];
       if (/match_analysis/i.test(query)) return [];
       return [];
     },

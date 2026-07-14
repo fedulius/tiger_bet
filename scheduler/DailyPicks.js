@@ -16,9 +16,9 @@ const MATCHES_PER_DAY = 3; // максимум матчей на слот (today
 // ── Load users with favorites ──────────────────────────────
 async function loadUsersWithFavorites(pg) {
   const rows = await pg.connection(`
-    SELECT DISTINCT us.user_id
-    FROM public.user_sport us
-    ORDER BY us.user_id
+    SELECT DISTINCT ut.user_id
+    FROM public.user_tournament ut
+    ORDER BY ut.user_id
   `);
   return rows.map(r => ({ id: r.user_id, user_id: r.user_id }));
 }

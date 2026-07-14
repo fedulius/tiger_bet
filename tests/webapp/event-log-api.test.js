@@ -72,7 +72,7 @@ test('GET /auth writes auth.login_success event', async () => {
 test('GET /favorites writes screen.favorites_open event', async () => {
   const fakePg = createFakePg({
     handler(query) {
-      if (/FROM public\.user_sport us/i.test(query)) {
+      if (/FROM public\.user_tournament ut/i.test(query)) {
         return [
           { sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer', tournament_id: null, tournament_name: null, tournament_name_en: null },
         ];
@@ -119,7 +119,7 @@ test('GET /favorites writes screen.favorites_open event', async () => {
 test('GET /history writes screen.history_open event', async () => {
   const fakePg = createFakePg({
     handler(query) {
-      if (/FROM public\.user_sport fs/i.test(query)) {
+      if (/FROM public\.user_tournament ut/i.test(query)) {
         return [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' }];
       }
       if (/logger\.user_event_log_create/i.test(query)) {
@@ -158,7 +158,7 @@ test('GET /home/daily-picks writes screen.daily_picks_open event', async () => {
       if (/user_access|access_scope/i.test(query)) {
         return [{ access_scope_name: 'admin' }];
       }
-      if (/FROM public\.user_sport us/i.test(query)) {
+      if (/FROM public\.user_tournament ut/i.test(query)) {
         return [];
       }
       if (/logger\.user_event_log_create/i.test(query)) {
@@ -197,7 +197,7 @@ test('GET /recommendations writes screen.recommendations_open event', async () =
       if (/user_access|access_scope/i.test(query)) {
         return [{ access_scope_name: 'admin' }];
       }
-      if (/FROM public\.user_sport us/i.test(query)) {
+      if (/FROM public\.user_tournament ut/i.test(query)) {
         return [];
       }
       if (/logger\.user_event_log_create/i.test(query)) {

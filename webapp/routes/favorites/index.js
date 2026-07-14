@@ -99,21 +99,7 @@ async function favoritesRoutes(fastify) {
         })
         .filter(Boolean);
 
-      const resolvedSportIds = [...new Set(
-        resolvedRows
-          .map(({ row }) => Number(row.sport_id))
-          .filter(Number.isFinite),
-      )];
-
       await fastify.pg.connection('DELETE FROM public.user_tournament WHERE user_id = $1', [userId]);
-      await fastify.pg.connection('DELETE FROM public.user_sport WHERE user_id = $1', [userId]);
-
-      for (const sportId of resolvedSportIds) {
-        await fastify.pg.connection(
-          'INSERT INTO public.user_sport (user_id, sport_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-          [userId, sportId],
-        );
-      }
 
       for (const { row, setting } of resolvedRows) {
         const sportId = Number(row.sport_id);
@@ -173,7 +159,6 @@ async function favoritesRoutes(fastify) {
     const previousFavorites = await loadResolvedFavoriteSports(fastify.pg, userId);
 
     await fastify.pg.connection('DELETE FROM public.user_tournament WHERE user_id = $1', [userId]);
-    await fastify.pg.connection('DELETE FROM public.user_sport WHERE user_id = $1', [userId]);
     await invalidateRecommendationsCache({
       favoriteSportsSets: [previousFavorites, []],
       redisClient: fastify.recommendationsRedis,
