@@ -131,6 +131,17 @@ function EmptyDay({ message }) {
   );
 }
 
+function countDayMatches(data, dayKey) {
+  return (data?.[dayKey] || []).reduce(
+    (sum, league) => sum + (Array.isArray(league.matches) ? league.matches.length : 0),
+    0,
+  );
+}
+
+function pickFirstNonEmptyDay(data) {
+  return ['today', 'tomorrow', 'yesterday'].find((dayKey) => countDayMatches(data, dayKey) > 0) || null;
+}
+
 export function HomePage() {
   const [activeTab, setActiveTab] = useState(() => {
     try { return sessionStorage.getItem('homeTab') || 'today'; } catch { return 'today'; }
@@ -166,6 +177,17 @@ export function HomePage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (!data) return;
+    if (countDayMatches(data, activeTab) > 0) return;
+
+    const nextTab = pickFirstNonEmptyDay(data);
+    if (!nextTab || nextTab === activeTab) return;
+
+    try { sessionStorage.setItem('homeTab', nextTab); } catch {}
+    setActiveTab(nextTab);
+  }, [activeTab, data]);
 
   // Auto-refresh when there are live matches
   useEffect(() => {
