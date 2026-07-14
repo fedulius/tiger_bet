@@ -138,11 +138,13 @@ export function HomePage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authState, setAuthState] = useState('pending');
+  const [loadError, setLoadError] = useState('');
   const navigate = useNavigate();
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
+      setLoadError('');
       await auth();
       setAuthState('ok');
       const result = await getHomeMatches();
@@ -154,7 +156,7 @@ export function HomePage() {
         setAuthState('denied');
       } else {
         setAuthState('ok');
-        setData({ yesterday: [], today: [], tomorrow: [] });
+        setLoadError('Не удалось загрузить матчи. Проверьте соединение и попробуйте ещё раз.');
       }
     } finally {
       setLoading(false);
@@ -268,7 +270,7 @@ export function HomePage() {
       );
     }
 
-    const noLeagues = data && Array.isArray(data.leagues) && data.leagues.length === 0;
+  const noLeagues = data && Array.isArray(data.leagues) && data.leagues.length === 0;
   const leagues = data?.[activeTab] || [];
   const hasAnyData = (data?.yesterday?.length || 0) + (data?.today?.length || 0) + (data?.tomorrow?.length || 0) > 0;
 
@@ -281,7 +283,32 @@ export function HomePage() {
         </div>
       </div>
 
-      {noLeagues ? (
+      {loadError && !data ? (
+        <div style={{ padding: '56px 24px', textAlign: 'center' }}>
+          <div style={{ fontSize: '36px', marginBottom: '14px' }}>⚠️</div>
+          <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text)', marginBottom: '8px' }}>
+            Матчи не загрузились
+          </div>
+          <div style={{ fontSize: '14px', color: 'var(--text-3)', marginBottom: '22px', lineHeight: 1.45 }}>
+            {loadError}
+          </div>
+          <button
+            onClick={loadData}
+            style={{
+              padding: '12px 28px',
+              borderRadius: '14px',
+              background: 'var(--accent)',
+              color: '#fff',
+              border: 'none',
+              fontWeight: 700,
+              fontSize: '15px',
+              cursor: 'pointer',
+            }}
+          >
+            Повторить
+          </button>
+        </div>
+      ) : noLeagues ? (
         <div style={{ padding: '60px 24px', textAlign: 'center' }}>
           <div style={{ fontSize: '40px', marginBottom: '16px' }}>⚽</div>
           <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text)', marginBottom: '8px' }}>
