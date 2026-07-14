@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import React, { useEffect, useLayoutEffect, useState } from 'react';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { HomePage } from './pages/HomePage.jsx';
 import { RecommendationsPage } from './pages/RecommendationsPage.jsx';
 import { PredictionPage } from './pages/PredictionPage.jsx';
@@ -13,6 +13,18 @@ import { auth, setOnAccessDenied } from './lib/api.js';
 
 const KEYBOARD_OPEN_CLASS = 'keyboard-open';
 const KEYBOARD_DELTA_PX = 140;
+
+function RouteScrollReset() {
+  const { pathname, search } = useLocation();
+
+  useLayoutEffect(() => {
+    const activePage = document.querySelector('.page.active');
+    if (activePage) activePage.scrollTop = 0;
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [pathname, search]);
+
+  return null;
+}
 
 function isTextInputElement(target) {
   if (!(target instanceof Element)) return false;
@@ -152,6 +164,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <RouteScrollReset />
       <div className="page active">
         <Routes>
           <Route path="/" element={<HomePage />} />
