@@ -37,18 +37,62 @@ function isFinished(status) {
   return [8, 9, 10, 17, 18].includes(status);
 }
 
+function getMoscowDate(daysOffset = 0) {
+  const now = new Date();
+  const mskStr = now.toLocaleString('en-CA', {
+    timeZone: 'Europe/Moscow',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const [y, m, d] = mskStr.split('-').map(Number);
+  const mskDate = new Date(Date.UTC(y, m - 1, d + daysOffset));
+  return mskDate.toISOString().slice(0, 10);
+}
+
+function getDayRange(dateStr) {
+  const from = `${dateStr}T00:00:00+03:00`;
+  const to = `${dateStr}T23:59:59+03:00`;
+  return { from, to };
+}
+
+async function fetchSstatsMatchFromList(gameId) {
+  const dayOffsets = [-1, 0, 1, 2];
+  const requests = dayOffsets.map(async (offset) => {
+    const { from, to } = getDayRange(getMoscowDate(offset));
+    const params = new URLSearchParams({
+      from,
+      to,
+      limit: '1000',
+      TimeZone: String(moscowOffset()),
+    });
+    const resp = await fetchWithRetry(`${SSTATS_BASE}/Games/list?${params.toString()}`, 1);
+    if (!resp || !resp.ok) return null;
+    const json = await resp.json();
+    return (json.data || []).find((game) => String(game.id) === String(gameId)) || null;
+  });
+
+  const results = await Promise.all(requests.map((request) => request.catch(() => null)));
+  const game = results.find(Boolean);
+  if (!game) return null;
+  return { game, statistics: {}, events: [] };
+}
+
 async function fetchSstatsMatch(gameId, retries = 2) {
   const url = `${SSTATS_BASE}/Games/${gameId}`;
   const resp = await fetchWithRetry(url, retries);
-  if (!resp || !resp.ok) return null;
-  const json = await resp.json();
-  const full = json.data || null;
-  if (!full) return null;
-  return {
-    game: full.game || null,
-    statistics: full.statistics || {},
-    events: full.events || [],
-  };
+  if (resp && resp.ok) {
+    const json = await resp.json();
+    const full = json.data || null;
+    if (full?.game) {
+      return {
+        game: full.game,
+        statistics: full.statistics || {},
+        events: full.events || [],
+      };
+    }
+  }
+  return fetchSstatsMatchFromList(gameId);
 }
 
 // ── Analytics fetchers ──────────────────────────────────────
