@@ -83,6 +83,8 @@ export function mapHistoryBet(row = {}) {
     profit_units: profitUnits,
     profit_label: formatProfitUnits(profitUnits),
     reason_text: safeText(row.reason_text),
+    ...(nullableNumber(row.stake_units) != null ? { stake_units: nullableNumber(row.stake_units) } : {}),
+    ...(nullableNumber(row.stake) != null ? { stake: nullableNumber(row.stake) } : {}),
   };
 }
 
@@ -336,4 +338,96 @@ export function aggregateBetsByDirection(cards = []) {
     const label = getBetDirection(bet);
     return { key: label, label };
   });
+}
+
+const PROBABILITY_GROUPS = [
+  { key: 'low', label: 'Надёжные' },
+  { key: 'medium', label: 'Средние' },
+  { key: 'high', label: 'Рискованные' },
+];
+
+function getProbabilityGroup(bet) {
+  const risk = safeText(bet?.risk_level).trim().toLowerCase();
+  if (['low', 'medium', 'high'].includes(risk)) return risk;
+  const confidence = nullableNumber(bet?.confidence);
+  if (confidence != null && confidence >= 70) return 'low';
+  if (confidence != null && confidence >= 50) return 'medium';
+  return 'high';
+}
+
+export function aggregateBetsByProbability(cards = []) {
+  const source = aggregateBets(cards, (bet) => {
+    const key = getProbabilityGroup(bet);
+    return PROBABILITY_GROUPS.find((item) => item.key === key);
+  });
+  return PROBABILITY_GROUPS
+    .map((group) => source.find((item) => item.key === group.key) || createBetAggregate(group.key, group.label))
+    .map(finalizeBetAggregate);
+}
+
+const REFERENCE_DIRECTION_GROUPS = [
+  { key: 'win', label: 'Победа' },
+  { key: 'total', label: 'Тотал' },
+  { key: 'btts', label: 'Обе забьют' },
+  { key: 'handicap', label: 'Фора' },
+  { key: 'correct_score', label: 'Точный счёт' },
+];
+
+function getReferenceDirection(bet) {
+  const marketType = safeText(bet?.market_type).trim().toLowerCase();
+  const marketText = [bet?.market_name, bet?.label].map((value) => safeText(value).toLowerCase()).join(' ');
+  if (['one_x_two', 'double_chance'].includes(marketType)) return 'win';
+  if (marketType.startsWith('total') || marketText.includes('тотал') || marketText.includes('total')) return 'total';
+  if (marketType === 'both_to_score' || marketText.includes('обе забьют')) return 'btts';
+  if (marketType.includes('handicap') || marketType.includes('фора') || marketText.includes('фора')) return 'handicap';
+  if (marketType === 'correct_score' || marketText.includes('точный счёт') || marketText.includes('точный счет')) return 'correct_score';
+  return null;
+}
+
+export function aggregateBetsByReferenceDirection(cards = []) {
+  const source = aggregateBets(cards, (bet) => {
+    const key = getReferenceDirection(bet);
+    return REFERENCE_DIRECTION_GROUPS.find((item) => item.key === key) || { key: 'other', label: 'Прочее' };
+  });
+  return [
+    ...REFERENCE_DIRECTION_GROUPS
+      .map((group) => source.find((item) => item.key === group.key) || createBetAggregate(group.key, group.label))
+      .map(finalizeBetAggregate),
+    ...source.filter((item) => item.key === 'other'),
+  ];
+}
+
+export function flattenHistoryBets(cards = []) {
+  return (Array.isArray(cards) ? cards : []).flatMap((card) => {
+    const date = card?.published_at || card?.starts_at || null;
+    return (Array.isArray(card?.bets) ? card.bets : []).map((bet) => ({
+      ...bet,
+      card_id: card?.id ?? null,
+      match: safeText(card?.match, 'Матч'),
+      date,
+      league: safeText(card?.league),
+    }));
+  });
+}
+
+export function getHistoryRecords(cards = []) {
+  return flattenHistoryBets(cards).map((bet, index) => ({
+    ...bet,
+    id: bet.id || `history-bet:${bet.card_id || 'unknown'}:${index}`,
+  }));
+}
+
+export function getProfitBuckets(records = []) {
+  const dated = (Array.isArray(records) ? records : [])
+    .map((record, index) => ({ record, index, timestamp: new Date(record?.date).getTime() }))
+    .filter(({ timestamp }) => Number.isFinite(timestamp))
+    .sort((a, b) => a.timestamp - b.timestamp);
+  if (dated.length === 0) return [];
+  const bucketSize = Math.max(1, Math.ceil(dated.length / 8));
+  const buckets = [];
+  for (let index = 0; index < dated.length; index += bucketSize) {
+    const value = dated.slice(index, index + bucketSize).reduce((sum, item) => sum + finiteNumber(item.record?.profit_units), 0) * 100;
+    buckets.push({ label: `W${buckets.length + 1}`, value: Math.round(value) });
+  }
+  return buckets;
 }

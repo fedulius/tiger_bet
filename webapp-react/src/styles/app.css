@@ -1276,3 +1276,52 @@ a {
   .bets-history-card-details { padding-left: 12px; padding-right: 12px; }
   .bets-history-card-aside { max-width: 98px; }
 }
+
+/* Screenshot-style analytics */
+.bets-analytics-section { margin: 0 16px 16px; }
+.bets-analytics-label { margin: 0 0 8px; color: var(--text-3); font-size: 10px; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
+.bets-analytics-card, .bets-profit-card, .bets-records-card { overflow: hidden; border: 1px solid var(--sep); border-radius: var(--radius-sm); background: var(--surface); }
+.bets-analytics-row { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 12px 13px; }
+.bets-analytics-row + .bets-analytics-row, .bets-record-row + .bets-record-row { border-top: 1px solid var(--sep); }
+.bets-analytics-dot { width: 7px; height: 7px; border-radius: 50%; }
+.bets-analytics-dot-green, .bets-analytics-fill-green { background: var(--green); }
+.bets-analytics-dot-amber, .bets-analytics-fill-amber { background: var(--amber); }
+.bets-analytics-dot-red, .bets-analytics-fill-red { background: var(--red); }
+.bets-analytics-dot-neutral, .bets-analytics-fill-neutral { background: var(--text-3); }
+.bets-analytics-row-main { min-width: 0; }
+.bets-analytics-row-top { display: flex; justify-content: space-between; gap: 8px; }
+.bets-analytics-row-top strong { color: var(--text); font-size: 12px; }
+.bets-analytics-row-top span { color: var(--text-3); font-size: 10px; }
+.bets-analytics-rate { color: var(--text); font-size: 12px; }
+.bets-analytics-track { height: 4px; margin-top: 7px; overflow: hidden; border-radius: 99px; background: var(--surface-2); }
+.bets-analytics-fill { display: block; height: 100%; border-radius: inherit; }
+.bets-analytics-empty { padding: 14px; color: var(--text-3); font-size: 11px; }
+.bets-profit-card { padding: 14px 12px 10px; }
+.bets-profit-bars { display: flex; align-items: flex-end; gap: 8px; height: 132px; }
+.bets-profit-column { display: flex; min-width: 0; flex: 1; height: 100%; flex-direction: column; align-items: center; justify-content: flex-end; }
+.bets-profit-value { min-height: 16px; font-size: 9px; font-weight: 800; }
+.bets-profit-bar-wrap { display: flex; width: 100%; height: 88px; align-items: flex-end; justify-content: center; }
+.bets-profit-bar { display: block; width: min(24px, 70%); min-height: 6px; border-radius: 5px 5px 2px 2px; }
+.bets-profit-bar-positive { background: var(--green); }
+.bets-profit-bar-negative { background: var(--red); }
+.bets-profit-label { margin-top: 6px; color: var(--text-3); font-size: 9px; font-weight: 700; }
+.bets-record-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 13px; }
+.bets-record-row span { color: var(--text-2); font-size: 11px; }
+.bets-record-row strong { color: var(--text); font-size: 12px; text-align: right; }
+.bets-history-all-label { margin: 0 16px 8px; }
+.bets-flat-list { display: grid; gap: 8px; margin: 0 16px; }
+.bets-flat-card { display: flex; min-width: 0; justify-content: space-between; gap: 12px; padding: 13px; border: 1px solid var(--sep); border-radius: var(--radius-sm); background: var(--surface); }
+.bets-flat-main { min-width: 0; flex: 1; }
+.bets-flat-main > strong { display: block; overflow: hidden; color: var(--text); font-size: 12.5px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.bets-flat-label { display: block; margin-top: 5px; overflow: hidden; color: var(--accent); font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.bets-flat-meta { display: block; margin-top: 4px; color: var(--text-3); font-size: 10px; }
+.bets-flat-aside { display: flex; flex: 0 0 auto; min-width: 68px; flex-direction: column; align-items: flex-end; gap: 3px; }
+.bets-flat-aside > strong { color: var(--text); font-size: 13px; }
+.bets-flat-aside .bets-history-status { padding: 0; background: none; font-size: 10px; }
+.bets-flat-aside > span:last-child { font-size: 10px; font-weight: 700; }
+
+@media (max-width: 360px) {
+  .bets-analytics-section { margin-left: 12px; margin-right: 12px; }
+  .bets-history-all-label { margin-left: 12px; margin-right: 12px; }
+  .bets-flat-list { margin-left: 12px; margin-right: 12px; }
+}

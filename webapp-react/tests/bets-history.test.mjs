@@ -14,6 +14,11 @@ import {
   getHistoryStatsFromCards,
   aggregateBetsByMarketType,
   aggregateBetsByDirection,
+  aggregateBetsByProbability,
+  aggregateBetsByReferenceDirection,
+  getProfitBuckets,
+  getHistoryRecords,
+  flattenHistoryBets,
 } from '../src/lib/bets-history.js';
 
 import { getHistory } from '../src/lib/api.js';
@@ -96,6 +101,14 @@ test('mapHistoryBet normalizes settlement fields without leaking undefined or Na
   assert.equal(bet.status.code, 'not_supported');
   assert.equal(bet.profit_units, 0);
   assert.equal(Object.values(bet).some((value) => value === undefined), false);
+});
+
+test('mapHistoryBet preserves a real stake field without inventing one', () => {
+  const withStake = mapHistoryBet({ prediction_bet_id: '203', stake_units: '25' });
+  const withoutStake = mapHistoryBet({ prediction_bet_id: '204' });
+
+  assert.equal(withStake.stake_units, 25);
+  assert.equal(Object.hasOwn(withoutStake, 'stake_units'), false);
 });
 
 test('mapHistoryCard maps nested bets, status and safe hit rate presentation', () => {
@@ -325,4 +338,72 @@ test('getHistory calls the existing history endpoint with limit and offset', asy
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('aggregateBetsByProbability groups risk levels and keeps neutral bets out of hit rate', () => {
+  const groups = aggregateBetsByProbability([{ bets: [
+    { risk_level: 'low', result_code: 'won' },
+    { risk_level: 'medium', result_code: 'lost' },
+    { confidence: 75, result_code: 'won' },
+    { confidence: 50, result_code: 'not_supported' },
+    { confidence: 20, result_code: 'pending' },
+  ] }]);
+  assert.deepEqual(groups.map(({ key, label, total, hit_rate_percent }) => ({ key, label, total, hit_rate_percent })), [
+    { key: 'low', label: 'Надёжные', total: 2, hit_rate_percent: 100 },
+    { key: 'medium', label: 'Средние', total: 2, hit_rate_percent: 0 },
+    { key: 'high', label: 'Рискованные', total: 1, hit_rate_percent: null },
+  ]);
+});
+
+test('aggregateBetsByReferenceDirection uses exact screenshot labels', () => {
+  const groups = aggregateBetsByReferenceDirection([{ bets: [
+    { market_type: 'one_x_two' }, { market_type: 'double_chance' },
+    { market_type: 'total_over' }, { market_type: 'total' },
+    { market_type: 'both_to_score' }, { market_type: 'handicap' },
+    { market_type: 'correct_score' },
+  ] }]);
+  assert.deepEqual(groups.map(({ key, label, total }) => ({ key, label, total })), [
+    { key: 'win', label: 'Победа', total: 2 },
+    { key: 'total', label: 'Тотал', total: 2 },
+    { key: 'btts', label: 'Обе забьют', total: 1 },
+    { key: 'handicap', label: 'Фора', total: 1 },
+    { key: 'correct_score', label: 'Точный счёт', total: 1 },
+  ]);
+});
+
+test('aggregateBetsByReferenceDirection keeps all reference rows for no data', () => {
+  assert.deepEqual(
+    aggregateBetsByReferenceDirection([]).map(({ key, label, total }) => ({ key, label, total })),
+    [
+      { key: 'win', label: 'Победа', total: 0 },
+      { key: 'total', label: 'Тотал', total: 0 },
+      { key: 'btts', label: 'Обе забьют', total: 0 },
+      { key: 'handicap', label: 'Фора', total: 0 },
+      { key: 'correct_score', label: 'Точный счёт', total: 0 },
+    ],
+  );
+});
+
+test('getProfitBuckets creates chronological buckets from real bet profit', () => {
+  const buckets = getProfitBuckets([
+    { date: '2026-07-01T00:00:00Z', profit_units: 1.6 },
+    { date: '2026-07-02T00:00:00Z', profit_units: 0.2 },
+    { date: '2026-07-03T00:00:00Z', profit_units: -0.9 },
+  ]);
+  assert.deepEqual(buckets, [
+    { label: 'W1', value: 160 },
+    { label: 'W2', value: 20 },
+    { label: 'W3', value: -90 },
+  ]);
+});
+
+test('flattenHistoryBets and getHistoryRecords expose flat screenshot-ready records', () => {
+  const cards = [{ id: 'card-1', match: 'A — B', published_at: '2026-07-15T10:00:00Z', bets: [
+    { id: 'bet-1', label: 'П1', odds_decimal: 1.8, result_code: 'won', profit_units: 0.8 },
+  ] }];
+  const flat = flattenHistoryBets(cards);
+  assert.equal(flat[0].match, 'A — B');
+  assert.equal(flat[0].date, '2026-07-15T10:00:00Z');
+  assert.equal(Object.hasOwn(flat[0], 'stake_units'), false);
+  assert.equal(Object.hasOwn(getHistoryRecords(cards)[0], 'stake_units'), false);
 });

@@ -9,9 +9,10 @@ import {
   getAverageOdds,
   filterHistoryCardsByPeriod,
   getHistoryStatsFromCards,
-  aggregateBetsByMarketType,
-  aggregateBetsByDirection,
-  formatProfitUnits,
+  aggregateBetsByProbability,
+  aggregateBetsByReferenceDirection,
+  getProfitBuckets,
+  getHistoryRecords,
 } from '../lib/bets-history.js';
 import { formatMoscowDateTime } from '../lib/format.js';
 
@@ -104,49 +105,87 @@ function Summary({ summary, items, period, onPeriodChange }) {
   );
 }
 
-function BetBreakdown({ title, groups }) {
+function ProgressRow({ group, tone }) {
+  const rate = group.hit_rate_percent == null ? 0 : Math.max(0, Math.min(100, group.hit_rate_percent));
   return (
-    <section className="bets-history-breakdown" aria-label={title}>
-      <div className="bets-history-breakdown-title">{title}</div>
-      {groups.length > 0 ? groups.map((group) => {
-        const resultCounts = [
-          ['Зашло', group.won],
-          ['Не зашло', group.lost],
-          ['Возврат', group.void],
-          ['Ждём', group.pending],
-          ['Не рассчитываем', group.not_supported],
-        ];
+    <div className="bets-analytics-row">
+      <div className={`bets-analytics-dot bets-analytics-dot-${tone}`} />
+      <div className="bets-analytics-row-main">
+        <div className="bets-analytics-row-top"><strong>{group.label}</strong><span>{pluralBets(group.total)}</span></div>
+        <div className="bets-analytics-track"><span className={`bets-analytics-fill bets-analytics-fill-${tone}`} style={{ width: `${rate}%` }} /></div>
+      </div>
+      <strong className="bets-analytics-rate">{group.hit_rate_percent == null ? '—' : `${group.hit_rate_percent.toFixed(0)}%`}</strong>
+    </div>
+  );
+}
 
-        return (
-        <div className="bets-history-breakdown-row" key={group.key}>
-          <div className="bets-history-breakdown-main">
-            <strong>{group.label}</strong>
-            <span>{pluralBets(group.total)}</span>
-          </div>
-          <div className="bets-history-breakdown-stats">
-            <strong>{group.hit_rate_percent == null ? '—' : `${group.hit_rate_percent.toFixed(2)}%`}</strong>
-            <span className={group.profit_units >= 0 ? 'bets-history-profit-positive' : 'bets-history-profit-negative'}>{formatProfitUnits(group.profit_units)} ед.</span>
-          </div>
-          <div className="bets-history-breakdown-counts" aria-label="Счётчики результатов">
-            {resultCounts.map(([label, count]) => <span key={label}>{label} {count}</span>)}
-          </div>
-        </div>
-        );
-      }) : <div className="bets-history-breakdown-empty">Нет данных за период</div>}
+function AnalyticsGroup({ title, groups, tones = [] }) {
+  return (
+    <section className="bets-analytics-section" aria-label={title}>
+      <div className="bets-analytics-label">{title}</div>
+      <div className="bets-analytics-card">
+        {groups.length > 0 ? groups.map((group, index) => <ProgressRow key={group.key} group={group} tone={tones[index] || 'neutral'} />) : <div className="bets-analytics-empty">Нет данных за период</div>}
+      </div>
     </section>
   );
 }
 
-function BetBreakdowns({ items }) {
-  const byMarketType = useMemo(() => aggregateBetsByMarketType(items), [items]);
-  const byDirection = useMemo(() => aggregateBetsByDirection(items), [items]);
-
+function ProfitChart({ records }) {
+  const buckets = getProfitBuckets(records);
+  const max = Math.max(1, ...buckets.map((bucket) => Math.abs(bucket.value)));
   return (
-    <div className="bets-history-breakdowns">
-      <BetBreakdown title="По типам ставок" groups={byMarketType} />
-      <BetBreakdown title="По направлениям" groups={byDirection} />
-    </div>
+    <section className="bets-analytics-section" aria-label="Динамика профита">
+      <div className="bets-analytics-label">ДИНАМИКА ПРОФИТА</div>
+      <div className="bets-profit-card">
+        {buckets.length > 0 ? <div className="bets-profit-bars">{buckets.map((bucket) => (
+          <div className="bets-profit-column" key={bucket.label}>
+            <span className={`bets-profit-value ${bucket.value >= 0 ? 'bets-history-profit-positive' : 'bets-history-profit-negative'}`}>{bucket.value >= 0 ? '+' : ''}{bucket.value}</span>
+            <div className="bets-profit-bar-wrap"><span className={`bets-profit-bar ${bucket.value >= 0 ? 'bets-profit-bar-positive' : 'bets-profit-bar-negative'}`} style={{ height: `${Math.max(8, Math.round(Math.abs(bucket.value) / max * 100))}%` }} /></div>
+            <span className="bets-profit-label">{bucket.label}</span>
+          </div>
+        ))}</div> : <div className="bets-analytics-empty">Нет данных за период</div>}
+      </div>
+    </section>
   );
+}
+
+function Records({ records, directionGroups }) {
+  const outcomes = records.map((record) => record.result_code);
+  let current = 0;
+  for (const outcome of outcomes) { if (outcome === 'won') current += 1; else if (outcome === 'lost') break; else if (outcome !== 'void') break; }
+  let best = 0; let run = 0;
+  outcomes.forEach((outcome) => { run = outcome === 'won' ? run + 1 : 0; best = Math.max(best, run); });
+  const oddsGroups = [
+    { label: '<1.80', test: (value) => value < 1.8 },
+    { label: '1.80–2.20', test: (value) => value >= 1.8 && value <= 2.2 },
+    { label: '>2.20', test: (value) => value > 2.2 },
+  ].map((group) => {
+    const bets = records.filter((record) => Number.isFinite(Number(record.odds_decimal)) && group.test(Number(record.odds_decimal)));
+    const settled = bets.filter((record) => ['won', 'lost'].includes(record.result_code));
+    return { ...group, rate: settled.length > 0 ? settled.filter((record) => record.result_code === 'won').length / settled.length : -1, total: bets.length };
+  });
+  const bestOdds = oddsGroups.filter((group) => group.total > 0).sort((a, b) => b.rate - a.rate)[0]?.label || '—';
+  const favorite = directionGroups.filter((group) => group.key !== 'other').sort((a, b) => b.total - a.total)[0]?.label || '—';
+  const stakes = records
+    .map((record) => Number(record?.stake_units ?? record?.stake))
+    .filter((value) => Number.isFinite(value));
+  const averageStake = stakes.length > 0
+    ? `${(stakes.reduce((sum, value) => sum + value, 0) / stakes.length).toFixed(2)} pts`
+    : '—';
+  const rows = [['Текущая серия', `${current} побед`], ['Лучшая серия', `${best} побед`], ['Средняя ставка', averageStake], ['Любимое направление', favorite], ['Лучший диапазон коэф.', bestOdds]];
+  return <section className="bets-analytics-section" aria-label="Показатели и рекорды"><div className="bets-analytics-label">ПОКАЗАТЕЛИ И РЕКОРДЫ</div><div className="bets-records-card">{rows.map(([label, value]) => <div className="bets-record-row" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div></section>;
+}
+
+function BetBreakdowns({ items }) {
+  const probabilityGroups = useMemo(() => aggregateBetsByProbability(items), [items]);
+  const directionGroups = useMemo(() => aggregateBetsByReferenceDirection(items).filter((group) => group.key !== 'other'), [items]);
+  const records = useMemo(() => getHistoryRecords(items), [items]);
+  return <div className="bets-history-breakdowns">
+    <AnalyticsGroup title="ПО ТИПУ СТАВОК" groups={probabilityGroups} tones={['green', 'amber', 'red']} />
+    <AnalyticsGroup title="ПО НАПРАВЛЕНИЮ" groups={directionGroups} tones={['green', 'amber', 'amber', 'red', 'red']} />
+    <ProfitChart records={records} />
+    <Records records={records} directionGroups={directionGroups} />
+  </div>;
 }
 
 function BetRow({ bet }) {
@@ -201,6 +240,16 @@ function HistoryCard({ card, expanded, onToggle }) {
       )}
     </article>
   );
+}
+
+function FlatBetCard({ record }) {
+  const date = formatMoscowDateTime(record.date);
+  const result = getHistoryStatusPresentation(record.result_code);
+  const meta = [date, record.league].filter(Boolean).join(' · ');
+  return <article className="bets-flat-card">
+    <div className="bets-flat-main"><strong>{record.match || 'Матч'}</strong><span className="bets-flat-label">{record.label || record.market_name || 'Ставка'}</span>{meta && <span className="bets-flat-meta">{meta}</span>}</div>
+    <div className="bets-flat-aside"><strong>{formatOdds(record.odds_decimal)}</strong><span className={statusClass(result.code)}>{result.label}</span><span className={record.profit_units >= 0 ? 'bets-history-profit-positive' : 'bets-history-profit-negative'}>{record.profit_label}</span></div>
+  </article>;
 }
 
 function Placeholder({ title, text, navigate }) {
@@ -324,17 +373,10 @@ export function BetsPage() {
             <>
               <Summary summary={filteredSummary} items={filteredItems} period={period} onPeriodChange={setPeriod} />
               <BetBreakdowns items={filteredItems} />
-              <div className="bets-history-list-heading">История ставок</div>
+              <div className="bets-analytics-label bets-history-all-label">ВСЕ СТАВКИ</div>
               {filteredItems.length > 0 ? (
-                <div className="bets-history-list">
-                  {filteredItems.map((card) => (
-                    <HistoryCard
-                      card={card}
-                      expanded={expandedId === card.id}
-                      key={card.id}
-                      onToggle={() => setExpandedId((current) => current === card.id ? null : card.id)}
-                    />
-                  ))}
+                <div className="bets-flat-list">
+                  {getHistoryRecords(filteredItems).map((record) => <FlatBetCard key={record.id} record={record} />)}
                 </div>
               ) : (
                 <div className="bets-history-state bets-history-empty-state">
