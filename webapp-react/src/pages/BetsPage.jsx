@@ -13,6 +13,7 @@ import {
   aggregateBetsByReferenceDirection,
   getProfitBuckets,
   getHistoryRecords,
+  getHistoryRecordStreaks,
 } from '../lib/bets-history.js';
 import { formatMoscowDateTime } from '../lib/format.js';
 
@@ -150,11 +151,7 @@ function ProfitChart({ records }) {
 }
 
 function Records({ records, directionGroups }) {
-  const outcomes = records.map((record) => record.result_code);
-  let current = 0;
-  for (const outcome of outcomes) { if (outcome === 'won') current += 1; else if (outcome === 'lost') break; else if (outcome !== 'void') break; }
-  let best = 0; let run = 0;
-  outcomes.forEach((outcome) => { run = outcome === 'won' ? run + 1 : 0; best = Math.max(best, run); });
+  const { current, best } = getHistoryRecordStreaks(records);
   const oddsGroups = [
     { label: '<1.80', test: (value) => value < 1.8 },
     { label: '1.80–2.20', test: (value) => value >= 1.8 && value <= 2.2 },

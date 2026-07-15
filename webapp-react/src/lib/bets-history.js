@@ -400,13 +400,18 @@ export function aggregateBetsByReferenceDirection(cards = []) {
 export function flattenHistoryBets(cards = []) {
   return (Array.isArray(cards) ? cards : []).flatMap((card) => {
     const date = card?.published_at || card?.starts_at || null;
-    return (Array.isArray(card?.bets) ? card.bets : []).map((bet) => ({
-      ...bet,
-      card_id: card?.id ?? null,
-      match: safeText(card?.match, 'Матч'),
-      date,
-      league: safeText(card?.league),
-    }));
+    return (Array.isArray(card?.bets) ? card.bets : []).map((bet) => {
+      const profitUnits = nullableNumber(bet?.profit_units ?? bet?.profit_factor) ?? 0;
+      return {
+        ...bet,
+        card_id: card?.id ?? null,
+        match: safeText(card?.match, 'Матч'),
+        date,
+        league: safeText(card?.league),
+        profit_units: profitUnits,
+        profit_label: formatProfitUnits(profitUnits),
+      };
+    });
   });
 }
 
@@ -415,6 +420,22 @@ export function getHistoryRecords(cards = []) {
     ...bet,
     id: bet.id || `history-bet:${bet.card_id || 'unknown'}:${index}`,
   }));
+}
+
+export function getHistoryRecordStreaks(records = []) {
+  const profits = (Array.isArray(records) ? records : []).map((record) => nullableNumber(record?.profit_units ?? record?.profit_factor) ?? 0);
+  let current = 0;
+  for (const profit of profits) {
+    if (profit > 0) current += 1;
+    else break;
+  }
+  let best = 0;
+  let run = 0;
+  profits.forEach((profit) => {
+    run = profit > 0 ? run + 1 : 0;
+    best = Math.max(best, run);
+  });
+  return { current, best };
 }
 
 export function getProfitBuckets(records = []) {

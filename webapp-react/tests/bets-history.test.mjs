@@ -19,6 +19,7 @@ import {
   getProfitBuckets,
   getHistoryRecords,
   flattenHistoryBets,
+  getHistoryRecordStreaks,
 } from '../src/lib/bets-history.js';
 
 import { getHistory } from '../src/lib/api.js';
@@ -101,6 +102,24 @@ test('mapHistoryBet normalizes settlement fields without leaking undefined or Na
   assert.equal(bet.status.code, 'not_supported');
   assert.equal(bet.profit_units, 0);
   assert.equal(Object.values(bet).some((value) => value === undefined), false);
+});
+
+test('mapHistoryBet uses profit_factor when settled API omits profit_units', () => {
+  const won = mapHistoryBet({
+    prediction_bet_id: 'won-factor',
+    ui_result_code: 'won',
+    profit_factor: '0.62',
+  });
+  const lost = mapHistoryBet({
+    prediction_bet_id: 'lost-factor',
+    ui_result_code: 'lost',
+    profit_factor: '-1',
+  });
+
+  assert.equal(won.profit_units, 0.62);
+  assert.equal(won.profit_label, '+0.62');
+  assert.equal(lost.profit_units, -1);
+  assert.equal(lost.profit_label, '-1.00');
 });
 
 test('mapHistoryBet preserves a real stake field without inventing one', () => {
@@ -395,6 +414,35 @@ test('getProfitBuckets creates chronological buckets from real bet profit', () =
     { label: 'W2', value: 20 },
     { label: 'W3', value: -90 },
   ]);
+});
+
+test('flattenHistoryBets normalizes profit_factor into screenshot-ready records', () => {
+  const records = getHistoryRecords([{
+    id: 'card-factor',
+    match: 'A — B',
+    published_at: '2026-07-15T10:00:00Z',
+    bets: [
+      { id: 'bet-won', label: 'П1', odds_decimal: 1.8, result_code: 'won', profit_factor: 0.62 },
+      { id: 'bet-lost', label: 'ТМ 2.5', odds_decimal: 2.1, result_code: 'lost', profit_factor: -1 },
+    ],
+  }]);
+
+  assert.deepEqual(records.map((record) => record.profit_units), [0.62, -1]);
+  assert.deepEqual(records.map((record) => record.profit_label), ['+0.62', '-1.00']);
+  assert.deepEqual(getProfitBuckets(records), [
+    { label: 'W1', value: 62 },
+    { label: 'W2', value: -100 },
+  ]);
+});
+
+test('getHistoryRecordStreaks uses real record profit for current and best winning streaks', () => {
+  assert.deepEqual(getHistoryRecordStreaks([
+    { profit_factor: 0.62 },
+    { profit_units: 0.4 },
+    { profit_units: -1 },
+    { profit_units: 0.8 },
+    { profit_units: 0.7 },
+  ]), { current: 2, best: 2 });
 });
 
 test('flattenHistoryBets and getHistoryRecords expose flat screenshot-ready records', () => {
