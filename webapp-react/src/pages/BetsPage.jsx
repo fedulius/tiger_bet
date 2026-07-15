@@ -112,10 +112,15 @@ function ProgressRow({ group, tone }) {
     <div className="bets-analytics-row">
       <div className={`bets-analytics-dot bets-analytics-dot-${tone}`} />
       <div className="bets-analytics-row-main">
-        <div className="bets-analytics-row-top"><strong>{group.label}</strong><span>{pluralBets(group.total)}</span></div>
+        <div className="bets-analytics-row-top">
+          <strong>{group.label}</strong>
+          <div className="bets-analytics-row-meta">
+            <span>{pluralBets(group.total)}</span>
+            <strong className="bets-analytics-rate">{group.hit_rate_percent == null ? '—' : `${group.hit_rate_percent.toFixed(0)}%`}</strong>
+          </div>
+        </div>
         <div className="bets-analytics-track"><span className={`bets-analytics-fill bets-analytics-fill-${tone}`} style={{ width: `${rate}%` }} /></div>
       </div>
-      <strong className="bets-analytics-rate">{group.hit_rate_percent == null ? '—' : `${group.hit_rate_percent.toFixed(0)}%`}</strong>
     </div>
   );
 }
