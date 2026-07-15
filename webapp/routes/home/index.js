@@ -8,8 +8,8 @@ const { rememberSstatsListMatches } = require('../../services/sstatsMatchListCac
 // ── Cache ──────────────────────────────────────────────────
 // In-memory cache, shared across ALL users.
 // Key = dayType + sorted league IDs → different favorites get separate cache entries.
-// Yesterday is dynamic: refresh quickly only while unfinished/live matches remain;
-// otherwise keep it until the end of the current Moscow day.
+// Yesterday is dynamic: keep it until the end of the current Moscow day only
+// when every match has a terminal SStats status.
 // Today: 15s (live elapsed time / scores must refresh frequently)
 // Tomorrow: 24h (scheduled matches are stable enough for the home cache)
 const CACHE_TTL = {
@@ -17,7 +17,7 @@ const CACHE_TTL = {
   today: 15 * 1000,
   tomorrow: 24 * 60 * 60 * 1000,
 };
-const LIVE_STATUSES = new Set([3, 4, 5, 6, 7, 11, 18, 19]);
+const CLOSED_SSTATS_STATUSES = new Set([8, 9, 10, 14, 15]);
 const _cache = new Map(); // key: "dayType:1,2,235", value: { data, expiresAt }
 
 function makeCacheKey(dayType, leagueIds, dateStr) {
@@ -34,9 +34,10 @@ function cacheGet(key) {
   return entry.data;
 }
 
-function hasLiveMatches(leagues) {
-  return (leagues || []).some((league) =>
-    (league.matches || []).some((match) => LIVE_STATUSES.has(Number(match?.status))),
+function allMatchesClosed(leagues) {
+  return Array.isArray(leagues) && leagues.length > 0 && leagues.every((league) =>
+    Array.isArray(league?.matches) && league.matches.length > 0 &&
+    league.matches.every((match) => CLOSED_SSTATS_STATUSES.has(Number(match?.status))),
   );
 }
 
@@ -54,7 +55,7 @@ function msUntilEndOfMoscowDay(now = new Date()) {
 
 function resolveCacheTtl(dayType, data, now = new Date()) {
   if (dayType === 'yesterday') {
-    return hasLiveMatches(data) ? CACHE_TTL.yesterdayLive : msUntilEndOfMoscowDay(now);
+    return allMatchesClosed(data) ? msUntilEndOfMoscowDay(now) : CACHE_TTL.yesterdayLive;
   }
   return CACHE_TTL[dayType] || CACHE_TTL.today;
 }

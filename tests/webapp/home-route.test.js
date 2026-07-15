@@ -16,11 +16,28 @@ test('makeCacheKey includes day date to avoid cross-midnight stale today/tomorro
   assert.equal(nextDayKey, 'tomorrow:2026-07-03:1,2,235');
 });
 
-test('yesterday home cache refreshes quickly only while yesterday still has live matches', () => {
+test('all closed yesterday SStats statuses receive TTL until Moscow day end', () => {
   const now = new Date('2026-07-15T09:00:00.000Z'); // 12:00 in Moscow
-  const leaguesWithLiveMatch = [{ matches: [{ status: 3 }] }];
+  for (const status of [8, 9, 10, 14, 15]) {
+    assert.equal(
+      resolveCacheTtl('yesterday', [{ matches: [{ status }] }], now),
+      12 * 60 * 60 * 1000,
+      `status ${status} must receive end-of-day TTL`,
+    );
+  }
+});
 
-  assert.equal(resolveCacheTtl('yesterday', leaguesWithLiveMatch, now), 60 * 1000);
+test('all non-final and unknown yesterday statuses receive 60 second TTL', () => {
+  const now = new Date('2026-07-15T09:00:00.000Z'); // 12:00 in Moscow
+
+  for (const status of [1, 2, 3, 4, 5, 6, 7, 12, 13, 999, null, undefined]) {
+    const match = status === undefined ? {} : { status };
+    assert.equal(
+      resolveCacheTtl('yesterday', [{ matches: [match] }], now),
+      60 * 1000,
+      `status ${status} must receive 60 second TTL`,
+    );
+  }
 });
 
 test('yesterday home cache is kept until Moscow day end when all matches are finished', () => {
@@ -30,6 +47,18 @@ test('yesterday home cache is kept until Moscow day end when all matches are fin
   assert.equal(resolveCacheTtl('yesterday', finishedLeagues, now), 12 * 60 * 60 * 1000);
   assert.equal(CACHE_TTL.today, 15 * 1000);
   assert.equal(CACHE_TTL.tomorrow, 24 * 60 * 60 * 1000);
+});
+
+test('empty leagues and empty matches receive 60 second TTL', () => {
+  const now = new Date('2026-07-15T09:00:00.000Z'); // 12:00 in Moscow
+
+  for (const leagues of [[], [{ matches: [] }], [{ matches: undefined }]]) {
+    assert.equal(
+      resolveCacheTtl('yesterday', leagues, now),
+      60 * 1000,
+      'empty match data must receive 60 second TTL',
+    );
+  }
 });
 
 test('getDayRange keeps explicit Moscow offset in SStats query window', () => {
