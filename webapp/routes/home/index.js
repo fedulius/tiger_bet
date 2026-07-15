@@ -8,15 +8,16 @@ const { rememberSstatsListMatches } = require('../../services/sstatsMatchListCac
 // ── Cache ──────────────────────────────────────────────────
 // In-memory cache, shared across ALL users.
 // Key = dayType + sorted league IDs → different favorites get separate cache entries.
-// Yesterday can still change after Moscow midnight: late matches may finish
-// after they first appeared in the "Вчера" tab, so keep it short.
+// Yesterday is dynamic: refresh quickly only while unfinished/live matches remain;
+// otherwise keep it until the end of the current Moscow day.
 // Today: 15s (live elapsed time / scores must refresh frequently)
 // Tomorrow: 24h (scheduled matches are stable enough for the home cache)
 const CACHE_TTL = {
-  yesterday: 60 * 1000,
+  yesterdayLive: 60 * 1000,
   today: 15 * 1000,
   tomorrow: 24 * 60 * 60 * 1000,
 };
+const LIVE_STATUSES = new Set([3, 4, 5, 6, 7, 11, 18, 19]);
 const _cache = new Map(); // key: "dayType:1,2,235", value: { data, expiresAt }
 
 function makeCacheKey(dayType, leagueIds, dateStr) {
@@ -33,10 +34,35 @@ function cacheGet(key) {
   return entry.data;
 }
 
+function hasLiveMatches(leagues) {
+  return (leagues || []).some((league) =>
+    (league.matches || []).some((match) => LIVE_STATUSES.has(Number(match?.status))),
+  );
+}
+
+function msUntilEndOfMoscowDay(now = new Date()) {
+  const mskStr = now.toLocaleString('en-CA', {
+    timeZone: 'Europe/Moscow',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const [year, month, day] = mskStr.split('-').map(Number);
+  const nextMoscowMidnightUtc = Date.UTC(year, month - 1, day + 1) - (moscowOffset() * 60 * 60 * 1000);
+  return Math.max(1000, nextMoscowMidnightUtc - now.getTime());
+}
+
+function resolveCacheTtl(dayType, data, now = new Date()) {
+  if (dayType === 'yesterday') {
+    return hasLiveMatches(data) ? CACHE_TTL.yesterdayLive : msUntilEndOfMoscowDay(now);
+  }
+  return CACHE_TTL[dayType] || CACHE_TTL.today;
+}
+
 function cacheSet(key, data, dayType) {
   _cache.set(key, {
     data,
-    expiresAt: Date.now() + (CACHE_TTL[dayType] || CACHE_TTL.today),
+    expiresAt: Date.now() + resolveCacheTtl(dayType, data),
   });
 }
 
@@ -172,11 +198,14 @@ async function fetchDay(dayType, leagueIds, dateStr, ended) {
   );
   const results = await Promise.all(batches);
   for (const matches of results) {
-    rememberSstatsListMatches(matches, CACHE_TTL[dayType] || CACHE_TTL.today);
     allMatches.push(...matches.map(formatMatch));
   }
 
   const grouped = groupByLeague(allMatches);
+  const ttl = resolveCacheTtl(dayType, grouped);
+  for (const matches of results) {
+    rememberSstatsListMatches(matches, ttl);
+  }
   cacheSet(key, grouped, dayType);
   return grouped;
 }
@@ -330,6 +359,7 @@ module.exports.__private = {
   makeCacheKey,
   getDayRange,
   getMoscowDate,
+  resolveCacheTtl,
   collectSstatsMatchIds,
   markFollowedMatches,
 };

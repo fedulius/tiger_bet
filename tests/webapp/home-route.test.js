@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 
 const homeRoutes = require('../../webapp/routes/home/index.js');
 
-const { CACHE_TTL, makeCacheKey, getDayRange, collectSstatsMatchIds, markFollowedMatches } = homeRoutes.__private;
+const { CACHE_TTL, makeCacheKey, getDayRange, resolveCacheTtl, collectSstatsMatchIds, markFollowedMatches } = homeRoutes.__private;
 
 test('makeCacheKey includes day date to avoid cross-midnight stale today/tomorrow cache reuse', () => {
   const leagueIds = [235, 1, 2];
@@ -16,8 +16,18 @@ test('makeCacheKey includes day date to avoid cross-midnight stale today/tomorro
   assert.equal(nextDayKey, 'tomorrow:2026-07-03:1,2,235');
 });
 
-test('yesterday home cache is short-lived because late matches can finish after midnight', () => {
-  assert.equal(CACHE_TTL.yesterday, 60 * 1000);
+test('yesterday home cache refreshes quickly only while yesterday still has live matches', () => {
+  const now = new Date('2026-07-15T09:00:00.000Z'); // 12:00 in Moscow
+  const leaguesWithLiveMatch = [{ matches: [{ status: 3 }] }];
+
+  assert.equal(resolveCacheTtl('yesterday', leaguesWithLiveMatch, now), 60 * 1000);
+});
+
+test('yesterday home cache is kept until Moscow day end when all matches are finished', () => {
+  const now = new Date('2026-07-15T09:00:00.000Z'); // 12:00 in Moscow
+  const finishedLeagues = [{ matches: [{ status: 8 }, { status: 9 }] }];
+
+  assert.equal(resolveCacheTtl('yesterday', finishedLeagues, now), 12 * 60 * 60 * 1000);
   assert.equal(CACHE_TTL.today, 15 * 1000);
   assert.equal(CACHE_TTL.tomorrow, 24 * 60 * 60 * 1000);
 });
