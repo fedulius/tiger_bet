@@ -107,7 +107,8 @@ function Summary({ summary, items, period, onPeriodChange }) {
 }
 
 function ProgressRow({ group, tone }) {
-  const rate = group.hit_rate_percent == null ? 0 : Math.max(0, Math.min(100, group.hit_rate_percent));
+  const hasHitRate = group.hit_rate_percent != null;
+  const rate = hasHitRate ? Math.max(0, Math.min(100, group.hit_rate_percent)) : 0;
   return (
     <div className="bets-analytics-row">
       <div className={`bets-analytics-dot bets-analytics-dot-${tone}`} />
@@ -119,7 +120,7 @@ function ProgressRow({ group, tone }) {
             <strong className="bets-analytics-rate">{group.hit_rate_percent == null ? '—' : `${group.hit_rate_percent.toFixed(0)}%`}</strong>
           </div>
         </div>
-        <div className="bets-analytics-track"><span className={`bets-analytics-fill bets-analytics-fill-${tone}`} style={{ width: `${rate}%` }} /></div>
+        {hasHitRate && <div className="bets-analytics-track"><span className={`bets-analytics-fill bets-analytics-fill-${tone}`} style={{ width: `${rate}%` }} /></div>}
       </div>
     </div>
   );
