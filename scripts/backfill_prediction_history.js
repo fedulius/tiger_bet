@@ -10,8 +10,21 @@ function parseArgs(argv) {
     const arg = argv[i];
     if (arg === '--apply') args.dryRun = false;
     else if (arg === '--dry-run') args.dryRun = true;
-    else if (arg === '--limit') args.limit = Number(argv[++i] || args.limit);
-    else if (arg === '--match-analysis-id') args.matchAnalysisId = Number(argv[++i] || 0) || null;
+    else if (arg === '--limit') {
+      const raw = argv[++i];
+      args.limit = Number(raw);
+      if (!Number.isInteger(args.limit) || args.limit <= 0) {
+        throw new Error(`Invalid --limit: ${raw}`);
+      }
+    } else if (arg === '--match-analysis-id') {
+      const raw = argv[++i];
+      args.matchAnalysisId = Number(raw);
+      if (!Number.isInteger(args.matchAnalysisId) || args.matchAnalysisId <= 0) {
+        throw new Error(`Invalid --match-analysis-id: ${raw}`);
+      }
+    } else {
+      throw new Error(`Unknown argument: ${arg}`);
+    }
   }
   return args;
 }

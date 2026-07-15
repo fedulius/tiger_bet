@@ -59,11 +59,21 @@ WHERE analysis_type_id IS NULL;
 ALTER TABLE public.match_analysis
   ALTER COLUMN analysis_type_id SET NOT NULL;
 
-ALTER TABLE public.match_analysis
-  ADD CONSTRAINT match_analysis_analysis_type_analysis_type_id_fk
-  FOREIGN KEY (analysis_type_id)
-  REFERENCES public.analysis_type(analysis_type_id)
-  NOT VALID;
+DO $constraint$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'match_analysis_analysis_type_analysis_type_id_fk'
+      AND conrelid = 'public.match_analysis'::regclass
+  ) THEN
+    ALTER TABLE public.match_analysis
+      ADD CONSTRAINT match_analysis_analysis_type_analysis_type_id_fk
+      FOREIGN KEY (analysis_type_id)
+      REFERENCES public.analysis_type(analysis_type_id)
+      NOT VALID;
+  END IF;
+END;
+$constraint$;
 
 ALTER TABLE public.match_analysis
   VALIDATE CONSTRAINT match_analysis_analysis_type_analysis_type_id_fk;
@@ -964,7 +974,11 @@ SELECT
       / NULLIF(COUNT(pb.prediction_bet_id) FILTER (WHERE pbs.settlement_result_code IN ('win', 'loss')), 0),
       2
     )
-  END AS hit_rate_percent
+  END AS hit_rate_percent,
+  pc.sport_name,
+  pc.brief,
+  pc.risk_note,
+  pc.snapshot
 FROM bet.v_prediction_cards pc
 LEFT JOIN bet.prediction_bet pb ON pb.prediction_card_id = pc.prediction_card_id
 LEFT JOIN bet.v_prediction_bet_settlements pbs ON pbs.prediction_bet_id = pb.prediction_bet_id
@@ -982,7 +996,11 @@ GROUP BY
   pc.tournament_id,
   pc.tournament_name,
   pc.title,
-  pc.headline;
+  pc.headline,
+  pc.sport_name,
+  pc.brief,
+  pc.risk_note,
+  pc.snapshot;
 
 COMMENT ON VIEW bet.v_prediction_card_history IS
   'One row per card with bet counts, current outcomes, profit units and hit rate. Good for list-level /history cards.';

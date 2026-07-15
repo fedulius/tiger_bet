@@ -1216,6 +1216,39 @@ BEGIN
 END;
 $function$;
 
+-- Atomic/idempotent one-analysis backfill. One function call is one transaction.
+DROP FUNCTION IF EXISTS bet.prediction_history_backfill_one(jsonb);
+CREATE OR REPLACE FUNCTION bet.prediction_history_backfill_one(in_payload jsonb)
+RETURNS TABLE(out_prediction_card_id bigint, bets_count integer, skipped boolean)
+LANGUAGE plpgsql
+AS $function$
+DECLARE old_card bigint; old_bets integer; old_settlements integer; expected integer := jsonb_array_length(COALESCE(in_payload->'normalized_bets','[]'::jsonb)); item jsonb; market_id smallint; period_id_value smallint; risk_id smallint; bet_id bigint; new_card bigint;
+BEGIN
+  SELECT pc.prediction_card_id INTO old_card FROM bet.prediction_card pc WHERE pc.primary_match_analysis_id=(in_payload->>'match_analysis_id')::integer OR pc.publication_hash=in_payload->>'publication_hash' ORDER BY pc.prediction_card_id LIMIT 1;
+  IF old_card IS NOT NULL THEN
+    SELECT COUNT(*) INTO old_bets FROM bet.prediction_bet pb WHERE pb.prediction_card_id=old_card;
+    SELECT COUNT(*) INTO old_settlements FROM bet.bet_settlement bs JOIN bet.prediction_bet pb ON pb.prediction_bet_id=bs.prediction_bet_id WHERE pb.prediction_card_id=old_card;
+    IF old_bets=expected AND old_settlements=expected AND EXISTS (SELECT 1 FROM bet.prediction_card_source pcs WHERE pcs.prediction_card_id=old_card AND pcs.match_analysis_id=(in_payload->>'match_analysis_id')::integer) THEN RETURN QUERY SELECT old_card,old_bets,true; RETURN; END IF;
+    DELETE FROM bet.bet_settlement bs USING bet.prediction_bet pb WHERE bs.prediction_bet_id=pb.prediction_bet_id AND pb.prediction_card_id=old_card;
+    DELETE FROM bet.prediction_bet pb WHERE pb.prediction_card_id=old_card; DELETE FROM bet.prediction_card_source pcs WHERE pcs.prediction_card_id=old_card; DELETE FROM bet.prediction_card pc WHERE pc.prediction_card_id=old_card;
+  END IF;
+  INSERT INTO bet.prediction_card(card_type_id,card_status_id,primary_match_id,primary_match_analysis_id,published_at,published_date,edition_no,title,headline,brief,risk_note,visibility_scope,publication_hash,snapshot)
+  SELECT ct.card_type_id,cs.card_status_id,(in_payload->>'match_id')::integer,(in_payload->>'match_analysis_id')::integer,(in_payload->>'published_at')::timestamptz,((in_payload->>'published_at')::timestamptz AT TIME ZONE 'Europe/Moscow')::date,1,in_payload->>'analysis_headline',in_payload->>'analysis_headline',in_payload->>'analysis_brief',in_payload->>'analysis_risk_note','public',in_payload->>'publication_hash',in_payload
+  FROM bet.card_type ct CROSS JOIN bet.card_status cs WHERE ct.card_type_code='daily' AND ct.is_active AND cs.card_status_code='published' AND cs.is_active RETURNING prediction_card_id INTO new_card;
+  INSERT INTO bet.prediction_card_source(prediction_card_id,match_analysis_id,source_role,ordinal) VALUES(new_card,(in_payload->>'match_analysis_id')::integer,'primary',1);
+  FOR item IN SELECT value FROM jsonb_array_elements(in_payload->'normalized_bets') LOOP
+    SELECT market_type_id INTO market_id FROM bet.market_type WHERE market_type_code=item->>'market_type_code' AND is_active; SELECT period_id INTO period_id_value FROM bet.period WHERE period_code=item->>'period_code' AND is_active; SELECT risk_level_id INTO risk_id FROM bet.risk_level WHERE risk_level_code=item->>'risk_level_code' AND is_active;
+    INSERT INTO bet.prediction_bet(prediction_card_id,kind,ordinal,match_id,match_analysis_id,market_type_id,period_id,participant_scope,selection_code,line_value,score_home,score_away,market_key,display_label,odds_decimal,risk_level_id,confidence,reason,source_payload,selection_snapshot)
+    VALUES(new_card,'single',(item->>'ordinal')::smallint,(in_payload->>'match_id')::integer,(in_payload->>'match_analysis_id')::integer,market_id,period_id_value,item->>'participant_scope',item->>'selection_code',NULLIF(item->>'line_value','')::numeric,NULLIF(item->>'score_home','')::smallint,NULLIF(item->>'score_away','')::smallint,item->>'market_key',item->>'display_label',NULLIF(item->>'odds_decimal','')::numeric,risk_id,NULLIF(item->>'confidence','')::numeric,item->>'reason',item->'source_payload',item->'selection_snapshot') RETURNING prediction_bet_id INTO bet_id;
+    INSERT INTO bet.bet_settlement(prediction_bet_id,settlement_status_id,calculated_by,reason_code,reason_text) SELECT bet_id,settlement_status_id,'backfill','awaiting_settlement','Ожидает расчёта результата' FROM bet.settlement_status WHERE settlement_status_code='pending' AND is_active;
+  END LOOP; RETURN QUERY SELECT new_card,expected,false;
+END; $function$;
+
+CREATE OR REPLACE FUNCTION bet.repair_correct_score_selection_codes() RETURNS integer LANGUAGE sql AS $function$
+  UPDATE bet.prediction_bet pb SET selection_code='exact_score',updated_at=now() FROM bet.market_type mt WHERE mt.market_type_id=pb.market_type_id AND mt.market_type_code='correct_score' AND pb.selection_code='exact';
+  SELECT COUNT(*)::integer FROM bet.prediction_bet pb JOIN bet.market_type mt ON mt.market_type_id=pb.market_type_id WHERE mt.market_type_code='correct_score' AND pb.selection_code='exact_score';
+$function$;
+
 -- ============================================================
 -- 7. Usage notes
 -- ============================================================

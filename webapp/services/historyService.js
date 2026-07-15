@@ -13,6 +13,7 @@ function toNumber(value, fallback = 0) {
 function getEmptyHistoryPayload() {
   return {
     items: [],
+    pagination: { limit: DEFAULT_LIMIT, offset: 0, returned: 0, total_cards: 0 },
     summary: {
       total_cards: 0,
       total_bets: 0,
@@ -47,6 +48,7 @@ function getSampleHistoryPayload() {
         confidence: 68,
       },
     ],
+    pagination: { limit: 1, offset: 0, returned: 1, total_cards: 1 },
     summary: {
       total_cards: 1,
       total_bets: 1,
@@ -86,6 +88,7 @@ function buildUserHistoryPayload(favoriteSports = []) {
 
   return {
     items,
+    pagination: { limit: items.length, offset: 0, returned: items.length, total_cards: items.length },
     summary: {
       total_cards: items.length,
       total_bets: items.length,
@@ -145,9 +148,9 @@ function mapBetRow(row) {
   };
 }
 
-function buildSummary(items) {
+function buildSummary(items, totalCards = items.length) {
   const base = {
-    total_cards: items.length,
+    total_cards: totalCards,
     total_bets: 0,
     won_count: 0,
     lost_count: 0,
@@ -178,6 +181,23 @@ async function loadPredictionHistory(pg, { visibilityScope = 'public', limit = D
   const safeLimit = normalizeLimit(limit);
   const safeOffset = Math.max(0, Math.trunc(toNumber(offset, 0)));
 
+  const [totalRow] = await pg.connection(
+    `SELECT
+       COUNT(*) AS total_cards,
+       COALESCE(SUM(bets_count), 0) AS total_bets,
+       COALESCE(SUM(won_count), 0) AS won_count,
+       COALESCE(SUM(lost_count), 0) AS lost_count,
+       COALESCE(SUM(void_count), 0) AS void_count,
+       COALESCE(SUM(pending_count), 0) AS pending_count,
+       COALESCE(SUM(not_supported_count), 0) AS not_supported_count,
+       COALESCE(SUM(profit_units), 0) AS profit_units
+     FROM bet.v_prediction_card_history
+     WHERE card_status_code = 'published'
+       AND visibility_scope = $1`,
+    [visibilityScope],
+  );
+  const totalCards = toNumber(totalRow?.total_cards, 0);
+
   const cardRows = await pg.connection(
     `SELECT *
      FROM bet.v_prediction_card_history
@@ -189,7 +209,26 @@ async function loadPredictionHistory(pg, { visibilityScope = 'public', limit = D
   );
 
   if (!Array.isArray(cardRows) || cardRows.length === 0) {
-    return getEmptyHistoryPayload();
+    const emptyPayload = getEmptyHistoryPayload();
+    const summary = {
+      ...emptyPayload.summary,
+      total_cards: totalCards,
+      total_bets: toNumber(totalRow?.total_bets, 0),
+      won_count: toNumber(totalRow?.won_count, 0),
+      lost_count: toNumber(totalRow?.lost_count, 0),
+      void_count: toNumber(totalRow?.void_count, 0),
+      pending_count: toNumber(totalRow?.pending_count, 0),
+      not_supported_count: toNumber(totalRow?.not_supported_count, 0),
+      profit_units: Number(toNumber(totalRow?.profit_units, 0).toFixed(6)),
+    };
+    const settled = summary.won_count + summary.lost_count;
+    summary.hit_rate_percent = settled > 0 ? Number(((summary.won_count / settled) * 100).toFixed(2)) : null;
+    return {
+      ...emptyPayload,
+      pagination: { limit: safeLimit, offset: safeOffset, returned: 0, total_cards: totalCards },
+      summary,
+      empty_state: totalCards > 0 ? null : emptyPayload.empty_state,
+    };
   }
 
   const cardIds = cardRows.map((row) => toNumber(row.prediction_card_id, null)).filter((id) => id != null);
@@ -228,15 +267,16 @@ async function loadPredictionHistory(pg, { visibilityScope = 'public', limit = D
       card_status: row.card_status_code || null,
       published_at: row.published_at || null,
       published_date: row.published_date || null,
-      match_id: row.match_id == null ? null : toNumber(row.match_id, null),
-      match: row.match_title || [row.home_team, row.away_team].filter(Boolean).join(' — '),
-      league: row.league || row.tournament_name || '',
-      sport_name: row.sport_name || '',
+      primary_match_id: row.primary_match_id == null ? null : toNumber(row.primary_match_id, null),
+      match: [row.home_team, row.away_team].filter(Boolean).join(' — '),
+      tournament_name: row.tournament_name || '',
+      league: row.tournament_name || '',
+      sport_name: row.sport_name || row.snapshot?.match?.sport_name || row.snapshot?.sport_name || '',
       starts_at: row.match_start_at || null,
       main_thought: row.headline || row.title || '',
       headline: row.headline || row.title || '',
-      brief: row.brief || '',
-      risk_note: row.risk_note || '',
+      brief: row.snapshot?.analysis_brief || row.snapshot?.brief || '',
+      risk_note: row.snapshot?.analysis_risk_note || row.snapshot?.risk_note || '',
       bets_count: betsCount,
       won_count: wonCount,
       lost_count: lostCount,
@@ -251,9 +291,21 @@ async function loadPredictionHistory(pg, { visibilityScope = 'public', limit = D
     };
   });
 
+  const summary = buildSummary(items, totalCards);
+  summary.total_bets = toNumber(totalRow?.total_bets, summary.total_bets);
+  summary.won_count = toNumber(totalRow?.won_count, summary.won_count);
+  summary.lost_count = toNumber(totalRow?.lost_count, summary.lost_count);
+  summary.void_count = toNumber(totalRow?.void_count, summary.void_count);
+  summary.pending_count = toNumber(totalRow?.pending_count, summary.pending_count);
+  summary.not_supported_count = toNumber(totalRow?.not_supported_count, summary.not_supported_count);
+  summary.profit_units = Number(toNumber(totalRow?.profit_units, summary.profit_units).toFixed(6));
+  const settled = summary.won_count + summary.lost_count;
+  summary.hit_rate_percent = settled > 0 ? Number(((summary.won_count / settled) * 100).toFixed(2)) : null;
+
   return {
     items,
-    summary: buildSummary(items),
+    pagination: { limit: safeLimit, offset: safeOffset, returned: items.length, total_cards: totalCards },
+    summary,
     empty_state: null,
     updated_at: new Date().toISOString(),
   };
@@ -267,6 +319,10 @@ function getHistory({ pg = null, sample = false, favoriteSports = [], limit, off
   if (pg && typeof pg.connection === 'function') {
     return loadPredictionHistory(pg, { limit, offset }).then((history) => {
       if (Array.isArray(history.items) && history.items.length > 0) {
+        return history;
+      }
+
+      if (toNumber(history?.pagination?.total_cards, 0) > 0) {
         return history;
       }
 

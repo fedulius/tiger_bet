@@ -46,20 +46,23 @@ test('GET /history returns published Tiger Bet prediction history from bet views
         return [];
       }
       if (/FROM bet\.v_prediction_card_history/i.test(query)) {
-        assert.deepEqual(params, ['public', 20, 0]);
+        if (/COUNT\(\*\)/i.test(query)) {
+          assert.deepEqual(params, ['public']);
+          return [{ total_cards: '4' }];
+        }
+        assert.deepEqual(params, ['public', 5, 2]);
         return [{
           prediction_card_id: '101',
           card_type_code: 'daily',
           card_status_code: 'published',
           published_at: '2026-07-15T10:00:00.000Z',
           published_date: '2026-07-15',
-          match_id: 55,
-          match_title: 'France — Spain',
-          league: 'Чемпионат мира',
-          sport_name: 'Футбол',
+          primary_match_id: 55,
+          home_team: 'France',
+          away_team: 'Spain',
+          tournament_name: 'Чемпионат мира',
+          title: 'France — Spain',
           headline: 'Испания сильнее по форме',
-          brief: 'Проверяем историю опубликованных ставок.',
-          risk_note: 'Средний риск',
           bets_count: '3',
           won_count: '2',
           lost_count: '1',
@@ -125,18 +128,19 @@ test('GET /history returns published Tiger Bet prediction history from bet views
     const response = await app.inject({
       headers: makeAuthHeaders(app, { userId: 77, telegram_user_id: 777, profile: 'telegram:777' }),
       method: 'GET',
-      url: '/history',
+      url: '/history?limit=5&offset=2',
     });
 
     assert.equal(response.statusCode, 200);
     const payload = response.json();
     assert.equal(payload.items.length, 1);
     assert.equal(payload.empty_state, null);
-    assert.equal(payload.summary.total_cards, 1);
+    assert.equal(payload.summary.total_cards, 4);
     assert.equal(payload.summary.total_bets, 3);
     assert.equal(payload.summary.won_count, 2);
     assert.equal(payload.summary.lost_count, 1);
     assert.equal(payload.summary.profit_units, 0.74);
+    assert.deepEqual(payload.pagination, { limit: 5, offset: 2, returned: 1, total_cards: 4 });
 
     const item = payload.items[0];
     assert.equal(item.id, 'prediction-card:101');
@@ -148,6 +152,39 @@ test('GET /history returns published Tiger Bet prediction history from bet views
     assert.equal(item.bets.length, 2);
     assert.equal(item.bets[0].result_code, 'won');
     assert.equal(item.bets[1].result_code, 'lost');
+  } finally {
+    await app.close();
+  }
+});
+
+test('GET /history keeps empty paginated read-model page instead of falling back', async () => {
+  const fakePg = createFakePg({
+    handler(query) {
+      if (/FROM public\.user_tournament ut/i.test(query)) {
+        return [{ sport_id: 1, sport_name: 'Футбол', sport_url: 'soccer' }];
+      }
+      if (/FROM bet\.v_prediction_card_history/i.test(query)) {
+        if (/COUNT\(\*\)/i.test(query)) return [{ total_cards: '13', total_bets: '33', pending_count: '33' }];
+        return [];
+      }
+      return [];
+    },
+  });
+  const app = buildTestApp(buildApp, { pg: fakePg });
+  await app.ready();
+
+  try {
+    const response = await app.inject({
+      headers: makeAuthHeaders(app, { userId: 77, telegram_user_id: 777, profile: 'telegram:777' }),
+      method: 'GET',
+      url: '/history?limit=5&offset=13',
+    });
+
+    assert.equal(response.statusCode, 200);
+    const payload = response.json();
+    assert.deepEqual(payload.items, []);
+    assert.deepEqual(payload.pagination, { limit: 5, offset: 13, returned: 0, total_cards: 13 });
+    assert.equal(payload.empty_state, null);
   } finally {
     await app.close();
   }

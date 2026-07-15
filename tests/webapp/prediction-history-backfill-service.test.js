@@ -60,13 +60,26 @@ test('normalizeRecommendedBet maps correct score', () => {
   const result = normalizeRecommendedBet({ type: 'correct_score', outcome: '1:2', label: 'Точный счёт 1:2' }, 3);
 
   assert.equal(result.market_type_code, 'correct_score');
-  assert.equal(result.selection_code, 'exact');
+  assert.equal(result.selection_code, 'exact_score');
   assert.equal(result.score_home, 1);
   assert.equal(result.score_away, 2);
 });
 
 test('normalizer returns null for unsupported markets', () => {
   assert.equal(normalizeRecommendedBet({ type: 'corners_over', outcome: '8_5' }, 1), null);
+});
+
+
+
+test('normalizer rejects malformed supported markets', () => {
+  assert.equal(normalizeRecommendedBet({ type: 'total_over', outcome: 'abc' }, 1), null);
+  assert.equal(normalizeRecommendedBet({ type: 'total_over', outcome: 'oops2.5oops' }, 1), null);
+  assert.equal(normalizeRecommendedBet({ type: 'total_over', outcome: '2.5.7' }, 1), null);
+  assert.equal(normalizeRecommendedBet({ type: 'handicap1', outcome: 'oops -1.5 oops' }, 1), null);
+  assert.equal(normalizeRecommendedBet({ type: 'one_x_two', outcome: 'maybe' }, 1), null);
+  assert.equal(normalizeRecommendedBet({ type: 'correct_score', outcome: '1/x' }, 1), null);
+  assert.equal(normalizeRecommendedBet({ type: 'correct_score', outcome: 'oops 1:2 oops' }, 1), null);
+  assert.equal(normalizeRecommendedBet({ type: 'correct_score', outcome: '1:2:3' }, 1), null);
 });
 
 test('parsers handle decimal and score variants', () => {

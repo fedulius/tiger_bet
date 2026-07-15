@@ -14,8 +14,16 @@ function parseLineValue(value) {
   return match ? Number(match[0]) : null;
 }
 
+function parseStrictLineValue(value) {
+  if (value == null || String(value).trim() === '') return null;
+  const normalized = String(value).trim().replace(',', '.').replace('_', '.');
+  if (!/^[+-]?\d+(?:\.\d+)?$/.test(normalized)) return null;
+  return Number(normalized);
+}
+
 function parseCorrectScore(value) {
-  const match = String(value || '').match(/(\d+)\s*[:\-]\s*(\d+)/);
+  const text = String(value || '').trim();
+  const match = text.match(/^(\d+)\s*[:\-]\s*(\d+)$/);
   if (!match) return { score_home: null, score_away: null };
   return { score_home: Number(match[1]), score_away: Number(match[2]) };
 }
@@ -46,34 +54,40 @@ function normalizeRecommendedBet(rawBet = {}, ordinal = 1) {
 
   if (type === 'one_x_two') {
     base.market_type_code = 'one_x_two';
-    base.selection_code = ({ w1: 'home', home: 'home', x: 'draw', draw: 'draw', w2: 'away', away: 'away' })[outcome] || outcome || null;
+    base.selection_code = ({ w1: 'home', home: 'home', x: 'draw', draw: 'draw', w2: 'away', away: 'away' })[outcome] || null;
   } else if (type === 'double_chance') {
     base.market_type_code = 'double_chance';
-    base.selection_code = ({ x1: 'home_or_draw', '1x': 'home_or_draw', x2: 'away_or_draw', '2x': 'away_or_draw', 12: 'home_or_away' })[outcome] || outcome || null;
+    base.selection_code = ({ x1: 'home_or_draw', '1x': 'home_or_draw', x2: 'away_or_draw', '2x': 'away_or_draw', 12: 'home_or_away' })[outcome] || null;
   } else if (type === 'both_to_score') {
     base.market_type_code = 'both_to_score';
-    base.selection_code = ({ yes: 'yes', no: 'no' })[outcome] || outcome || null;
+    base.selection_code = ({ yes: 'yes', no: 'no' })[outcome] || null;
   } else if (type === 'total_over' || type === 'total_under') {
     base.market_type_code = 'total';
     base.selection_code = type === 'total_over' ? 'over' : 'under';
-    base.line_value = parseLineValue(outcome || label);
+    base.line_value = outcome ? parseStrictLineValue(outcome) : parseLineValue(label);
   } else if (/^total_t[12]_(over|under)$/.test(type)) {
     base.market_type_code = 'team_total';
     base.participant_scope = type.includes('_t1_') ? 'home_team' : 'away_team';
     base.selection_code = type.endsWith('_over') ? 'over' : 'under';
-    base.line_value = parseLineValue(outcome || label);
+    base.line_value = outcome ? parseStrictLineValue(outcome) : parseLineValue(label);
   } else if (/^handicap[12]$/.test(type)) {
     base.market_type_code = 'handicap';
     base.participant_scope = type === 'handicap1' ? 'home_team' : 'away_team';
     base.selection_code = base.participant_scope;
-    base.line_value = parseLineValue(outcome || label);
+    base.line_value = outcome ? parseStrictLineValue(outcome) : parseLineValue(label);
   } else if (type === 'correct_score') {
     base.market_type_code = 'correct_score';
-    base.selection_code = 'exact';
+    base.selection_code = 'exact_score';
     const score = parseCorrectScore(outcome || label);
     base.score_home = score.score_home;
     base.score_away = score.score_away;
   } else {
+    return null;
+  }
+
+  if (!base.selection_code
+    || (['total', 'team_total', 'handicap'].includes(base.market_type_code) && base.line_value == null)
+    || (base.market_type_code === 'correct_score' && (base.score_home == null || base.score_away == null))) {
     return null;
   }
 
@@ -139,9 +153,7 @@ async function loadReadyAnalyses(pg, { limit = 100, matchAnalysisId = null } = {
      JOIN public.match m ON m.match_id = ms.match_id
      JOIN public.sport s ON s.sport_id = m.sport_id
      LEFT JOIN public.tournament t ON t.tournament_id = m.tournament_id
-     LEFT JOIN bet.prediction_card_source pcs ON pcs.match_analysis_id = ma.match_analysis_id
-     WHERE ${where.join(' AND ')}
-       AND pcs.prediction_card_source_id IS NULL
+      WHERE ${where.join(' AND ')}
      ORDER BY ma.analysis_create_at ASC, ma.match_analysis_id ASC
      LIMIT $${params.length}`,
     params,
@@ -179,93 +191,42 @@ async function insertAnalysisCard(pg, row, dictionaries, { dryRun = false } = {}
       sport_name: row.sport_name,
     },
   };
-
   const publicationHash = buildPublicationHash({ matchAnalysisId: row.match_analysis_id, analysisHash: row.analysis_hash });
-  const [card] = await pg.connection(
-    `INSERT INTO bet.prediction_card (
-       card_type_id, card_status_id, primary_match_id, primary_match_analysis_id,
-       published_at, published_date, edition_no, title, headline, brief, risk_note,
-       visibility_scope, publication_hash, snapshot
-     ) VALUES ($1,$2,$3,$4,$5,(($5 AT TIME ZONE 'Europe/Moscow')::date),1,$6,$7,$8,$9,'public',$10,$11)
-     RETURNING prediction_card_id`,
-    [
-      dictionaries.cardType.get('daily'),
-      dictionaries.cardStatus.get('published'),
-      row.match_id,
-      row.match_analysis_id,
-      row.analysis_create_at || new Date().toISOString(),
-      row.analysis_headline,
-      row.analysis_headline,
-      row.analysis_brief,
-      row.analysis_risk_note,
-      publicationHash,
-      snapshot,
-    ],
+  const payload = {
+    ...snapshot,
+    match_analysis_id: row.match_analysis_id,
+    match_id: row.match_id,
+    published_at: row.analysis_create_at || new Date().toISOString(),
+    publication_hash: publicationHash,
+    normalized_bets: normalizedBets,
+  };
+
+  // The SQL function is one PostgreSQL statement: its exception rolls back the
+  // card, source, bets and settlements together. It also removes/resumes partial
+  // rows and skips a complete card by the stable match_analysis id.
+  const [result] = await pg.connection(
+    'SELECT * FROM bet.prediction_history_backfill_one($1::jsonb)',
+    [payload],
   );
-
-  await pg.connection(
-    `INSERT INTO bet.prediction_card_source (prediction_card_id, match_analysis_id, source_role, ordinal)
-     VALUES ($1,$2,'primary',1)`,
-    [card.prediction_card_id, row.match_analysis_id],
-  );
-
-  const pendingStatusId = dictionaries.settlementStatus.get('pending');
-  let createdBets = 0;
-  for (const bet of normalizedBets) {
-    const [insertedBet] = await pg.connection(
-      `INSERT INTO bet.prediction_bet (
-         prediction_card_id, kind, ordinal, match_id, match_analysis_id,
-         market_type_id, period_id, participant_scope, selection_code, line_value,
-         score_home, score_away, market_key, display_label, odds_decimal,
-         risk_level_id, confidence, reason, source_payload, selection_snapshot
-       ) VALUES ($1,'single',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
-       RETURNING prediction_bet_id`,
-      [
-        card.prediction_card_id,
-        bet.ordinal,
-        row.match_id,
-        row.match_analysis_id,
-        dictionaries.marketType.get(bet.market_type_code),
-        dictionaries.period.get(bet.period_code),
-        bet.participant_scope,
-        bet.selection_code,
-        bet.line_value,
-        bet.score_home,
-        bet.score_away,
-        bet.market_key,
-        bet.display_label,
-        bet.odds_decimal,
-        bet.risk_level_code ? dictionaries.riskLevel.get(bet.risk_level_code) : null,
-        bet.confidence,
-        bet.reason,
-        bet.source_payload,
-        bet.selection_snapshot,
-      ],
-    );
-
-    await pg.connection(
-      `INSERT INTO bet.bet_settlement (prediction_bet_id, settlement_status_id, settlement_result_id, calculated_by, reason_code, reason_text)
-       VALUES ($1,$2,NULL,'backfill','awaiting_settlement','Ожидает расчёта результата')`,
-      [insertedBet.prediction_bet_id, pendingStatusId],
-    );
-    createdBets += 1;
-  }
-
-  return { match_analysis_id: row.match_analysis_id, prediction_card_id: card.prediction_card_id, bets_count: createdBets };
+  return {
+    match_analysis_id: row.match_analysis_id,
+    prediction_card_id: result?.prediction_card_id ?? result?.out_prediction_card_id ?? null,
+    bets_count: toNumber(result?.bets_count, normalizedBets.length),
+    skipped: result?.skipped === true,
+  };
 }
 
 async function backfillPredictionHistory(pg, { limit = 100, dryRun = false, matchAnalysisId = null } = {}) {
-  const dictionaries = await loadDictionaries(pg);
   const rows = await loadReadyAnalyses(pg, { limit, matchAnalysisId });
   const results = [];
   for (const row of rows) {
-    results.push(await insertAnalysisCard(pg, row, dictionaries, { dryRun }));
+    results.push(await insertAnalysisCard(pg, row, null, { dryRun }));
   }
   return {
     dry_run: dryRun,
     candidates: rows.length,
-    cards_created: results.filter((item) => item.prediction_card_id != null).length,
-    bets_created: results.reduce((sum, item) => sum + toNumber(item.bets_count, 0), 0),
+    cards_created: results.filter((item) => item.prediction_card_id != null && !item.skipped && !item.dry_run).length,
+    bets_created: results.reduce((sum, item) => sum + (!item.skipped && !item.dry_run ? toNumber(item.bets_count, 0) : 0), 0),
     skipped: results.filter((item) => item.skipped).length,
     results,
   };
