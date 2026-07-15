@@ -3,9 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { auth, getHistory } from '../lib/api.js';
 import {
   getHistoryStatusPresentation,
-  getHistorySummaryPresentation,
   hasNextHistoryPage,
   mapHistoryCard,
+  getRecentBetStreak,
+  getAverageOdds,
+  filterHistoryCardsByPeriod,
+  getHistoryStatsFromCards,
 } from '../lib/bets-history.js';
 import { formatMoscowDateTime } from '../lib/format.js';
 
@@ -15,6 +18,8 @@ const SEGMENTS = [
   { id: 'history', label: 'История' },
   { id: 'express', label: 'Экспрессы' },
 ];
+
+const PERIODS = ['Неделя', 'Месяц', 'Всё время'];
 
 function formatOdds(value) {
   if (value == null || !Number.isFinite(Number(value))) return '—';
@@ -39,33 +44,46 @@ function HistorySkeleton() {
   );
 }
 
-function Summary({ summary }) {
-  const cards = [
-    { label: 'Прибыль', value: summary.profit_label, accent: summary.profit_units >= 0 ? 'positive' : 'negative' },
-    { label: 'Проходимость', value: summary.hit_rate_label },
-    { label: 'Всего ставок', value: summary.total_bets },
-  ];
+function Summary({ summary, items, period, onPeriodChange }) {
+  const streak = getRecentBetStreak(items);
+  const averageOdds = getAverageOdds(items);
+  const hitRate = Math.max(0, Math.min(100, summary.hit_rate_percent ?? 0));
+  const profitTone = summary.profit_units >= 0 ? 'positive' : 'negative';
 
   return (
     <>
-      <div className="bets-history-summary-grid">
-        {cards.map((card) => (
-          <div className="bets-history-summary-card" key={card.label}>
-            <div className="bets-history-summary-label">{card.label}</div>
-            <div className={`bets-history-summary-value ${card.accent ? `bets-history-summary-${card.accent}` : ''}`}>
-              {card.value}
-            </div>
-          </div>
+      <div className="bets-history-periods" role="tablist" aria-label="Период истории">
+        {PERIODS.map((item) => (
+          <button className={`bets-history-period ${period === item ? 'bets-history-period-active' : ''}`} key={item} type="button" role="tab" aria-selected={period === item} onClick={() => onPeriodChange(item)}>
+            {item}
+          </button>
         ))}
       </div>
-      <div className="bets-history-counters" aria-label="Результаты ставок">
-        <div className="bets-history-counter bets-history-counter-won"><span>Зашло</span><strong>{summary.won_count}</strong></div>
-        <div className="bets-history-counter bets-history-counter-lost"><span>Не зашло</span><strong>{summary.lost_count}</strong></div>
-        <div className="bets-history-counter"><span>Возврат</span><strong>{summary.void_count}</strong></div>
-        <div className="bets-history-counter"><span>Ждём</span><strong>{summary.pending_count}</strong></div>
-        {summary.not_supported_count > 0 && (
-          <div className="bets-history-counter"><span>Не рассчитываем</span><strong>{summary.not_supported_count}</strong></div>
-        )}
+      <section className="bets-history-overview" aria-label="Сводка истории">
+        <div className={`bets-history-donut ${summary.hit_rate_percent == null ? 'bets-history-donut-empty' : ''}`} style={{ '--hit-rate': `${hitRate}%` }}>
+          <div className="bets-history-donut-center"><strong>{summary.hit_rate_label}</strong><span>ЗАШЛО</span></div>
+        </div>
+        <div className="bets-history-legend">
+          {[
+            ['won', 'Зашло', summary.won_count],
+            ['lost', 'Не зашло', summary.lost_count],
+            ['void', 'Возврат', summary.void_count],
+          ].map(([code, label, count]) => (
+            <div className="bets-history-legend-row" key={code}><span className={`bets-history-legend-dot bets-history-legend-dot-${code}`} /><span>{label}</span><strong>{count}</strong></div>
+          ))}
+          <div className="bets-history-neutral-info">Ждём {summary.pending_count} · Не рассчитываем {summary.not_supported_count}</div>
+        </div>
+      </section>
+      <div className="bets-history-metrics" aria-label="Метрики истории">
+        <div><span>Проходимость</span><strong>{summary.hit_rate_label}</strong><small>зашло от рассчитанных</small></div>
+        <div><span>Чистыми</span><strong className={`bets-history-summary-${profitTone}`}>{summary.profit_label} ед.</strong><small>по выбранному периоду</small></div>
+        <div><span>Ср. коэф.</span><strong>{averageOdds == null ? '—' : averageOdds.toFixed(2)}</strong><small>по загруженным ставкам</small></div>
+      </div>
+      <div className="bets-history-recent">
+        <div className="bets-history-section-heading"><strong>Последние ставки</strong><span>{summary.won_count} В · {summary.lost_count} П · {summary.void_count} возврат</span></div>
+        <div className="bets-history-streak" aria-label="Последние результаты">
+          {streak.length > 0 ? streak.map((item, index) => <span className={`bets-history-streak-square bets-history-streak-${item.code}`} key={`${item.code}-${index}`}>{item.marker}</span>) : <span className="bets-history-recent-empty">Нет рассчитанных ставок</span>}
+        </div>
       </div>
     </>
   );
@@ -141,8 +159,8 @@ function Placeholder({ title, text, navigate }) {
 export function BetsPage() {
   const navigate = useNavigate();
   const [segment, setSegment] = useState('history');
+  const [period, setPeriod] = useState('Всё время');
   const [items, setItems] = useState([]);
-  const [summary, setSummary] = useState(() => getHistorySummaryPresentation());
   const [pagination, setPagination] = useState({ limit: HISTORY_LIMIT, offset: 0, returned: 0, total_cards: 0 });
   const [emptyState, setEmptyState] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -171,7 +189,6 @@ export function BetsPage() {
         mappedItems.forEach((item) => byId.set(item.id, item));
         return Array.from(byId.values());
       });
-      setSummary(getHistorySummaryPresentation(payload?.summary));
       setPagination(payload?.pagination || { limit: HISTORY_LIMIT, offset, returned: mappedItems.length, total_cards: mappedItems.length });
       setEmptyState(payload?.empty_state || null);
       setExpandedId(null);
@@ -195,7 +212,6 @@ export function BetsPage() {
         if (cancelled || requestId !== requestIdRef.current) return;
         const mappedItems = Array.isArray(payload?.items) ? payload.items.map(mapHistoryCard) : [];
         setItems(mappedItems);
-        setSummary(getHistorySummaryPresentation(payload?.summary));
         setPagination(payload?.pagination || { limit: HISTORY_LIMIT, offset: 0, returned: mappedItems.length, total_cards: mappedItems.length });
         setEmptyState(payload?.empty_state || null);
       } catch (err) {
@@ -209,6 +225,8 @@ export function BetsPage() {
   }, []);
 
   const canLoadMore = useMemo(() => hasNextHistoryPage(pagination), [pagination]);
+  const filteredItems = useMemo(() => filterHistoryCardsByPeriod(items, period), [items, period]);
+  const filteredSummary = useMemo(() => getHistoryStatsFromCards(filteredItems), [filteredItems]);
 
   return (
     <div className="bets-page">
@@ -244,10 +262,11 @@ export function BetsPage() {
           )}
           {!loading && !error && (
             <>
-              <Summary summary={summary} />
-              {items.length > 0 ? (
+              <Summary summary={filteredSummary} items={filteredItems} period={period} onPeriodChange={setPeriod} />
+              <div className="bets-history-list-heading">История ставок</div>
+              {filteredItems.length > 0 ? (
                 <div className="bets-history-list">
-                  {items.map((card) => (
+                  {filteredItems.map((card) => (
                     <HistoryCard
                       card={card}
                       expanded={expandedId === card.id}

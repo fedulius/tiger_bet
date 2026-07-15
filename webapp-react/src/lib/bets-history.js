@@ -168,3 +168,84 @@ export function hasNextHistoryPage(pagination = {}) {
   const returned = finiteNumber(pagination?.returned, 0);
   return total > 0 && offset + returned < total;
 }
+
+const STREAK_MARKERS = {
+  won: 'В',
+  lost: 'П',
+  void: '↩',
+  pending: '·',
+  not_supported: '?',
+};
+
+export function getRecentBetStreak(cards = [], limit = 12) {
+  const bets = (Array.isArray(cards) ? cards : [])
+    .flatMap((card) => Array.isArray(card?.bets) ? card.bets : [])
+    .filter((bet) => Object.prototype.hasOwnProperty.call(STREAK_MARKERS, bet?.result_code))
+    .slice(0, Math.max(0, limit));
+
+  return bets.map((bet) => ({
+    code: bet.result_code,
+    marker: STREAK_MARKERS[bet.result_code],
+  }));
+}
+
+export function getAverageOdds(cards = []) {
+  const odds = (Array.isArray(cards) ? cards : [])
+    .flatMap((card) => Array.isArray(card?.bets) ? card.bets : [])
+    .map((bet) => nullableNumber(bet?.odds_decimal))
+    .filter((value) => value != null);
+
+  if (odds.length === 0) return null;
+  return odds.reduce((sum, value) => sum + value, 0) / odds.length;
+}
+
+const PERIOD_WINDOWS = {
+  'Неделя': 7 * 24 * 60 * 60 * 1000,
+  'Месяц': 30 * 24 * 60 * 60 * 1000,
+};
+
+export function filterHistoryCardsByPeriod(cards = [], period = 'Всё время', now = new Date()) {
+  const source = Array.isArray(cards) ? cards : [];
+  const window = PERIOD_WINDOWS[period];
+  if (!window) return [...source];
+
+  const end = now instanceof Date ? now.getTime() : new Date(now).getTime();
+  if (!Number.isFinite(end)) return [];
+  const start = end - window;
+
+  return source.filter((card) => {
+    const timestamps = [card?.published_at, card?.starts_at]
+      .map((value) => new Date(value).getTime())
+      .filter((timestamp) => Number.isFinite(timestamp));
+    return timestamps.some((timestamp) => timestamp >= start && timestamp <= end);
+  });
+}
+
+export function getHistoryStatsFromCards(cards = []) {
+  const stats = (Array.isArray(cards) ? cards : []).reduce((result, card) => {
+    result.total_cards += 1;
+    result.total_bets += finiteNumber(card?.bets_count, Array.isArray(card?.bets) ? card.bets.length : 0);
+    result.won_count += finiteNumber(card?.won_count);
+    result.lost_count += finiteNumber(card?.lost_count);
+    result.void_count += finiteNumber(card?.void_count);
+    result.pending_count += finiteNumber(card?.pending_count);
+    result.not_supported_count += finiteNumber(card?.not_supported_count);
+    result.profit_units += finiteNumber(card?.profit_units);
+    return result;
+  }, {
+    total_cards: 0,
+    total_bets: 0,
+    won_count: 0,
+    lost_count: 0,
+    void_count: 0,
+    pending_count: 0,
+    not_supported_count: 0,
+    profit_units: 0,
+  });
+
+  const settled = stats.won_count + stats.lost_count;
+  stats.hit_rate_percent = settled > 0 ? (stats.won_count / settled) * 100 : null;
+  stats.profit_label = formatProfitUnits(stats.profit_units);
+  stats.hit_rate_label = stats.hit_rate_percent == null ? '—' : `${stats.hit_rate_percent.toFixed(2)}%`;
+  return stats;
+}

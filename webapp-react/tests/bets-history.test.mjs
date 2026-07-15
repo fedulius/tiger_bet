@@ -8,6 +8,10 @@ import {
   mapHistoryCard,
   getHistorySummaryPresentation,
   hasNextHistoryPage,
+  getRecentBetStreak,
+  getAverageOdds,
+  filterHistoryCardsByPeriod,
+  getHistoryStatsFromCards,
 } from '../src/lib/bets-history.js';
 
 import { getHistory } from '../src/lib/api.js';
@@ -147,6 +151,60 @@ test('hasNextHistoryPage uses total cards and never returns true for malformed p
   assert.equal(hasNextHistoryPage({ limit: 2, offset: 0, returned: 2, total_cards: 3 }), true);
   assert.equal(hasNextHistoryPage({ limit: 2, offset: 2, returned: 1, total_cards: 3 }), false);
   assert.equal(hasNextHistoryPage(null), false);
+});
+
+test('getRecentBetStreak maps real bet outcomes to compact reference markers', () => {
+  const streak = getRecentBetStreak([
+    { bets: [{ result_code: 'won' }, { result_code: 'lost' }, { result_code: 'void' }, { result_code: 'pending' }, { result_code: 'not_supported' }] },
+  ]);
+
+  assert.deepEqual(streak.map((item) => item.marker), ['В', 'П', '↩', '·', '?']);
+  assert.deepEqual(streak.map((item) => item.code), ['won', 'lost', 'void', 'pending', 'not_supported']);
+});
+
+test('getAverageOdds averages only finite decimal odds from nested history bets', () => {
+  assert.equal(getAverageOdds([
+    { bets: [{ odds_decimal: 1.5 }, { odds_decimal: '2.5' }] },
+    { bets: [{ odds_decimal: null }, { odds_decimal: 'bad' }] },
+  ]), 2);
+  assert.equal(getAverageOdds([]), null);
+});
+
+test('filterHistoryCardsByPeriod filters by published_at within the selected rolling window', () => {
+  const now = new Date('2026-07-15T12:00:00.000Z');
+  const cards = [
+    { id: 'week', published_at: '2026-07-10T12:00:00.000Z' },
+    { id: 'month', published_at: '2026-06-20T12:00:00.000Z' },
+    { id: 'old', published_at: '2026-06-14T11:59:59.000Z' },
+    { id: 'future', starts_at: '2026-07-20T12:00:00.000Z' },
+    { id: 'fallback', published_at: 'not-a-date', starts_at: '2026-07-12T12:00:00.000Z' },
+    { id: 'invalid', published_at: 'not-a-date' },
+  ];
+
+  assert.deepEqual(filterHistoryCardsByPeriod(cards, 'Неделя', now).map((card) => card.id), ['week', 'fallback']);
+  assert.deepEqual(filterHistoryCardsByPeriod(cards, 'Месяц', now).map((card) => card.id), ['week', 'month', 'fallback']);
+  assert.deepEqual(filterHistoryCardsByPeriod(cards, 'Всё время', now).map((card) => card.id), cards.map((card) => card.id));
+});
+
+test('getHistoryStatsFromCards recomputes filtered counts, hit rate and profit', () => {
+  const stats = getHistoryStatsFromCards([
+    { bets_count: 2, won_count: 2, lost_count: 0, void_count: 0, pending_count: 0, not_supported_count: 0, profit_units: 1.5 },
+    { bets_count: 3, won_count: 1, lost_count: 2, void_count: 1, pending_count: 1, not_supported_count: 0, profit_units: -0.5 },
+  ]);
+
+  assert.deepEqual(stats, {
+    total_cards: 2,
+    total_bets: 5,
+    won_count: 3,
+    lost_count: 2,
+    void_count: 1,
+    pending_count: 1,
+    not_supported_count: 0,
+    profit_units: 1,
+    hit_rate_percent: 60,
+    profit_label: '+1.00',
+    hit_rate_label: '60.00%',
+  });
 });
 
 test('getHistory calls the existing history endpoint with limit and offset', async () => {
