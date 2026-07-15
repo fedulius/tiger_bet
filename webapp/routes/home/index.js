@@ -8,10 +8,12 @@ const { rememberSstatsListMatches } = require('../../services/sstatsMatchListCac
 // ── Cache ──────────────────────────────────────────────────
 // In-memory cache, shared across ALL users.
 // Key = dayType + sorted league IDs → different favorites get separate cache entries.
-// Yesterday/tomorrow: 24h (data won't change)
+// Yesterday can still change after Moscow midnight: late matches may finish
+// after they first appeared in the "Вчера" tab, so keep it short.
 // Today: 15s (live elapsed time / scores must refresh frequently)
+// Tomorrow: 24h (scheduled matches are stable enough for the home cache)
 const CACHE_TTL = {
-  yesterday: 24 * 60 * 60 * 1000,
+  yesterday: 60 * 1000,
   today: 15 * 1000,
   tomorrow: 24 * 60 * 60 * 1000,
 };
@@ -324,6 +326,7 @@ async function homeRoutes(fastify) {
 
 module.exports = homeRoutes;
 module.exports.__private = {
+  CACHE_TTL,
   makeCacheKey,
   getDayRange,
   getMoscowDate,

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 
 const homeRoutes = require('../../webapp/routes/home/index.js');
 
-const { makeCacheKey, getDayRange, collectSstatsMatchIds, markFollowedMatches } = homeRoutes.__private;
+const { CACHE_TTL, makeCacheKey, getDayRange, collectSstatsMatchIds, markFollowedMatches } = homeRoutes.__private;
 
 test('makeCacheKey includes day date to avoid cross-midnight stale today/tomorrow cache reuse', () => {
   const leagueIds = [235, 1, 2];
@@ -14,6 +14,12 @@ test('makeCacheKey includes day date to avoid cross-midnight stale today/tomorro
   assert.notEqual(todayKey, nextDayKey);
   assert.equal(todayKey, 'tomorrow:2026-07-02:1,2,235');
   assert.equal(nextDayKey, 'tomorrow:2026-07-03:1,2,235');
+});
+
+test('yesterday home cache is short-lived because late matches can finish after midnight', () => {
+  assert.equal(CACHE_TTL.yesterday, 60 * 1000);
+  assert.equal(CACHE_TTL.today, 15 * 1000);
+  assert.equal(CACHE_TTL.tomorrow, 24 * 60 * 60 * 1000);
 });
 
 test('getDayRange keeps explicit Moscow offset in SStats query window', () => {
