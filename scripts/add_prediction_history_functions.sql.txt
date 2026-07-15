@@ -1,0 +1,1241 @@
+-- Tiger Bet: bet.* wrapper functions
+-- Date: 2026-07-15
+-- Purpose:
+--   Wrapper functions for the prediction history / settlement schema.
+--   Style follows existing public.match_create / public.match_analysis_create:
+--   resolve dictionary IDs by *_code fields, insert/update rows, return created IDs.
+--
+-- Apply after add_prediction_history_schema.sql/txt.
+-- Review in staging first.
+
+BEGIN;
+
+-- ============================================================
+-- 1. Dictionary resolvers
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION public.analysis_type_resolve(
+    in_analysis_type_code varchar
+)
+RETURNS integer
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    out_analysis_type_id integer;
+BEGIN
+    SELECT analysis_type_id
+    FROM public.analysis_type
+    WHERE analysis_type_code = in_analysis_type_code
+      AND is_active = true
+    INTO out_analysis_type_id;
+
+    IF out_analysis_type_id IS NULL THEN
+        RAISE EXCEPTION 'Unknown or inactive analysis_type_code: %', in_analysis_type_code
+            USING ERRCODE = 'foreign_key_violation';
+    END IF;
+
+    RETURN out_analysis_type_id;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION bet.card_type_resolve(
+    in_card_type_code varchar
+)
+RETURNS smallint
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    out_card_type_id smallint;
+BEGIN
+    SELECT card_type_id
+    FROM bet.card_type
+    WHERE card_type_code = in_card_type_code
+      AND is_active = true
+    INTO out_card_type_id;
+
+    IF out_card_type_id IS NULL THEN
+        RAISE EXCEPTION 'Unknown or inactive card_type_code: %', in_card_type_code
+            USING ERRCODE = 'foreign_key_violation';
+    END IF;
+
+    RETURN out_card_type_id;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION bet.card_status_resolve(
+    in_card_status_code varchar
+)
+RETURNS smallint
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    out_card_status_id smallint;
+BEGIN
+    SELECT card_status_id
+    FROM bet.card_status
+    WHERE card_status_code = in_card_status_code
+      AND is_active = true
+    INTO out_card_status_id;
+
+    IF out_card_status_id IS NULL THEN
+        RAISE EXCEPTION 'Unknown or inactive card_status_code: %', in_card_status_code
+            USING ERRCODE = 'foreign_key_violation';
+    END IF;
+
+    RETURN out_card_status_id;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION bet.market_type_resolve(
+    in_market_type_code varchar
+)
+RETURNS smallint
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    out_market_type_id smallint;
+BEGIN
+    SELECT market_type_id
+    FROM bet.market_type
+    WHERE market_type_code = in_market_type_code
+      AND is_active = true
+    INTO out_market_type_id;
+
+    IF out_market_type_id IS NULL THEN
+        RAISE EXCEPTION 'Unknown or inactive market_type_code: %', in_market_type_code
+            USING ERRCODE = 'foreign_key_violation';
+    END IF;
+
+    RETURN out_market_type_id;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION bet.period_resolve(
+    in_period_code varchar DEFAULT 'full_time'
+)
+RETURNS smallint
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    out_period_id smallint;
+BEGIN
+    SELECT period_id
+    FROM bet.period
+    WHERE period_code = COALESCE(in_period_code, 'full_time')
+      AND is_active = true
+    INTO out_period_id;
+
+    IF out_period_id IS NULL THEN
+        RAISE EXCEPTION 'Unknown or inactive period_code: %', in_period_code
+            USING ERRCODE = 'foreign_key_violation';
+    END IF;
+
+    RETURN out_period_id;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION bet.risk_level_resolve(
+    in_risk_level_code varchar
+)
+RETURNS smallint
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    out_risk_level_id smallint;
+BEGIN
+    IF in_risk_level_code IS NULL THEN
+        RETURN NULL;
+    END IF;
+
+    SELECT risk_level_id
+    FROM bet.risk_level
+    WHERE risk_level_code = in_risk_level_code
+      AND is_active = true
+    INTO out_risk_level_id;
+
+    IF out_risk_level_id IS NULL THEN
+        RAISE EXCEPTION 'Unknown or inactive risk_level_code: %', in_risk_level_code
+            USING ERRCODE = 'foreign_key_violation';
+    END IF;
+
+    RETURN out_risk_level_id;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION bet.settlement_status_resolve(
+    in_settlement_status_code varchar
+)
+RETURNS smallint
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    out_settlement_status_id smallint;
+BEGIN
+    SELECT settlement_status_id
+    FROM bet.settlement_status
+    WHERE settlement_status_code = in_settlement_status_code
+      AND is_active = true
+    INTO out_settlement_status_id;
+
+    IF out_settlement_status_id IS NULL THEN
+        RAISE EXCEPTION 'Unknown or inactive settlement_status_code: %', in_settlement_status_code
+            USING ERRCODE = 'foreign_key_violation';
+    END IF;
+
+    RETURN out_settlement_status_id;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION bet.settlement_result_resolve(
+    in_settlement_result_code varchar
+)
+RETURNS smallint
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    out_settlement_result_id smallint;
+BEGIN
+    IF in_settlement_result_code IS NULL THEN
+        RETURN NULL;
+    END IF;
+
+    SELECT settlement_result_id
+    FROM bet.settlement_result
+    WHERE settlement_result_code = in_settlement_result_code
+      AND is_active = true
+    INTO out_settlement_result_id;
+
+    IF out_settlement_result_id IS NULL THEN
+        RAISE EXCEPTION 'Unknown or inactive settlement_result_code: %', in_settlement_result_code
+            USING ERRCODE = 'foreign_key_violation';
+    END IF;
+
+    RETURN out_settlement_result_id;
+END;
+$function$;
+
+-- ============================================================
+-- 2. public.match_analysis helpers
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION public.match_analysis_type_set(
+    in_match_analysis_id integer,
+    in_analysis_type_code varchar
+)
+RETURNS integer
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    tmp_analysis_type_id integer;
+BEGIN
+    tmp_analysis_type_id := public.analysis_type_resolve(in_analysis_type_code);
+
+    UPDATE public.match_analysis
+    SET analysis_type_id = tmp_analysis_type_id,
+        analysis_update_at = now()
+    WHERE match_analysis_id = in_match_analysis_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'match_analysis not found: %', in_match_analysis_id
+            USING ERRCODE = 'no_data_found';
+    END IF;
+
+    RETURN in_match_analysis_id;
+END;
+$function$;
+
+-- Optional replacement with analysis_type support. Existing call sites can keep
+-- using public.match_analysis_create(...); new call sites can use this function.
+CREATE OR REPLACE FUNCTION public.match_analysis_create_v2(
+    in_match_source_id integer,
+    in_analysis_status_name varchar,
+    in_analysis_type_code varchar,
+    in_analysis_headline varchar,
+    in_analysis_brief varchar,
+    in_analysis_risk_note varchar,
+    in_recommended_bets jsonb,
+    in_model_name varchar,
+    in_prompt_version varchar,
+    in_analysis_hash varchar,
+    in_error_message varchar,
+    in_skip_reason varchar
+)
+RETURNS integer
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    tmp_analysis_status_id integer;
+    tmp_analysis_type_id integer;
+    out_match_analysis_id integer;
+BEGIN
+    SELECT analysis_status_id
+    FROM public.analysis_status
+    WHERE analysis_status_name = in_analysis_status_name
+    INTO tmp_analysis_status_id;
+
+    IF tmp_analysis_status_id IS NULL THEN
+        RAISE EXCEPTION 'Unknown analysis_status_name: %', in_analysis_status_name
+            USING ERRCODE = 'foreign_key_violation';
+    END IF;
+
+    tmp_analysis_type_id := public.analysis_type_resolve(COALESCE(in_analysis_type_code, 'daily_pick'));
+
+    INSERT INTO public.match_analysis(
+          match_source_id
+        , analysis_type_id
+        , analysis_status_id
+        , analysis_headline
+        , analysis_brief
+        , analysis_risk_note
+        , recommended_bets
+        , model_name
+        , prompt_version
+        , analysis_hash
+        , error_message
+        , skip_reason
+    )
+    VALUES (
+          in_match_source_id
+        , tmp_analysis_type_id
+        , tmp_analysis_status_id
+        , in_analysis_headline
+        , in_analysis_brief
+        , in_analysis_risk_note
+        , in_recommended_bets
+        , in_model_name
+        , in_prompt_version
+        , in_analysis_hash
+        , in_error_message
+        , in_skip_reason
+    )
+    RETURNING match_analysis_id
+    INTO out_match_analysis_id;
+
+    RETURN out_match_analysis_id;
+END;
+$function$;
+
+-- ============================================================
+-- 3. Prediction card functions
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION bet.prediction_card_create(
+    in_card_type_code varchar,
+    in_card_status_code varchar DEFAULT 'published',
+    in_primary_match_id integer DEFAULT NULL,
+    in_primary_match_analysis_id integer DEFAULT NULL,
+    in_published_at timestamptz DEFAULT now(),
+    in_published_date date DEFAULT NULL,
+    in_edition_no integer DEFAULT 1,
+    in_title text DEFAULT NULL,
+    in_headline text DEFAULT NULL,
+    in_brief text DEFAULT NULL,
+    in_risk_note text DEFAULT NULL,
+    in_visibility_scope varchar DEFAULT 'public',
+    in_publication_hash varchar DEFAULT NULL,
+    in_snapshot jsonb DEFAULT '{}'::jsonb
+)
+RETURNS bigint
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    tmp_card_type_id smallint;
+    tmp_card_status_id smallint;
+    tmp_publication_hash varchar;
+    out_prediction_card_id bigint;
+BEGIN
+    tmp_card_type_id := bet.card_type_resolve(in_card_type_code);
+    tmp_card_status_id := bet.card_status_resolve(in_card_status_code);
+
+    tmp_publication_hash := COALESCE(
+        in_publication_hash,
+        md5(concat_ws('|',
+            in_card_type_code,
+            COALESCE(in_primary_match_id::text, ''),
+            COALESCE(in_primary_match_analysis_id::text, ''),
+            COALESCE(in_edition_no::text, '1'),
+            COALESCE(in_published_at::text, now()::text),
+            COALESCE(in_snapshot::text, '{}')
+        ))
+    );
+
+    INSERT INTO bet.prediction_card(
+          card_type_id
+        , card_status_id
+        , primary_match_id
+        , primary_match_analysis_id
+        , published_at
+        , published_date
+        , edition_no
+        , title
+        , headline
+        , brief
+        , risk_note
+        , visibility_scope
+        , publication_hash
+        , snapshot
+    )
+    VALUES (
+          tmp_card_type_id
+        , tmp_card_status_id
+        , in_primary_match_id
+        , in_primary_match_analysis_id
+        , in_published_at
+        , COALESCE(in_published_date, (in_published_at AT TIME ZONE 'Europe/Moscow')::date)
+        , COALESCE(in_edition_no, 1)
+        , in_title
+        , in_headline
+        , in_brief
+        , in_risk_note
+        , COALESCE(in_visibility_scope, 'public')
+        , tmp_publication_hash
+        , COALESCE(in_snapshot, '{}'::jsonb)
+    )
+    RETURNING prediction_card_id
+    INTO out_prediction_card_id;
+
+    RETURN out_prediction_card_id;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION bet.prediction_card_source_create(
+    in_prediction_card_id bigint,
+    in_match_analysis_id integer,
+    in_source_role varchar DEFAULT 'primary',
+    in_ordinal smallint DEFAULT 1
+)
+RETURNS bigint
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    out_prediction_card_source_id bigint;
+BEGIN
+    INSERT INTO bet.prediction_card_source(
+          prediction_card_id
+        , match_analysis_id
+        , source_role
+        , ordinal
+    )
+    VALUES (
+          in_prediction_card_id
+        , in_match_analysis_id
+        , COALESCE(in_source_role, 'primary')
+        , COALESCE(in_ordinal, 1)
+    )
+    RETURNING prediction_card_source_id
+    INTO out_prediction_card_source_id;
+
+    RETURN out_prediction_card_source_id;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION bet.prediction_card_status_set(
+    in_prediction_card_id bigint,
+    in_card_status_code varchar,
+    in_updated_at timestamptz DEFAULT now()
+)
+RETURNS bigint
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    tmp_card_status_id smallint;
+BEGIN
+    tmp_card_status_id := bet.card_status_resolve(in_card_status_code);
+
+    UPDATE bet.prediction_card
+    SET card_status_id = tmp_card_status_id,
+        updated_at = in_updated_at
+    WHERE prediction_card_id = in_prediction_card_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'prediction_card not found: %', in_prediction_card_id
+            USING ERRCODE = 'no_data_found';
+    END IF;
+
+    RETURN in_prediction_card_id;
+END;
+$function$;
+
+-- Convenience function: create a daily/single card from existing match_analysis.
+CREATE OR REPLACE FUNCTION bet.prediction_card_create_from_match_analysis(
+    in_match_analysis_id integer,
+    in_card_type_code varchar DEFAULT 'daily',
+    in_card_status_code varchar DEFAULT 'published',
+    in_visibility_scope varchar DEFAULT 'public',
+    in_published_at timestamptz DEFAULT now(),
+    in_edition_no integer DEFAULT 1
+)
+RETURNS bigint
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    tmp_match_id integer;
+    tmp_analysis public.match_analysis%ROWTYPE;
+    tmp_snapshot jsonb;
+    tmp_publication_hash varchar;
+    out_prediction_card_id bigint;
+BEGIN
+    SELECT ma.*
+    FROM public.match_analysis ma
+    WHERE ma.match_analysis_id = in_match_analysis_id
+    INTO tmp_analysis;
+
+    IF tmp_analysis.match_analysis_id IS NULL THEN
+        RAISE EXCEPTION 'match_analysis not found: %', in_match_analysis_id
+            USING ERRCODE = 'no_data_found';
+    END IF;
+
+    SELECT match_id
+    FROM public.match_source
+    WHERE match_source_id = tmp_analysis.match_source_id
+    INTO tmp_match_id;
+
+    IF tmp_match_id IS NULL THEN
+        RAISE EXCEPTION 'match_source/match not found for match_analysis: %', in_match_analysis_id
+            USING ERRCODE = 'foreign_key_violation';
+    END IF;
+
+    tmp_snapshot := jsonb_build_object(
+        'match_analysis_id', tmp_analysis.match_analysis_id,
+        'match_source_id', tmp_analysis.match_source_id,
+        'analysis_hash', tmp_analysis.analysis_hash,
+        'analysis_headline', tmp_analysis.analysis_headline,
+        'analysis_brief', tmp_analysis.analysis_brief,
+        'analysis_risk_note', tmp_analysis.analysis_risk_note,
+        'recommended_bets', tmp_analysis.recommended_bets,
+        'model_name', tmp_analysis.model_name,
+        'prompt_version', tmp_analysis.prompt_version,
+        'analysis_create_at', tmp_analysis.analysis_create_at
+    );
+
+    tmp_publication_hash := md5(concat_ws('|',
+        in_card_type_code,
+        tmp_analysis.match_analysis_id::text,
+        COALESCE(tmp_analysis.analysis_hash, ''),
+        COALESCE(in_edition_no::text, '1')
+    ));
+
+    out_prediction_card_id := bet.prediction_card_create(
+          in_card_type_code => in_card_type_code
+        , in_card_status_code => in_card_status_code
+        , in_primary_match_id => tmp_match_id
+        , in_primary_match_analysis_id => tmp_analysis.match_analysis_id
+        , in_published_at => in_published_at
+        , in_published_date => (in_published_at AT TIME ZONE 'Europe/Moscow')::date
+        , in_edition_no => in_edition_no
+        , in_title => tmp_analysis.analysis_headline
+        , in_headline => tmp_analysis.analysis_headline
+        , in_brief => tmp_analysis.analysis_brief
+        , in_risk_note => tmp_analysis.analysis_risk_note
+        , in_visibility_scope => in_visibility_scope
+        , in_publication_hash => tmp_publication_hash
+        , in_snapshot => tmp_snapshot
+    );
+
+    PERFORM bet.prediction_card_source_create(
+          in_prediction_card_id => out_prediction_card_id
+        , in_match_analysis_id => tmp_analysis.match_analysis_id
+        , in_source_role => 'primary'
+        , in_ordinal => 1
+    );
+
+    RETURN out_prediction_card_id;
+END;
+$function$;
+
+-- ============================================================
+-- 4. Prediction bet / express leg functions
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION bet.prediction_bet_create(
+    in_prediction_card_id bigint,
+    in_kind varchar DEFAULT 'single',
+    in_ordinal smallint DEFAULT 1,
+    in_match_id integer DEFAULT NULL,
+    in_match_analysis_id integer DEFAULT NULL,
+    in_market_type_code varchar DEFAULT NULL,
+    in_period_code varchar DEFAULT 'full_time',
+    in_participant_scope varchar DEFAULT NULL,
+    in_selection_code varchar DEFAULT NULL,
+    in_line_value numeric DEFAULT NULL,
+    in_score_home smallint DEFAULT NULL,
+    in_score_away smallint DEFAULT NULL,
+    in_market_key text DEFAULT NULL,
+    in_display_label text DEFAULT NULL,
+    in_odds_decimal numeric DEFAULT NULL,
+    in_risk_level_code varchar DEFAULT NULL,
+    in_confidence numeric DEFAULT NULL,
+    in_reason text DEFAULT NULL,
+    in_source_payload jsonb DEFAULT NULL,
+    in_selection_snapshot jsonb DEFAULT '{}'::jsonb
+)
+RETURNS bigint
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    tmp_market_type_id smallint;
+    tmp_period_id smallint;
+    tmp_risk_level_id smallint;
+    tmp_market_key text;
+    out_prediction_bet_id bigint;
+BEGIN
+    IF COALESCE(in_kind, 'single') = 'single' THEN
+        tmp_market_type_id := bet.market_type_resolve(in_market_type_code);
+        tmp_period_id := bet.period_resolve(COALESCE(in_period_code, 'full_time'));
+        tmp_market_key := COALESCE(
+            in_market_key,
+            concat_ws('|', in_market_type_code, COALESCE(in_period_code, 'full_time'), in_participant_scope, in_selection_code, in_line_value::text)
+        );
+    ELSE
+        tmp_market_type_id := NULL;
+        tmp_period_id := NULL;
+        tmp_market_key := COALESCE(in_market_key, concat_ws('|', 'express', in_prediction_card_id::text, in_ordinal::text));
+    END IF;
+
+    tmp_risk_level_id := bet.risk_level_resolve(in_risk_level_code);
+
+    INSERT INTO bet.prediction_bet(
+          prediction_card_id
+        , kind
+        , ordinal
+        , match_id
+        , match_analysis_id
+        , market_type_id
+        , period_id
+        , participant_scope
+        , selection_code
+        , line_value
+        , score_home
+        , score_away
+        , market_key
+        , display_label
+        , odds_decimal
+        , risk_level_id
+        , confidence
+        , reason
+        , source_payload
+        , selection_snapshot
+    )
+    VALUES (
+          in_prediction_card_id
+        , COALESCE(in_kind, 'single')
+        , COALESCE(in_ordinal, 1)
+        , in_match_id
+        , in_match_analysis_id
+        , tmp_market_type_id
+        , tmp_period_id
+        , in_participant_scope
+        , in_selection_code
+        , in_line_value
+        , in_score_home
+        , in_score_away
+        , tmp_market_key
+        , COALESCE(in_display_label, tmp_market_key)
+        , in_odds_decimal
+        , tmp_risk_level_id
+        , in_confidence
+        , in_reason
+        , in_source_payload
+        , COALESCE(in_selection_snapshot, '{}'::jsonb)
+    )
+    RETURNING prediction_bet_id
+    INTO out_prediction_bet_id;
+
+    RETURN out_prediction_bet_id;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION bet.prediction_bet_leg_create(
+    in_prediction_bet_id bigint,
+    in_ordinal smallint,
+    in_match_id integer,
+    in_match_analysis_id integer DEFAULT NULL,
+    in_market_type_code varchar DEFAULT NULL,
+    in_period_code varchar DEFAULT 'full_time',
+    in_participant_scope varchar DEFAULT 'match',
+    in_selection_code varchar DEFAULT NULL,
+    in_line_value numeric DEFAULT NULL,
+    in_score_home smallint DEFAULT NULL,
+    in_score_away smallint DEFAULT NULL,
+    in_market_key text DEFAULT NULL,
+    in_display_label text DEFAULT NULL,
+    in_odds_decimal numeric DEFAULT NULL,
+    in_leg_snapshot jsonb DEFAULT '{}'::jsonb
+)
+RETURNS bigint
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    tmp_parent_kind varchar;
+    tmp_market_type_id smallint;
+    tmp_period_id smallint;
+    tmp_market_key text;
+    out_prediction_bet_leg_id bigint;
+BEGIN
+    SELECT kind
+    FROM bet.prediction_bet
+    WHERE prediction_bet_id = in_prediction_bet_id
+    INTO tmp_parent_kind;
+
+    IF tmp_parent_kind IS NULL THEN
+        RAISE EXCEPTION 'prediction_bet not found: %', in_prediction_bet_id
+            USING ERRCODE = 'no_data_found';
+    END IF;
+
+    IF tmp_parent_kind <> 'express' THEN
+        RAISE EXCEPTION 'prediction_bet_leg can be attached only to kind=express, got: %', tmp_parent_kind
+            USING ERRCODE = 'check_violation';
+    END IF;
+
+    tmp_market_type_id := bet.market_type_resolve(in_market_type_code);
+    tmp_period_id := bet.period_resolve(COALESCE(in_period_code, 'full_time'));
+    tmp_market_key := COALESCE(
+        in_market_key,
+        concat_ws('|', in_market_type_code, COALESCE(in_period_code, 'full_time'), in_participant_scope, in_selection_code, in_line_value::text)
+    );
+
+    INSERT INTO bet.prediction_bet_leg(
+          prediction_bet_id
+        , ordinal
+        , match_id
+        , match_analysis_id
+        , market_type_id
+        , period_id
+        , participant_scope
+        , selection_code
+        , line_value
+        , score_home
+        , score_away
+        , market_key
+        , display_label
+        , odds_decimal
+        , leg_snapshot
+    )
+    VALUES (
+          in_prediction_bet_id
+        , in_ordinal
+        , in_match_id
+        , in_match_analysis_id
+        , tmp_market_type_id
+        , tmp_period_id
+        , COALESCE(in_participant_scope, 'match')
+        , in_selection_code
+        , in_line_value
+        , in_score_home
+        , in_score_away
+        , tmp_market_key
+        , COALESCE(in_display_label, tmp_market_key)
+        , in_odds_decimal
+        , COALESCE(in_leg_snapshot, '{}'::jsonb)
+    )
+    RETURNING prediction_bet_leg_id
+    INTO out_prediction_bet_leg_id;
+
+    RETURN out_prediction_bet_leg_id;
+END;
+$function$;
+
+-- ============================================================
+-- 5. Settlement functions
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION bet.bet_settlement_upsert(
+    in_prediction_bet_id bigint,
+    in_settlement_status_code varchar,
+    in_settlement_result_code varchar DEFAULT NULL,
+    in_settled_at timestamptz DEFAULT NULL,
+    in_rule_version varchar DEFAULT 'v1',
+    in_score_scope jsonb DEFAULT '{}'::jsonb,
+    in_outcome_value jsonb DEFAULT NULL,
+    in_profit_factor numeric DEFAULT NULL,
+    in_reason_code varchar DEFAULT NULL,
+    in_reason_text text DEFAULT NULL,
+    in_calculated_by varchar DEFAULT 'rule_engine',
+    in_raw_payload jsonb DEFAULT NULL,
+    in_write_revision boolean DEFAULT true
+)
+RETURNS bigint
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    tmp_status_id smallint;
+    tmp_result_id smallint;
+    old_row bet.bet_settlement%ROWTYPE;
+    out_bet_settlement_id bigint;
+BEGIN
+    tmp_status_id := bet.settlement_status_resolve(in_settlement_status_code);
+    tmp_result_id := bet.settlement_result_resolve(in_settlement_result_code);
+
+    SELECT *
+    FROM bet.bet_settlement
+    WHERE prediction_bet_id = in_prediction_bet_id
+    INTO old_row;
+
+    IF old_row.bet_settlement_id IS NULL THEN
+        INSERT INTO bet.bet_settlement(
+              prediction_bet_id
+            , settlement_status_id
+            , settlement_result_id
+            , settled_at
+            , settlement_version
+            , rule_version
+            , score_scope
+            , outcome_value
+            , profit_factor
+            , reason_code
+            , reason_text
+            , calculated_at
+            , calculated_by
+            , raw_payload
+        )
+        VALUES (
+              in_prediction_bet_id
+            , tmp_status_id
+            , tmp_result_id
+            , in_settled_at
+            , 1
+            , COALESCE(in_rule_version, 'v1')
+            , COALESCE(in_score_scope, '{}'::jsonb)
+            , in_outcome_value
+            , in_profit_factor
+            , in_reason_code
+            , in_reason_text
+            , now()
+            , COALESCE(in_calculated_by, 'rule_engine')
+            , in_raw_payload
+        )
+        RETURNING bet_settlement_id
+        INTO out_bet_settlement_id;
+
+        IF in_write_revision THEN
+            INSERT INTO bet.bet_settlement_revision(
+                  prediction_bet_id
+                , previous_settlement_status_id
+                , previous_settlement_result_id
+                , new_settlement_status_id
+                , new_settlement_result_id
+                , previous_profit_factor
+                , new_profit_factor
+                , reason_code
+                , reason_text
+                , changed_by
+                , payload
+            )
+            VALUES (
+                  in_prediction_bet_id
+                , NULL
+                , NULL
+                , tmp_status_id
+                , tmp_result_id
+                , NULL
+                , in_profit_factor
+                , COALESCE(in_reason_code, 'initial_settlement')
+                , in_reason_text
+                , COALESCE(in_calculated_by, 'rule_engine')
+                , COALESCE(in_raw_payload, '{}'::jsonb)
+            );
+        END IF;
+    ELSE
+        UPDATE bet.bet_settlement
+        SET settlement_status_id = tmp_status_id,
+            settlement_result_id = tmp_result_id,
+            settled_at = in_settled_at,
+            settlement_version = old_row.settlement_version + 1,
+            rule_version = COALESCE(in_rule_version, old_row.rule_version),
+            score_scope = COALESCE(in_score_scope, '{}'::jsonb),
+            outcome_value = in_outcome_value,
+            profit_factor = in_profit_factor,
+            reason_code = in_reason_code,
+            reason_text = in_reason_text,
+            calculated_at = now(),
+            calculated_by = COALESCE(in_calculated_by, 'rule_engine'),
+            raw_payload = in_raw_payload
+        WHERE bet_settlement_id = old_row.bet_settlement_id
+        RETURNING bet_settlement_id
+        INTO out_bet_settlement_id;
+
+        IF in_write_revision THEN
+            INSERT INTO bet.bet_settlement_revision(
+                  prediction_bet_id
+                , previous_settlement_status_id
+                , previous_settlement_result_id
+                , new_settlement_status_id
+                , new_settlement_result_id
+                , previous_profit_factor
+                , new_profit_factor
+                , reason_code
+                , reason_text
+                , changed_by
+                , payload
+            )
+            VALUES (
+                  in_prediction_bet_id
+                , old_row.settlement_status_id
+                , old_row.settlement_result_id
+                , tmp_status_id
+                , tmp_result_id
+                , old_row.profit_factor
+                , in_profit_factor
+                , in_reason_code
+                , in_reason_text
+                , COALESCE(in_calculated_by, 'rule_engine')
+                , COALESCE(in_raw_payload, '{}'::jsonb)
+            );
+        END IF;
+    END IF;
+
+    RETURN out_bet_settlement_id;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION bet.bet_leg_settlement_upsert(
+    in_prediction_bet_leg_id bigint,
+    in_settlement_status_code varchar,
+    in_settlement_result_code varchar DEFAULT NULL,
+    in_settled_at timestamptz DEFAULT NULL,
+    in_rule_version varchar DEFAULT 'v1',
+    in_score_scope jsonb DEFAULT '{}'::jsonb,
+    in_outcome_value jsonb DEFAULT NULL,
+    in_profit_factor numeric DEFAULT NULL,
+    in_reason_code varchar DEFAULT NULL,
+    in_reason_text text DEFAULT NULL,
+    in_calculated_by varchar DEFAULT 'rule_engine',
+    in_raw_payload jsonb DEFAULT NULL,
+    in_write_revision boolean DEFAULT true
+)
+RETURNS bigint
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    tmp_status_id smallint;
+    tmp_result_id smallint;
+    old_row bet.bet_leg_settlement%ROWTYPE;
+    out_bet_leg_settlement_id bigint;
+BEGIN
+    tmp_status_id := bet.settlement_status_resolve(in_settlement_status_code);
+    tmp_result_id := bet.settlement_result_resolve(in_settlement_result_code);
+
+    SELECT *
+    FROM bet.bet_leg_settlement
+    WHERE prediction_bet_leg_id = in_prediction_bet_leg_id
+    INTO old_row;
+
+    IF old_row.bet_leg_settlement_id IS NULL THEN
+        INSERT INTO bet.bet_leg_settlement(
+              prediction_bet_leg_id
+            , settlement_status_id
+            , settlement_result_id
+            , settled_at
+            , settlement_version
+            , rule_version
+            , score_scope
+            , outcome_value
+            , profit_factor
+            , reason_code
+            , reason_text
+            , calculated_at
+            , calculated_by
+            , raw_payload
+        )
+        VALUES (
+              in_prediction_bet_leg_id
+            , tmp_status_id
+            , tmp_result_id
+            , in_settled_at
+            , 1
+            , COALESCE(in_rule_version, 'v1')
+            , COALESCE(in_score_scope, '{}'::jsonb)
+            , in_outcome_value
+            , in_profit_factor
+            , in_reason_code
+            , in_reason_text
+            , now()
+            , COALESCE(in_calculated_by, 'rule_engine')
+            , in_raw_payload
+        )
+        RETURNING bet_leg_settlement_id
+        INTO out_bet_leg_settlement_id;
+
+        IF in_write_revision THEN
+            INSERT INTO bet.bet_settlement_revision(
+                  prediction_bet_leg_id
+                , previous_settlement_status_id
+                , previous_settlement_result_id
+                , new_settlement_status_id
+                , new_settlement_result_id
+                , previous_profit_factor
+                , new_profit_factor
+                , reason_code
+                , reason_text
+                , changed_by
+                , payload
+            )
+            VALUES (
+                  in_prediction_bet_leg_id
+                , NULL
+                , NULL
+                , tmp_status_id
+                , tmp_result_id
+                , NULL
+                , in_profit_factor
+                , COALESCE(in_reason_code, 'initial_leg_settlement')
+                , in_reason_text
+                , COALESCE(in_calculated_by, 'rule_engine')
+                , COALESCE(in_raw_payload, '{}'::jsonb)
+            );
+        END IF;
+    ELSE
+        UPDATE bet.bet_leg_settlement
+        SET settlement_status_id = tmp_status_id,
+            settlement_result_id = tmp_result_id,
+            settled_at = in_settled_at,
+            settlement_version = old_row.settlement_version + 1,
+            rule_version = COALESCE(in_rule_version, old_row.rule_version),
+            score_scope = COALESCE(in_score_scope, '{}'::jsonb),
+            outcome_value = in_outcome_value,
+            profit_factor = in_profit_factor,
+            reason_code = in_reason_code,
+            reason_text = in_reason_text,
+            calculated_at = now(),
+            calculated_by = COALESCE(in_calculated_by, 'rule_engine'),
+            raw_payload = in_raw_payload
+        WHERE bet_leg_settlement_id = old_row.bet_leg_settlement_id
+        RETURNING bet_leg_settlement_id
+        INTO out_bet_leg_settlement_id;
+
+        IF in_write_revision THEN
+            INSERT INTO bet.bet_settlement_revision(
+                  prediction_bet_leg_id
+                , previous_settlement_status_id
+                , previous_settlement_result_id
+                , new_settlement_status_id
+                , new_settlement_result_id
+                , previous_profit_factor
+                , new_profit_factor
+                , reason_code
+                , reason_text
+                , changed_by
+                , payload
+            )
+            VALUES (
+                  in_prediction_bet_leg_id
+                , old_row.settlement_status_id
+                , old_row.settlement_result_id
+                , tmp_status_id
+                , tmp_result_id
+                , old_row.profit_factor
+                , in_profit_factor
+                , in_reason_code
+                , in_reason_text
+                , COALESCE(in_calculated_by, 'rule_engine')
+                , COALESCE(in_raw_payload, '{}'::jsonb)
+            );
+        END IF;
+    END IF;
+
+    RETURN out_bet_leg_settlement_id;
+END;
+$function$;
+
+-- ============================================================
+-- 6. User / strategy / odds helper functions
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION bet.user_pick_create(
+    in_user_id bigint,
+    in_prediction_bet_id bigint,
+    in_decision_code varchar DEFAULT 'saved',
+    in_decision_at timestamptz DEFAULT now(),
+    in_stake_amount numeric DEFAULT NULL,
+    in_stake_currency char(3) DEFAULT NULL,
+    in_user_odds_decimal numeric DEFAULT NULL,
+    in_placed_at timestamptz DEFAULT NULL,
+    in_note text DEFAULT NULL,
+    in_meta jsonb DEFAULT '{}'::jsonb
+)
+RETURNS bigint
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    out_user_pick_id bigint;
+BEGIN
+    INSERT INTO bet.user_pick(
+          user_id
+        , prediction_bet_id
+        , decision_code
+        , decision_at
+        , stake_amount
+        , stake_currency
+        , user_odds_decimal
+        , placed_at
+        , note
+        , meta
+    )
+    VALUES (
+          in_user_id
+        , in_prediction_bet_id
+        , COALESCE(in_decision_code, 'saved')
+        , COALESCE(in_decision_at, now())
+        , in_stake_amount
+        , in_stake_currency
+        , in_user_odds_decimal
+        , in_placed_at
+        , in_note
+        , COALESCE(in_meta, '{}'::jsonb)
+    )
+    RETURNING user_pick_id
+    INTO out_user_pick_id;
+
+    RETURN out_user_pick_id;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION bet.user_strategy_create(
+    in_user_id bigint,
+    in_strategy_name varchar,
+    in_strategy_status varchar DEFAULT 'active',
+    in_is_default boolean DEFAULT false,
+    in_filters jsonb DEFAULT '{}'::jsonb
+)
+RETURNS bigint
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    out_user_strategy_id bigint;
+BEGIN
+    INSERT INTO bet.user_strategy(
+          user_id
+        , strategy_name
+        , strategy_status
+        , is_default
+        , filters
+    )
+    VALUES (
+          in_user_id
+        , in_strategy_name
+        , COALESCE(in_strategy_status, 'active')
+        , COALESCE(in_is_default, false)
+        , COALESCE(in_filters, '{}'::jsonb)
+    )
+    RETURNING user_strategy_id
+    INTO out_user_strategy_id;
+
+    RETURN out_user_strategy_id;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION bet.strategy_selection_create(
+    in_user_strategy_id bigint,
+    in_prediction_bet_id bigint,
+    in_selection_run_id uuid,
+    in_selected_at timestamptz DEFAULT now(),
+    in_rank smallint DEFAULT NULL,
+    in_is_primary boolean DEFAULT false,
+    in_selection_reason jsonb DEFAULT '{}'::jsonb
+)
+RETURNS bigint
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    out_strategy_selection_id bigint;
+BEGIN
+    INSERT INTO bet.strategy_selection(
+          user_strategy_id
+        , prediction_bet_id
+        , selection_run_id
+        , selected_at
+        , rank
+        , is_primary
+        , selection_reason
+    )
+    VALUES (
+          in_user_strategy_id
+        , in_prediction_bet_id
+        , in_selection_run_id
+        , COALESCE(in_selected_at, now())
+        , in_rank
+        , COALESCE(in_is_primary, false)
+        , COALESCE(in_selection_reason, '{}'::jsonb)
+    )
+    RETURNING strategy_selection_id
+    INTO out_strategy_selection_id;
+
+    RETURN out_strategy_selection_id;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION bet.odds_snapshot_create(
+    in_prediction_bet_id bigint DEFAULT NULL,
+    in_prediction_bet_leg_id bigint DEFAULT NULL,
+    in_match_source_id integer DEFAULT NULL,
+    in_market_key text DEFAULT NULL,
+    in_provider_code varchar DEFAULT 'stavka',
+    in_provider_market_ref text DEFAULT NULL,
+    in_provider_selection_ref text DEFAULT NULL,
+    in_odds_decimal numeric DEFAULT NULL,
+    in_captured_at timestamptz DEFAULT now(),
+    in_is_live boolean DEFAULT false,
+    in_payload jsonb DEFAULT NULL
+)
+RETURNS bigint
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    out_odds_snapshot_id bigint;
+BEGIN
+    INSERT INTO bet.odds_snapshot(
+          prediction_bet_id
+        , prediction_bet_leg_id
+        , match_source_id
+        , market_key
+        , provider_code
+        , provider_market_ref
+        , provider_selection_ref
+        , odds_decimal
+        , captured_at
+        , is_live
+        , payload
+    )
+    VALUES (
+          in_prediction_bet_id
+        , in_prediction_bet_leg_id
+        , in_match_source_id
+        , in_market_key
+        , COALESCE(in_provider_code, 'stavka')
+        , in_provider_market_ref
+        , in_provider_selection_ref
+        , in_odds_decimal
+        , COALESCE(in_captured_at, now())
+        , COALESCE(in_is_live, false)
+        , in_payload
+    )
+    RETURNING odds_snapshot_id
+    INTO out_odds_snapshot_id;
+
+    RETURN out_odds_snapshot_id;
+END;
+$function$;
+
+-- ============================================================
+-- 7. Usage notes
+-- ============================================================
+--
+-- Daily MVP expected flow:
+--   1) bet.prediction_card_create_from_match_analysis(match_analysis_id)
+--   2) app normalizes each recommended_bets item
+--   3) bet.prediction_bet_create(... one row per normalized bet ...)
+--   4) bet.bet_settlement_upsert(... pending ...)
+--   5) settlement worker later calls bet.bet_settlement_upsert(... settled/win/loss/...)
+--
+-- Express expected flow:
+--   1) bet.prediction_card_create(card_type='express')
+--   2) bet.prediction_bet_create(kind='express', odds_decimal=combined_odds)
+--   3) bet.prediction_bet_leg_create(... one row per leg ...)
+--   4) bet.bet_leg_settlement_upsert(... per leg ...)
+--   5) bet.bet_settlement_upsert(... final express outcome ...)
+--
+-- Important:
+--   Functions intentionally return scalar IDs, matching current project style.
+--   App code should read rich data through bet.v_* views.
+
+COMMIT;

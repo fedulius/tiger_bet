@@ -17,7 +17,7 @@ async function historyRoutes(fastify) {
     const sample = String(request.query?.sample || '') === '1';
     const userId = Number(request.user?.userId);
     const favoriteSports = await loadFavoriteSports(fastify, userId);
-    const payload = getHistory({ sample, favoriteSports });
+    const payload = await getHistory({ pg: fastify.pg, sample, favoriteSports });
     await logUserEvent(fastify, request, {
       eventName: 'screen.history_open',
       statusCode: 200,

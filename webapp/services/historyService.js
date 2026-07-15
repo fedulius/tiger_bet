@@ -1,8 +1,29 @@
+'use strict';
+
 const { FALLBACK_TOP_MATCHES } = require('./recommendationService');
+
+const DEFAULT_LIMIT = 20;
+const MAX_LIMIT = 100;
+
+function toNumber(value, fallback = 0) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : fallback;
+}
 
 function getEmptyHistoryPayload() {
   return {
     items: [],
+    summary: {
+      total_cards: 0,
+      total_bets: 0,
+      won_count: 0,
+      lost_count: 0,
+      void_count: 0,
+      pending_count: 0,
+      not_supported_count: 0,
+      profit_units: 0,
+      hit_rate_percent: null,
+    },
     empty_state: {
       message: 'Здесь появятся ваши последние прогнозы',
       cta: {
@@ -26,6 +47,17 @@ function getSampleHistoryPayload() {
         confidence: 68,
       },
     ],
+    summary: {
+      total_cards: 1,
+      total_bets: 1,
+      won_count: 0,
+      lost_count: 0,
+      void_count: 0,
+      pending_count: 1,
+      not_supported_count: 0,
+      profit_units: 0,
+      hit_rate_percent: null,
+    },
     empty_state: null,
     updated_at: new Date().toISOString(),
   };
@@ -54,14 +86,196 @@ function buildUserHistoryPayload(favoriteSports = []) {
 
   return {
     items,
+    summary: {
+      total_cards: items.length,
+      total_bets: items.length,
+      won_count: 0,
+      lost_count: 0,
+      void_count: 0,
+      pending_count: items.length,
+      not_supported_count: 0,
+      profit_units: 0,
+      hit_rate_percent: null,
+    },
     empty_state: null,
     updated_at: new Date().toISOString(),
   };
 }
 
-function getHistory({ sample = false, favoriteSports = [] } = {}) {
+function normalizeLimit(limit) {
+  const parsed = Number(limit ?? DEFAULT_LIMIT);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_LIMIT;
+  return Math.min(Math.trunc(parsed), MAX_LIMIT);
+}
+
+function getCardResult({ wonCount, lostCount, voidCount, pendingCount, notSupportedCount, betsCount }) {
+  if (betsCount <= 0) return { result_code: 'empty', result_label: 'Нет ставок' };
+  if (lostCount > 0 && wonCount > 0) return { result_code: 'mixed', result_label: `${wonCount} из ${betsCount}` };
+  if (lostCount > 0) return { result_code: 'lost', result_label: 'Не зашло' };
+  if (wonCount > 0 && wonCount === betsCount) return { result_code: 'won', result_label: 'Зашло' };
+  if (wonCount > 0) return { result_code: 'mixed', result_label: `${wonCount} из ${betsCount}` };
+  if (pendingCount > 0) return { result_code: 'pending', result_label: 'Ждём результат' };
+  if (notSupportedCount > 0) return { result_code: 'not_supported', result_label: 'Пока не рассчитываем' };
+  if (voidCount > 0) return { result_code: 'void', result_label: 'Возврат' };
+  return { result_code: 'unknown', result_label: 'Неизвестно' };
+}
+
+function mapBetRow(row) {
+  return {
+    id: `prediction-bet:${row.prediction_bet_id}`,
+    prediction_bet_id: toNumber(row.prediction_bet_id, null),
+    ordinal: toNumber(row.ordinal, 0),
+    kind: row.kind || 'single',
+    market_type: row.market_type_code || null,
+    market_name: row.market_type_name || null,
+    period: row.period_code || null,
+    label: row.display_label || row.market_key || '',
+    selection_code: row.selection_code || null,
+    line_value: row.line_value == null ? null : toNumber(row.line_value, null),
+    odds_decimal: row.odds_decimal == null ? null : toNumber(row.odds_decimal, null),
+    risk_level: row.risk_level_code || null,
+    confidence: row.confidence == null ? null : toNumber(row.confidence, null),
+    reason: row.reason || '',
+    settlement_status: row.settlement_status_code || 'pending',
+    settlement_result: row.settlement_result_code || null,
+    result_code: row.ui_result_code || 'pending',
+    result_label: row.ui_result_label || 'Ждём результат',
+    profit_factor: row.profit_factor == null ? null : toNumber(row.profit_factor, null),
+    reason_text: row.reason_text || '',
+  };
+}
+
+function buildSummary(items) {
+  const base = {
+    total_cards: items.length,
+    total_bets: 0,
+    won_count: 0,
+    lost_count: 0,
+    void_count: 0,
+    pending_count: 0,
+    not_supported_count: 0,
+    profit_units: 0,
+    hit_rate_percent: null,
+  };
+
+  for (const item of items) {
+    base.total_bets += toNumber(item.bets_count, 0);
+    base.won_count += toNumber(item.won_count, 0);
+    base.lost_count += toNumber(item.lost_count, 0);
+    base.void_count += toNumber(item.void_count, 0);
+    base.pending_count += toNumber(item.pending_count, 0);
+    base.not_supported_count += toNumber(item.not_supported_count, 0);
+    base.profit_units += toNumber(item.profit_units, 0);
+  }
+
+  base.profit_units = Number(base.profit_units.toFixed(6));
+  const settled = base.won_count + base.lost_count;
+  base.hit_rate_percent = settled > 0 ? Number(((base.won_count / settled) * 100).toFixed(2)) : null;
+  return base;
+}
+
+async function loadPredictionHistory(pg, { visibilityScope = 'public', limit = DEFAULT_LIMIT, offset = 0 } = {}) {
+  const safeLimit = normalizeLimit(limit);
+  const safeOffset = Math.max(0, Math.trunc(toNumber(offset, 0)));
+
+  const cardRows = await pg.connection(
+    `SELECT *
+     FROM bet.v_prediction_card_history
+     WHERE card_status_code = 'published'
+       AND visibility_scope = $1
+     ORDER BY published_at DESC, prediction_card_id DESC
+     LIMIT $2 OFFSET $3`,
+    [visibilityScope, safeLimit, safeOffset],
+  );
+
+  if (!Array.isArray(cardRows) || cardRows.length === 0) {
+    return getEmptyHistoryPayload();
+  }
+
+  const cardIds = cardRows.map((row) => toNumber(row.prediction_card_id, null)).filter((id) => id != null);
+  const betRows = cardIds.length > 0
+    ? await pg.connection(
+      `SELECT *
+       FROM bet.v_prediction_bet_settlements
+       WHERE prediction_card_id = ANY($1::bigint[])
+       ORDER BY prediction_card_id DESC, ordinal ASC, prediction_bet_id ASC`,
+      [cardIds],
+    )
+    : [];
+
+  const betsByCard = new Map();
+  for (const row of Array.isArray(betRows) ? betRows : []) {
+    const cardId = toNumber(row.prediction_card_id, null);
+    if (cardId == null) continue;
+    if (!betsByCard.has(cardId)) betsByCard.set(cardId, []);
+    betsByCard.get(cardId).push(mapBetRow(row));
+  }
+
+  const items = cardRows.map((row) => {
+    const cardId = toNumber(row.prediction_card_id, null);
+    const betsCount = toNumber(row.bets_count, 0);
+    const wonCount = toNumber(row.won_count, 0);
+    const lostCount = toNumber(row.lost_count, 0);
+    const voidCount = toNumber(row.void_count, 0);
+    const pendingCount = toNumber(row.pending_count, 0);
+    const notSupportedCount = toNumber(row.not_supported_count, 0);
+    const result = getCardResult({ wonCount, lostCount, voidCount, pendingCount, notSupportedCount, betsCount });
+
+    return {
+      id: `prediction-card:${row.prediction_card_id}`,
+      prediction_card_id: cardId,
+      card_type: row.card_type_code || null,
+      card_status: row.card_status_code || null,
+      published_at: row.published_at || null,
+      published_date: row.published_date || null,
+      match_id: row.match_id == null ? null : toNumber(row.match_id, null),
+      match: row.match_title || [row.home_team, row.away_team].filter(Boolean).join(' — '),
+      league: row.league || row.tournament_name || '',
+      sport_name: row.sport_name || '',
+      starts_at: row.match_start_at || null,
+      main_thought: row.headline || row.title || '',
+      headline: row.headline || row.title || '',
+      brief: row.brief || '',
+      risk_note: row.risk_note || '',
+      bets_count: betsCount,
+      won_count: wonCount,
+      lost_count: lostCount,
+      void_count: voidCount,
+      pending_count: pendingCount,
+      not_supported_count: notSupportedCount,
+      profit_units: toNumber(row.profit_units, 0),
+      hit_rate_percent: row.hit_rate_percent == null ? null : toNumber(row.hit_rate_percent, null),
+      result_code: result.result_code,
+      result_label: result.result_label,
+      bets: betsByCard.get(cardId) || [],
+    };
+  });
+
+  return {
+    items,
+    summary: buildSummary(items),
+    empty_state: null,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function getHistory({ pg = null, sample = false, favoriteSports = [], limit, offset } = {}) {
   if (sample) {
     return getSampleHistoryPayload();
+  }
+
+  if (pg && typeof pg.connection === 'function') {
+    return loadPredictionHistory(pg, { limit, offset }).then((history) => {
+      if (Array.isArray(history.items) && history.items.length > 0) {
+        return history;
+      }
+
+      if (Array.isArray(favoriteSports) && favoriteSports.length > 0) {
+        return buildUserHistoryPayload(favoriteSports);
+      }
+
+      return getEmptyHistoryPayload();
+    });
   }
 
   if (Array.isArray(favoriteSports) && favoriteSports.length > 0) {
@@ -73,4 +287,11 @@ function getHistory({ sample = false, favoriteSports = [] } = {}) {
 
 module.exports = {
   getHistory,
+  loadPredictionHistory,
+  __private: {
+    getCardResult,
+    mapBetRow,
+    buildSummary,
+    normalizeLimit,
+  },
 };
