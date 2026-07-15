@@ -1278,7 +1278,7 @@ a {
 }
 
 /* Screenshot-style analytics */
-.bets-analytics-section { margin: 0 16px 16px; }
+.bets-analytics-section { margin: 0; }
 .bets-analytics-label { margin: 0 0 8px; color: var(--text-3); font-size: 10px; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
 .bets-analytics-card, .bets-profit-card, .bets-records-card { overflow: hidden; border: 1px solid var(--sep); border-radius: var(--radius-sm); background: var(--surface); padding-bottom: 12px; }
 .bets-analytics-row { display: grid; grid-template-columns: 8px minmax(0, 1fr); align-items: center; gap: 9px; min-height: 49px; padding: 12px 13px; }
@@ -1322,7 +1322,7 @@ a {
 .bets-flat-aside > span:last-child { font-size: 10px; font-weight: 700; }
 
 @media (max-width: 360px) {
-  .bets-analytics-section { margin-left: 12px; margin-right: 12px; }
+  .bets-analytics-section { margin: 0; }
   .bets-history-all-label { margin-left: 12px; margin-right: 12px; }
   .bets-flat-list { margin-left: 12px; margin-right: 12px; }
 }
