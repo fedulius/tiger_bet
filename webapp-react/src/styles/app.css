@@ -1100,3 +1100,123 @@ a {
 .tab-content-enter {
   animation: tabFadeIn 0.25s ease-out;
 }
+
+/* ===== Bets history page ===== */
+.bets-page { width: 100%; min-width: 0; padding-bottom: 12px; }
+.bets-page-header { padding-bottom: 12px; }
+.bets-page-segments {
+  display: flex;
+  gap: 4px;
+  margin: 0 16px 16px;
+  padding: 4px;
+  border: 1px solid var(--sep);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.bets-page-segment {
+  min-width: 0;
+  flex: 1;
+  padding: 9px 5px;
+  border-radius: calc(var(--radius-sm) - 2px);
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.bets-page-segment-active { background: var(--accent-soft); color: var(--accent); }
+.bets-history-content { min-width: 0; }
+.bets-history-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 16px 10px;
+}
+.bets-history-summary-card {
+  min-width: 0;
+  padding: 12px 10px;
+  border: 1px solid var(--sep);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.bets-history-summary-label { color: var(--text-3); font-size: 10.5px; line-height: 1.2; }
+.bets-history-summary-value { margin-top: 6px; overflow: hidden; color: var(--text); font-size: 17px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.bets-history-summary-positive, .bets-history-profit-positive { color: var(--green); }
+.bets-history-summary-negative, .bets-history-profit-negative { color: var(--red); }
+.bets-history-counters {
+  display: flex;
+  gap: 6px;
+  margin: 0 16px 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.bets-history-counters::-webkit-scrollbar { display: none; }
+.bets-history-counter {
+  flex: 1 0 auto;
+  min-width: 66px;
+  padding: 8px 9px;
+  border: 1px solid var(--sep);
+  border-radius: 10px;
+  background: color-mix(in oklch, var(--surface) 82%, var(--bg));
+  color: var(--text-3);
+  font-size: 10px;
+  text-align: center;
+}
+.bets-history-counter strong { display: block; margin-top: 2px; color: var(--text); font-size: 14px; }
+.bets-history-counter-won strong { color: var(--green); }
+.bets-history-counter-lost strong { color: var(--red); }
+.bets-history-list { display: grid; gap: 10px; margin: 0 16px; }
+.bets-history-card { overflow: hidden; border: 1px solid var(--sep); border-radius: var(--radius); background: var(--surface); }
+.bets-history-card-toggle { display: flex; width: 100%; min-width: 0; gap: 12px; padding: 15px; text-align: left; }
+.bets-history-card-main { min-width: 0; flex: 1; }
+.bets-history-card-match { overflow: hidden; color: var(--text); font-size: 14px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.bets-history-card-meta { margin-top: 4px; color: var(--text-3); font-size: 11px; line-height: 1.35; }
+.bets-history-card-headline { margin-top: 8px; color: var(--accent); font-size: 12px; font-weight: 700; }
+.bets-history-card-aside { display: flex; flex: 0 0 auto; flex-direction: column; align-items: flex-end; gap: 4px; }
+.bets-history-status { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 7px; font-size: 10px; font-weight: 800; white-space: nowrap; }
+.bets-history-status-won { background: color-mix(in oklch, var(--green) 16%, transparent); color: var(--green); }
+.bets-history-status-lost { background: color-mix(in oklch, var(--red) 16%, transparent); color: var(--red); }
+.bets-history-status-mixed { background: color-mix(in oklch, var(--amber) 16%, transparent); color: var(--amber); }
+.bets-history-status-pending, .bets-history-status-void, .bets-history-status-not_supported, .bets-history-status-unknown { background: var(--accent-dim); color: var(--text-2); }
+.bets-history-card-profit { color: var(--text-2); font-size: 12px; font-weight: 800; }
+.bets-history-card-chevron { margin-top: 2px; color: var(--text-3); font-size: 15px; line-height: 1; }
+.bets-history-card-details { border-top: 1px solid var(--sep); padding: 12px 15px 14px; }
+.bets-history-card-brief, .bets-history-card-risk { color: var(--text-2); font-size: 12px; line-height: 1.5; }
+.bets-history-card-risk { margin-top: 6px; color: var(--amber); }
+.bets-history-bets-list { margin-top: 10px; }
+.bets-history-bet-row { display: flex; min-width: 0; gap: 10px; padding: 11px 0; border-top: 1px solid var(--sep); }
+.bets-history-bet-main { min-width: 0; flex: 1; }
+.bets-history-bet-label { color: var(--text); font-size: 12.5px; font-weight: 700; overflow-wrap: anywhere; }
+.bets-history-bet-meta { margin-top: 3px; color: var(--text-3); font-size: 10.5px; overflow-wrap: anywhere; }
+.bets-history-bet-reason { margin-top: 6px; color: var(--text-2); font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+.bets-history-bet-values { display: flex; flex: 0 0 auto; min-width: 76px; flex-direction: column; align-items: flex-end; gap: 3px; }
+.bets-history-bet-values strong { color: var(--text); font-size: 14px; }
+.bets-history-bet-values .bets-history-status { padding: 0; background: none; font-size: 10px; }
+.bets-history-bet-profit { font-size: 10.5px; font-weight: 700; }
+.bets-history-no-bets { padding: 10px 0 2px; color: var(--text-3); font-size: 12px; }
+.bets-history-load-more { display: block; width: calc(100% - 32px); margin: 14px 16px 0; padding: 12px; border: 1px solid var(--sep); border-radius: var(--radius-sm); color: var(--accent); font-size: 13px; font-weight: 800; }
+.bets-history-load-more:disabled { opacity: 0.55; }
+.bets-history-state { margin: 0 16px; padding: 28px 18px; border: 1px solid var(--sep); border-radius: var(--radius); background: var(--surface); text-align: center; }
+.bets-history-state h2, .bets-page-placeholder h2 { color: var(--text); font-size: 16px; }
+.bets-history-state p, .bets-page-placeholder p { margin-top: 8px; color: var(--text-2); font-size: 13px; line-height: 1.5; }
+.bets-history-state-error { color: var(--red); }
+.bets-page-cta { margin-top: 16px; padding: 11px 16px; border-radius: var(--radius-sm); background: var(--accent); color: oklch(0.22 0.01 250); font-size: 12px; font-weight: 800; }
+.bets-page-placeholder { margin: 24px 16px; padding: 34px 20px; border: 1px solid var(--sep); border-radius: var(--radius); background: var(--surface); text-align: center; }
+.bets-page-placeholder-icon { color: var(--accent); font-size: 32px; line-height: 1; }
+.bets-page-placeholder h2 { margin-top: 14px; }
+.bets-history-skeletons { display: grid; gap: 10px; margin: 0 16px; }
+.bets-history-skeleton { padding: 18px 15px; border: 1px solid var(--sep); border-radius: var(--radius); background: var(--surface); }
+.bets-history-skeleton-line { position: relative; overflow: hidden; height: 11px; border-radius: 999px; background: var(--surface-2); }
+.bets-history-skeleton-line::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgba(255,255,255,0.16), transparent); animation: shimmer 1.2s ease-in-out infinite; }
+.bets-history-skeleton-line-wide { width: 64%; }
+.bets-history-skeleton-line-short { width: 35%; margin-top: 9px; }
+.bets-history-skeleton-line-body { width: 86%; margin-top: 20px; opacity: 0.75; }
+
+@media (max-width: 360px) {
+  .bets-page-segments { margin-left: 12px; margin-right: 12px; }
+  .bets-history-summary-grid, .bets-history-counters, .bets-history-list, .bets-history-skeletons, .bets-history-state, .bets-page-placeholder { margin-left: 12px; margin-right: 12px; }
+  .bets-history-load-more { width: calc(100% - 24px); margin-left: 12px; }
+  .bets-page-segment { font-size: 11px; }
+  .bets-history-card-toggle { padding: 13px 12px; gap: 8px; }
+  .bets-history-card-details { padding-left: 12px; padding-right: 12px; }
+  .bets-history-card-aside { max-width: 98px; }
+}

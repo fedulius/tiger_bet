@@ -99,6 +99,14 @@ export function getDailyPicks() {
   return getJson('/home/daily-picks');
 }
 
+export function getHistory({ limit = 20, offset = 0 } = {}) {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  });
+  return getJson(`/history?${params.toString()}`);
+}
+
 export async function fetchJSON(url, options = {}) {
   const hasBody = options.body != null;
   const headers = buildHeaders({
