@@ -1211,10 +1211,10 @@ a {
 .bets-history-skeleton-line-short { width: 35%; margin-top: 9px; }
 .bets-history-skeleton-line-body { width: 86%; margin-top: 20px; opacity: 0.75; }
 
-.bets-history-periods { display: flex; gap: 6px; margin: 0 4px 12px; }
+.bets-history-periods { display: flex; gap: 6px; margin: 0 16px 12px; }
 .bets-history-period { flex: 1; min-width: 0; padding: 8px 6px; border: 1px solid var(--sep); border-radius: 999px; color: var(--text-3); font-size: 11px; font-weight: 700; }
 .bets-history-period-active { border-color: color-mix(in oklch, var(--accent) 55%, var(--sep)); background: var(--accent-soft); color: var(--accent); }
-.bets-history-overview { display: flex; align-items: center; gap: 22px; min-width: 0; margin: 0 4px 10px; padding: 18px; border: 1px solid var(--sep); border-radius: var(--radius); background: var(--surface); }
+.bets-history-overview { display: flex; align-items: center; gap: 22px; min-width: 0; margin: 0 16px 10px; padding: 18px; border: 1px solid var(--sep); border-radius: var(--radius); background: var(--surface); }
 .bets-history-donut { display: grid; flex: 0 0 116px; width: 116px; height: 116px; place-items: center; border-radius: 50%; background: conic-gradient(var(--green) var(--hit-rate), var(--red) var(--hit-rate) 100%); }
 .bets-history-donut::before { width: 88px; height: 88px; border-radius: 50%; background: var(--surface); content: ''; grid-area: 1 / 1; }
 .bets-history-donut-empty { background: var(--text-3); }
@@ -1230,12 +1230,12 @@ a {
 .bets-history-legend-dot-lost { background: var(--red); }
 .bets-history-legend-dot-void { background: var(--text-3); }
 .bets-history-neutral-info { margin-top: 7px; color: var(--text-3); font-size: 10px; line-height: 1.4; }
-.bets-history-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0 4px 14px; border: 1px solid var(--sep); border-radius: var(--radius-sm); background: var(--surface); }
+.bets-history-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0 16px 14px; border: 1px solid var(--sep); border-radius: var(--radius-sm); background: var(--surface); }
 .bets-history-metrics > div { min-width: 0; padding: 12px 10px; border-right: 1px solid var(--sep); }
 .bets-history-metrics > div:last-child { border-right: 0; }
 .bets-history-metrics span, .bets-history-metrics small { display: block; overflow-wrap: anywhere; color: var(--text-3); font-size: 9px; line-height: 1.3; }
 .bets-history-metrics strong { display: block; margin: 6px 0 3px; overflow: hidden; color: var(--text); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
-.bets-history-recent { margin: 0 4px 16px; padding: 13px 14px; border: 1px solid var(--sep); border-radius: var(--radius-sm); background: var(--surface); }
+.bets-history-recent { margin: 0 16px 16px; padding: 13px 14px; border: 1px solid var(--sep); border-radius: var(--radius-sm); background: var(--surface); }
 .bets-history-section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .bets-history-section-heading strong { color: var(--text); font-size: 13px; }
 .bets-history-section-heading span { color: var(--text-3); font-size: 10px; text-align: right; }
@@ -1245,7 +1245,7 @@ a {
 .bets-history-streak-lost { background: color-mix(in oklch, var(--red) 18%, transparent); color: var(--red); }
 .bets-history-streak-void, .bets-history-streak-pending, .bets-history-streak-not_supported { color: var(--text-2); }
 .bets-history-recent-empty { color: var(--text-3); font-size: 11px; }
-.bets-history-breakdowns { display: grid; gap: 10px; margin: 0 4px 16px; }
+.bets-history-breakdowns { display: grid; gap: 10px; margin: 0 16px 16px; }
 .bets-history-breakdown { overflow: hidden; border: 1px solid var(--sep); border-radius: var(--radius-sm); background: var(--surface); }
 .bets-history-breakdown-title { padding: 11px 13px 8px; color: var(--text); font-size: 13px; font-weight: 800; }
 .bets-history-breakdown-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; padding: 10px 13px; border-top: 1px solid var(--sep); }
@@ -1257,14 +1257,14 @@ a {
 .bets-history-breakdown-stats span { font-size: 10px; font-weight: 700; white-space: nowrap; }
 .bets-history-breakdown-counts { display: flex; grid-column: 1 / -1; gap: 8px; overflow: hidden; color: var(--text-3); font-size: 9px; white-space: nowrap; }
 .bets-history-breakdown-empty { padding: 12px 13px; border-top: 1px solid var(--sep); color: var(--text-3); font-size: 11px; }
-.bets-history-list-heading { margin: 0 4px 8px; color: var(--text-2); font-size: 12px; font-weight: 800; }
+.bets-history-list-heading { margin: 0 16px 8px; color: var(--text-2); font-size: 12px; font-weight: 800; }
 .bets-history-card { border-radius: var(--radius-sm); }
 .bets-history-card-toggle { padding-top: 12px; padding-bottom: 12px; }
 .bets-history-card-meta { font-size: 10px; }
 
 @media (max-width: 360px) {
   .bets-page-segments { margin-left: 12px; margin-right: 12px; }
-  .bets-history-periods, .bets-history-overview, .bets-history-metrics, .bets-history-recent, .bets-history-breakdowns, .bets-history-list-heading { margin-left: 4px; margin-right: 4px; }
+  .bets-history-periods, .bets-history-overview, .bets-history-metrics, .bets-history-recent, .bets-history-breakdowns, .bets-history-list-heading { margin-left: 12px; margin-right: 12px; }
   .bets-history-overview { gap: 12px; padding: 12px; }
   .bets-history-donut { flex-basis: 96px; width: 96px; height: 96px; }
   .bets-history-donut::before { width: 72px; height: 72px; }
@@ -1278,7 +1278,7 @@ a {
 }
 
 /* Screenshot-style analytics */
-.bets-analytics-section { margin: 0 4px 16px; }
+.bets-analytics-section { margin: 0 16px 16px; }
 .bets-analytics-label { margin: 0 0 8px; color: var(--text-3); font-size: 10px; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
 .bets-analytics-card, .bets-profit-card, .bets-records-card { overflow: hidden; border: 1px solid var(--sep); border-radius: var(--radius-sm); background: var(--surface); padding-bottom: 12px; }
 .bets-analytics-row { display: grid; grid-template-columns: 8px minmax(0, 1fr); align-items: center; gap: 9px; min-height: 49px; padding: 12px 13px; }
@@ -1310,7 +1310,7 @@ a {
 .bets-record-row span { color: var(--text-2); font-size: 11px; }
 .bets-record-row strong { color: var(--text); font-size: 12px; text-align: right; }
 .bets-history-all-label { margin: 0 16px 8px; }
-.bets-flat-list { display: grid; gap: 8px; margin: 0 4px; }
+.bets-flat-list { display: grid; gap: 8px; margin: 0 16px; }
 .bets-flat-card { display: flex; min-width: 0; justify-content: space-between; gap: 12px; padding: 13px; border: 1px solid var(--sep); border-radius: var(--radius-sm); background: var(--surface); }
 .bets-flat-main { min-width: 0; flex: 1; }
 .bets-flat-main > strong { display: block; overflow: hidden; color: var(--text); font-size: 12.5px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
@@ -1322,7 +1322,7 @@ a {
 .bets-flat-aside > span:last-child { font-size: 10px; font-weight: 700; }
 
 @media (max-width: 360px) {
-  .bets-analytics-section { margin-left: 4px; margin-right: 4px; }
+  .bets-analytics-section { margin-left: 12px; margin-right: 12px; }
   .bets-history-all-label { margin-left: 12px; margin-right: 12px; }
-  .bets-flat-list { margin-left: 4px; margin-right: 4px; }
+  .bets-flat-list { margin-left: 12px; margin-right: 12px; }
 }
