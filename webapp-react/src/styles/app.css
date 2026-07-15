@@ -1245,6 +1245,18 @@ a {
 .bets-history-streak-lost { background: color-mix(in oklch, var(--red) 18%, transparent); color: var(--red); }
 .bets-history-streak-void, .bets-history-streak-pending, .bets-history-streak-not_supported { color: var(--text-2); }
 .bets-history-recent-empty { color: var(--text-3); font-size: 11px; }
+.bets-history-breakdowns { display: grid; gap: 10px; margin: 0 16px 16px; }
+.bets-history-breakdown { overflow: hidden; border: 1px solid var(--sep); border-radius: var(--radius-sm); background: var(--surface); }
+.bets-history-breakdown-title { padding: 11px 13px 8px; color: var(--text); font-size: 13px; font-weight: 800; }
+.bets-history-breakdown-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; padding: 10px 13px; border-top: 1px solid var(--sep); }
+.bets-history-breakdown-main { min-width: 0; }
+.bets-history-breakdown-main strong { display: block; overflow: hidden; color: var(--text); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.bets-history-breakdown-main span { display: block; margin-top: 2px; color: var(--text-3); font-size: 10px; }
+.bets-history-breakdown-stats { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.bets-history-breakdown-stats strong { color: var(--text); font-size: 12px; }
+.bets-history-breakdown-stats span { font-size: 10px; font-weight: 700; white-space: nowrap; }
+.bets-history-breakdown-counts { display: flex; grid-column: 1 / -1; gap: 8px; overflow: hidden; color: var(--text-3); font-size: 9px; white-space: nowrap; }
+.bets-history-breakdown-empty { padding: 12px 13px; border-top: 1px solid var(--sep); color: var(--text-3); font-size: 11px; }
 .bets-history-list-heading { margin: 0 16px 8px; color: var(--text-2); font-size: 12px; font-weight: 800; }
 .bets-history-card { border-radius: var(--radius-sm); }
 .bets-history-card-toggle { padding-top: 12px; padding-bottom: 12px; }
@@ -1252,7 +1264,7 @@ a {
 
 @media (max-width: 360px) {
   .bets-page-segments { margin-left: 12px; margin-right: 12px; }
-  .bets-history-periods, .bets-history-overview, .bets-history-metrics, .bets-history-recent, .bets-history-list-heading { margin-left: 12px; margin-right: 12px; }
+  .bets-history-periods, .bets-history-overview, .bets-history-metrics, .bets-history-recent, .bets-history-breakdowns, .bets-history-list-heading { margin-left: 12px; margin-right: 12px; }
   .bets-history-overview { gap: 12px; padding: 12px; }
   .bets-history-donut { flex-basis: 96px; width: 96px; height: 96px; }
   .bets-history-donut::before { width: 72px; height: 72px; }

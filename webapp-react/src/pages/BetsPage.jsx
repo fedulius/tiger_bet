@@ -9,6 +9,9 @@ import {
   getAverageOdds,
   filterHistoryCardsByPeriod,
   getHistoryStatsFromCards,
+  aggregateBetsByMarketType,
+  aggregateBetsByDirection,
+  formatProfitUnits,
 } from '../lib/bets-history.js';
 import { formatMoscowDateTime } from '../lib/format.js';
 
@@ -24,6 +27,18 @@ const PERIODS = ['Неделя', 'Месяц', 'Всё время'];
 function formatOdds(value) {
   if (value == null || !Number.isFinite(Number(value))) return '—';
   return Number(value).toFixed(2);
+}
+
+function pluralBets(count) {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  const word = mod10 === 1 && mod100 !== 11
+    ? 'ставка'
+    : mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)
+      ? 'ставки'
+      : 'ставок';
+
+  return `${count} ${word}`;
 }
 
 function statusClass(code) {
@@ -86,6 +101,51 @@ function Summary({ summary, items, period, onPeriodChange }) {
         </div>
       </div>
     </>
+  );
+}
+
+function BetBreakdown({ title, groups }) {
+  return (
+    <section className="bets-history-breakdown" aria-label={title}>
+      <div className="bets-history-breakdown-title">{title}</div>
+      {groups.length > 0 ? groups.map((group) => {
+        const resultCounts = [
+          ['Зашло', group.won],
+          ['Не зашло', group.lost],
+          ['Возврат', group.void],
+          ['Ждём', group.pending],
+          ['Не рассчитываем', group.not_supported],
+        ];
+
+        return (
+        <div className="bets-history-breakdown-row" key={group.key}>
+          <div className="bets-history-breakdown-main">
+            <strong>{group.label}</strong>
+            <span>{pluralBets(group.total)}</span>
+          </div>
+          <div className="bets-history-breakdown-stats">
+            <strong>{group.hit_rate_percent == null ? '—' : `${group.hit_rate_percent.toFixed(2)}%`}</strong>
+            <span className={group.profit_units >= 0 ? 'bets-history-profit-positive' : 'bets-history-profit-negative'}>{formatProfitUnits(group.profit_units)} ед.</span>
+          </div>
+          <div className="bets-history-breakdown-counts" aria-label="Счётчики результатов">
+            {resultCounts.map(([label, count]) => <span key={label}>{label} {count}</span>)}
+          </div>
+        </div>
+        );
+      }) : <div className="bets-history-breakdown-empty">Нет данных за период</div>}
+    </section>
+  );
+}
+
+function BetBreakdowns({ items }) {
+  const byMarketType = useMemo(() => aggregateBetsByMarketType(items), [items]);
+  const byDirection = useMemo(() => aggregateBetsByDirection(items), [items]);
+
+  return (
+    <div className="bets-history-breakdowns">
+      <BetBreakdown title="По типам ставок" groups={byMarketType} />
+      <BetBreakdown title="По направлениям" groups={byDirection} />
+    </div>
   );
 }
 
@@ -263,6 +323,7 @@ export function BetsPage() {
           {!loading && !error && (
             <>
               <Summary summary={filteredSummary} items={filteredItems} period={period} onPeriodChange={setPeriod} />
+              <BetBreakdowns items={filteredItems} />
               <div className="bets-history-list-heading">История ставок</div>
               {filteredItems.length > 0 ? (
                 <div className="bets-history-list">

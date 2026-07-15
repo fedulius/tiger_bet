@@ -12,6 +12,8 @@ import {
   getAverageOdds,
   filterHistoryCardsByPeriod,
   getHistoryStatsFromCards,
+  aggregateBetsByMarketType,
+  aggregateBetsByDirection,
 } from '../src/lib/bets-history.js';
 
 import { getHistory } from '../src/lib/api.js';
@@ -205,6 +207,105 @@ test('getHistoryStatsFromCards recomputes filtered counts, hit rate and profit',
     profit_label: '+1.00',
     hit_rate_label: '60.00%',
   });
+});
+
+test('aggregateBetsByMarketType groups nested bets and keeps unsupported neutral', () => {
+  const groups = aggregateBetsByMarketType([
+    { bets: [
+      { market_type: 'one_x_two', market_name: 'Победа', result_code: 'won', profit_units: 0.8 },
+      { market_type: 'one_x_two', market_name: 'Победа', result_code: 'lost', profit_units: -1 },
+      { market_type: 'total_over', market_name: 'Тотал больше', result_code: 'not_supported', profit_units: 0 },
+    ] },
+    { bets: [{ market_type: 'total_over', market_name: 'Тотал больше', result_code: 'pending', profit_units: 0 }] },
+  ]);
+
+  assert.deepEqual(groups, [
+    {
+      key: 'one_x_two|Победа', label: 'Исход матча', total: 2, won: 1, lost: 1, void: 0,
+      pending: 0, not_supported: 0, profit_units: -0.2, hit_rate_percent: 50,
+    },
+    {
+      key: 'total_over|Тотал больше', label: 'Тотал матча', total: 2, won: 0, lost: 0, void: 0,
+      pending: 1, not_supported: 1, profit_units: 0, hit_rate_percent: null,
+    },
+  ]);
+});
+
+test('aggregateBetsByMarketType uses Russian labels for known market types and falls back safely', () => {
+  const marketTypes = [
+    ['one_x_two', 'Исход матча'],
+    ['double_chance', 'Двойной шанс'],
+    ['total_over', 'Тотал матча'],
+    ['total_under', 'Тотал матча'],
+    ['total', 'Тотал матча'],
+    ['match_total', 'Тотал матча'],
+    ['team_total', 'Индивидуальный тотал'],
+    ['both_to_score', 'Обе забьют'],
+    ['correct_score', 'Точный счёт'],
+    ['handicap', 'Фора'],
+    ['asian_handicap', 'Фора'],
+  ];
+  const cards = [{ bets: marketTypes.map(([market_type]) => ({ market_type, market_name: 'API English label' })) }];
+  cards[0].bets.push(
+    { market_type: 'unknown_type', market_name: 'Название рынка' },
+    { market_type: 'unknown_without_name', market_name: '' },
+  );
+
+  assert.deepEqual(
+    aggregateBetsByMarketType(cards).map(({ key, label, total }) => ({ key, label, total })),
+    [
+      ...marketTypes.map(([market_type, label]) => ({ key: `${market_type}|API English label`, label, total: 1 })),
+      { key: 'unknown_type|Название рынка', label: 'Название рынка', total: 1 },
+      { key: 'unknown_without_name|', label: 'unknown_without_name', total: 1 },
+    ],
+  );
+});
+
+test('aggregateBetsByMarketType translates the live total market contract', () => {
+  const [group] = aggregateBetsByMarketType([
+    { bets: [{ market_type: 'total', market_name: 'Match total' }] },
+  ]);
+
+  assert.equal(group.label, 'Тотал матча');
+});
+
+test('aggregateBetsByDirection classifies every total_ market as totals', () => {
+  const groups = aggregateBetsByDirection([
+    { bets: [
+      { market_type: 'total_corners', market_name: 'Угловые', result_code: 'won', profit_units: 0.5 },
+      { market_type: 'total_foo', market_name: 'Особый рынок', result_code: 'lost', profit_units: -1 },
+    ] },
+  ]);
+
+  assert.deepEqual(groups.map(({ key, label, total, won, lost, profit_units, hit_rate_percent }) => ({
+    key, label, total, won, lost, profit_units, hit_rate_percent,
+  })), [
+    { key: 'Тоталы', label: 'Тоталы', total: 2, won: 1, lost: 1, profit_units: -0.5, hit_rate_percent: 50 },
+  ]);
+});
+
+test('aggregateBetsByDirection classifies requested market families and calculates metrics', () => {
+  const groups = aggregateBetsByDirection([
+    { bets: [
+      { market_type: 'double_chance', market_name: 'X2', result_code: 'won', profit_units: 0.5 },
+      { market_type: 'total_under', market_name: 'ТМ 2.5', result_code: 'lost', profit_units: -1 },
+      { market_type: 'asian_handicap', market_name: 'Фора -1', result_code: 'void', profit_units: 0 },
+      { market_type: 'both_to_score', market_name: 'Обе забьют', result_code: 'pending', profit_units: 0 },
+      { market_type: 'correct_score', market_name: 'Точный счёт 2:1', result_code: 'not_supported', profit_units: 0 },
+      { market_type: 'corners', market_name: 'Угловые', result_code: 'won', profit_units: 0.25 },
+    ] },
+  ]);
+
+  assert.deepEqual(groups.map(({ key, label, total, won, lost, void: voidCount, pending, not_supported, profit_units, hit_rate_percent }) => ({
+    key, label, total, won, lost, void: voidCount, pending, not_supported, profit_units, hit_rate_percent,
+  })), [
+    { key: 'Победа/исходы', label: 'Победа/исходы', total: 1, won: 1, lost: 0, void: 0, pending: 0, not_supported: 0, profit_units: 0.5, hit_rate_percent: 100 },
+    { key: 'Тоталы', label: 'Тоталы', total: 1, won: 0, lost: 1, void: 0, pending: 0, not_supported: 0, profit_units: -1, hit_rate_percent: 0 },
+    { key: 'Фора', label: 'Фора', total: 1, won: 0, lost: 0, void: 1, pending: 0, not_supported: 0, profit_units: 0, hit_rate_percent: null },
+    { key: 'Обе забьют', label: 'Обе забьют', total: 1, won: 0, lost: 0, void: 0, pending: 1, not_supported: 0, profit_units: 0, hit_rate_percent: null },
+    { key: 'Точный счёт', label: 'Точный счёт', total: 1, won: 0, lost: 0, void: 0, pending: 0, not_supported: 1, profit_units: 0, hit_rate_percent: null },
+    { key: 'Прочее', label: 'Прочее', total: 1, won: 1, lost: 0, void: 0, pending: 0, not_supported: 0, profit_units: 0.25, hit_rate_percent: 100 },
+  ]);
 });
 
 test('getHistory calls the existing history endpoint with limit and offset', async () => {

@@ -249,3 +249,91 @@ export function getHistoryStatsFromCards(cards = []) {
   stats.hit_rate_label = stats.hit_rate_percent == null ? '—' : `${stats.hit_rate_percent.toFixed(2)}%`;
   return stats;
 }
+
+function createBetAggregate(key, label) {
+  return {
+    key,
+    label,
+    total: 0,
+    won: 0,
+    lost: 0,
+    void: 0,
+    pending: 0,
+    not_supported: 0,
+    profit_units: 0,
+    hit_rate_percent: null,
+  };
+}
+
+function addBetToAggregate(aggregate, bet) {
+  const status = getBetStatus(bet);
+  aggregate.total += 1;
+  if (status === 'won') aggregate.won += 1;
+  if (status === 'lost') aggregate.lost += 1;
+  if (status === 'void') aggregate.void += 1;
+  if (status === 'pending') aggregate.pending += 1;
+  if (status === 'not_supported') aggregate.not_supported += 1;
+  aggregate.profit_units += finiteNumber(bet?.profit_units ?? bet?.profit_factor);
+}
+
+function finalizeBetAggregate(aggregate) {
+  aggregate.profit_units = Number(aggregate.profit_units.toFixed(10));
+  const settled = aggregate.won + aggregate.lost;
+  aggregate.hit_rate_percent = settled > 0 ? (aggregate.won / settled) * 100 : null;
+  return aggregate;
+}
+
+function aggregateBets(cards, getGroup) {
+  const groups = new Map();
+  (Array.isArray(cards) ? cards : []).forEach((card) => {
+    (Array.isArray(card?.bets) ? card.bets : []).forEach((bet) => {
+      const group = getGroup(bet);
+      if (!groups.has(group.key)) groups.set(group.key, createBetAggregate(group.key, group.label));
+      addBetToAggregate(groups.get(group.key), bet);
+    });
+  });
+  return Array.from(groups.values()).map(finalizeBetAggregate);
+}
+
+const MARKET_TYPE_LABELS = {
+  one_x_two: 'Исход матча',
+  double_chance: 'Двойной шанс',
+  total_over: 'Тотал матча',
+  total_under: 'Тотал матча',
+  total: 'Тотал матча',
+  match_total: 'Тотал матча',
+  team_total: 'Индивидуальный тотал',
+  both_to_score: 'Обе забьют',
+  correct_score: 'Точный счёт',
+  handicap: 'Фора',
+  asian_handicap: 'Фора',
+};
+
+export function aggregateBetsByMarketType(cards = []) {
+  return aggregateBets(cards, (bet) => {
+    const marketType = safeText(bet?.market_type).trim();
+    const marketName = safeText(bet?.market_name).trim();
+    const key = `${marketType}|${marketName}`;
+    const normalizedType = marketType.toLowerCase();
+    const label = MARKET_TYPE_LABELS[normalizedType] || marketName || marketType || 'Прочее';
+    return { key, label };
+  });
+}
+
+function getBetDirection(bet) {
+  const marketType = safeText(bet?.market_type).trim().toLowerCase();
+  const marketText = [bet?.market_name, bet?.label].map((value) => safeText(value).toLowerCase()).join(' ');
+  if (['one_x_two', 'double_chance'].includes(marketType)) return 'Победа/исходы';
+  if (marketType.startsWith('total_') || ['match_total', 'team_total'].includes(marketType) || marketText.includes('тотал') || marketText.includes('total')) return 'Тоталы';
+  if (marketType.includes('handicap') || marketText.includes('фора')) return 'Фора';
+  if (marketType === 'both_to_score' || marketText.includes('обе забьют')) return 'Обе забьют';
+  if (marketType === 'correct_score' || marketText.includes('точный счёт') || marketText.includes('точный счет')) return 'Точный счёт';
+  return 'Прочее';
+}
+
+export function aggregateBetsByDirection(cards = []) {
+  return aggregateBets(cards, (bet) => {
+    const label = getBetDirection(bet);
+    return { key: label, label };
+  });
+}
