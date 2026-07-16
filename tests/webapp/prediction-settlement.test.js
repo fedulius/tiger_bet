@@ -41,10 +41,28 @@ test('pure rules support 1X2 and double chance and reject unsupported period/mar
   assert.equal(settlePredictionBet(bet({ market_type_code: 'one_x_two', selection_code: 'home', line_value: null }), score(2, 0)).settlement_result_code, 'win');
   assert.equal(settlePredictionBet(bet({ market_type_code: 'double_chance', selection_code: 'home_or_draw', line_value: null }), score(1, 1)).settlement_result_code, 'win');
   assert.equal(settlePredictionBet(bet({ market_type_code: 'double_chance', selection_code: 'x2', line_value: null }), score(0, 2)).settlement_result_code, 'win');
-  assert.deepEqual(settlePredictionBet(bet({ market_type_code: 'handicap' }), score(1, 0)), {
-    settlement_status_code: 'not_supported', settlement_result_code: 'unknown', reason_code: 'unsupported_market',
-  });
   assert.equal(settlePredictionBet(bet({ period_code: 'first_half' }), score(1, 0)).settlement_status_code, 'not_supported');
+});
+
+test('pure rules settle handicap with win loss and push', () => {
+  assert.equal(settlePredictionBet(bet({ market_type_code: 'handicap', participant_scope: 'home_team', selection_code: 'home_team', line_value: '-1.5' }), score(3, 1)).settlement_result_code, 'win');
+  assert.equal(settlePredictionBet(bet({ market_type_code: 'handicap', participant_scope: 'home_team', selection_code: 'home_team', line_value: '-1.5' }), score(2, 1)).settlement_result_code, 'loss');
+  assert.equal(settlePredictionBet(bet({ market_type_code: 'handicap', participant_scope: 'away_team', selection_code: 'away_team', line_value: '1.5' }), score(2, 1)).settlement_result_code, 'win');
+  assert.equal(settlePredictionBet(bet({ market_type_code: 'handicap', participant_scope: 'away_team', selection_code: 'away_team', line_value: '-1' }), score(0, 1)).settlement_result_code, 'push');
+});
+
+test('pure rules reject unsupported asian quarter handicap lines', () => {
+  assert.deepEqual(settlePredictionBet(bet({ market_type_code: 'handicap', participant_scope: 'home_team', selection_code: 'home_team', line_value: '-0.25' }), score(1, 1)), {
+    settlement_status_code: 'not_supported', settlement_result_code: 'unknown', reason_code: 'unsupported_quarter_handicap',
+  });
+  assert.deepEqual(settlePredictionBet(bet({ market_type_code: 'handicap', participant_scope: 'away_team', selection_code: 'away_team', line_value: '0.75' }), score(1, 1)), {
+    settlement_status_code: 'not_supported', settlement_result_code: 'unknown', reason_code: 'unsupported_quarter_handicap',
+  });
+});
+
+test('early settlement does not close handicap before full time', () => {
+  const outcome = settleEarlyPredictionBet(bet({ market_type_code: 'handicap', participant_scope: 'home_team', selection_code: 'home_team', line_value: '-1.5' }), { home_score: 5, away_score: 0 });
+  assert.deepEqual(outcome, { settlement_status_code: 'pending', settlement_result_code: 'unknown', reason_code: 'not_mathematically_locked' });
 });
 
 test('missing final score remains pending and unknown, never loss', () => {

@@ -2,7 +2,7 @@
 
 const sstatsApi = require('../../lib/sstatsApi');
 
-const SUPPORTED_MARKETS = new Set(['one_x_two', 'double_chance', 'total', 'both_to_score', 'correct_score']);
+const SUPPORTED_MARKETS = new Set(['one_x_two', 'double_chance', 'total', 'both_to_score', 'correct_score', 'handicap']);
 const FINAL_STATUSES = new Set(['finished', 'completed', 'ft', 'full_time', 'final']);
 
 function numberOrNull(value) {
@@ -93,6 +93,29 @@ function unsupported(reason_code) {
   return { settlement_status_code: 'not_supported', settlement_result_code: 'unknown', reason_code };
 }
 
+function isQuarterLine(line) {
+  if (line === null) return false;
+  const doubled = Math.abs(line * 2);
+  return Math.abs(doubled - Math.round(doubled)) > 1e-9;
+}
+
+function resolveParticipantScope(row, market) {
+  const scope = String(row.participant_scope || row.team_scope || row.selection_participant || market.selection || '').toLowerCase();
+  if (['home', 'home_team', '1', 'home_team_id'].includes(scope)) return 'home';
+  if (['away', 'away_team', '2', 'away_team_id'].includes(scope)) return 'away';
+  return null;
+}
+
+function settleHandicap(row, market, home, away) {
+  if (market.line === null) return unsupported('invalid_handicap');
+  if (isQuarterLine(market.line)) return unsupported('unsupported_quarter_handicap');
+  const side = resolveParticipantScope(row, market);
+  if (!side) return unsupported('unsupported_selection');
+  const adjusted = side === 'home' ? home + market.line - away : away + market.line - home;
+  if (Math.abs(adjusted) < 1e-9) return { settlement_status_code: 'settled', settlement_result_code: 'push', reason_code: 'handicap_equals_line' };
+  return { settlement_status_code: 'settled', settlement_result_code: adjusted > 0 ? 'win' : 'loss', reason_code: adjusted > 0 ? 'rule_match' : 'rule_mismatch' };
+}
+
 function settleEarlyPredictionBet(row, liveScore) {
   const market = parseMarket(row);
   if (!liveScore || numberOrNull(liveScore.home_score) === null || numberOrNull(liveScore.away_score) === null) {
@@ -152,6 +175,8 @@ function settlePredictionBet(row, finalScore) {
     if (!['yes', 'no'].includes(market.selection)) return unsupported('unsupported_selection');
     const actual = home > 0 && away > 0;
     won = market.selection === 'yes' ? actual : !actual;
+  } else if (market.market === 'handicap') {
+    return settleHandicap(row, market, home, away);
   } else {
     const expectedHome = numberOrNull(row.score_home);
     const expectedAway = numberOrNull(row.score_away);
