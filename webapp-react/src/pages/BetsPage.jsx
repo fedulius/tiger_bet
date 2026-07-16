@@ -14,6 +14,7 @@ import {
   getProfitBuckets,
   getHistoryRecords,
   getHistoryRecordStreaks,
+  formatProfitUnits,
 } from '../lib/bets-history.js';
 import { formatMoscowDateTime } from '../lib/format.js';
 
@@ -191,7 +192,74 @@ function BetBreakdowns({ items }) {
   </div>;
 }
 
-function BetRow({ bet }) {
+function getAggregatedResultCode({ wonCount, lostCount, voidCount, pendingCount, notSupportedCount, betsCount }) {
+  if (betsCount <= 0) return 'empty';
+  if (lostCount > 0 && wonCount > 0) return 'mixed';
+  if (lostCount > 0) return 'lost';
+  if (wonCount > 0 && wonCount === betsCount) return 'won';
+  if (wonCount > 0) return 'mixed';
+  if (pendingCount > 0) return 'pending';
+  if (notSupportedCount > 0) return 'not_supported';
+  if (voidCount > 0) return 'void';
+  return 'unknown';
+}
+
+function groupCardsByMatch(cards = []) {
+  const groups = new Map();
+  (Array.isArray(cards) ? cards : []).forEach((card) => {
+    const key = card.primary_match_id != null
+      ? `match:${card.primary_match_id}`
+      : `match:${card.match || 'unknown'}:${card.starts_at || card.published_at || ''}`;
+    const existing = groups.get(key);
+    if (!existing) {
+      groups.set(key, {
+        ...card,
+        id: `match-block:${key}`,
+        source_card_ids: card.prediction_card_id != null ? [card.prediction_card_id] : [],
+        bets: Array.isArray(card.bets) ? [...card.bets] : [],
+        bets_count: Number(card.bets_count) || (Array.isArray(card.bets) ? card.bets.length : 0),
+        won_count: Number(card.won_count) || 0,
+        lost_count: Number(card.lost_count) || 0,
+        void_count: Number(card.void_count) || 0,
+        pending_count: Number(card.pending_count) || 0,
+        not_supported_count: Number(card.not_supported_count) || 0,
+        profit_units: Number(card.profit_units) || 0,
+      });
+      return;
+    }
+    if (card.prediction_card_id != null) existing.source_card_ids.push(card.prediction_card_id);
+    existing.bets.push(...(Array.isArray(card.bets) ? card.bets : []));
+    existing.bets_count += Number(card.bets_count) || (Array.isArray(card.bets) ? card.bets.length : 0);
+    existing.won_count += Number(card.won_count) || 0;
+    existing.lost_count += Number(card.lost_count) || 0;
+    existing.void_count += Number(card.void_count) || 0;
+    existing.pending_count += Number(card.pending_count) || 0;
+    existing.not_supported_count += Number(card.not_supported_count) || 0;
+    existing.profit_units += Number(card.profit_units) || 0;
+    if (!existing.headline && card.headline) existing.headline = card.headline;
+    if (!existing.starts_at && card.starts_at) existing.starts_at = card.starts_at;
+    if (!existing.published_at && card.published_at) existing.published_at = card.published_at;
+  });
+
+  return Array.from(groups.values()).map((group) => {
+    const resultCode = getAggregatedResultCode({
+      wonCount: group.won_count,
+      lostCount: group.lost_count,
+      voidCount: group.void_count,
+      pendingCount: group.pending_count,
+      notSupportedCount: group.not_supported_count,
+      betsCount: group.bets_count,
+    });
+    return {
+      ...group,
+      result_code: resultCode,
+      profit_units: Number(group.profit_units.toFixed(6)),
+      profit_label: formatProfitUnits(group.profit_units),
+    };
+  });
+}
+
+function BetRow({ bet, showReason = true }) {
   return (
     <div className="bets-history-bet-row">
       <div className="bets-history-bet-main">
@@ -199,7 +267,7 @@ function BetRow({ bet }) {
         <div className="bets-history-bet-meta">
           {[bet.market_name, bet.period, bet.line_value != null ? `линия ${bet.line_value}` : ''].filter(Boolean).join(' · ') || 'Одиночная ставка'}
         </div>
-        {bet.reason_text && <div className="bets-history-bet-reason">{bet.reason_text}</div>}
+        {showReason && bet.reason_text && <div className="bets-history-bet-reason">{bet.reason_text}</div>}
       </div>
       <div className="bets-history-bet-values">
         <strong>{formatOdds(bet.odds_decimal)}</strong>
@@ -212,47 +280,29 @@ function BetRow({ bet }) {
   );
 }
 
-function HistoryCard({ card, expanded, onToggle }) {
+function MatchBetBlock({ card }) {
   const status = getHistoryStatusPresentation(card.result_code);
   const date = formatMoscowDateTime(card.published_at || card.starts_at);
-
+  const meta = [card.sport_name, card.league, date].filter(Boolean).join(' · ') || 'Прогноз';
   return (
-    <article className={`bets-history-card ${expanded ? 'bets-history-card-expanded' : ''}`}>
-      <button className="bets-history-card-toggle" type="button" onClick={onToggle} aria-expanded={expanded}>
-        <div className="bets-history-card-main">
-          <div className="bets-history-card-match">{card.match || 'Матч'}</div>
-          <div className="bets-history-card-meta">{[card.sport_name, card.league].filter(Boolean).join(' · ') || 'Прогноз'}{date ? ` · ${date}` : ''}</div>
-          {card.headline && <div className="bets-history-card-headline">{card.headline}</div>}
+    <article className="bets-match-block">
+      <div className="bets-match-block-header">
+        <div className="bets-match-block-main">
+          <div className="bets-match-block-match">{card.match || 'Матч'}</div>
+          <div className="bets-match-block-meta">{meta}</div>
         </div>
-        <div className="bets-history-card-aside">
+        <div className="bets-match-block-aside">
           <span className={statusClass(status.code)}>{status.label}</span>
-          <span className="bets-history-card-profit">{card.profit_label}</span>
-          <span className="bets-history-card-chevron" aria-hidden="true">{expanded ? '⌃' : '⌄'}</span>
+          <strong className="bets-match-block-profit">{card.profit_label}</strong>
         </div>
-      </button>
-      {expanded && (
-        <div className="bets-history-card-details">
-          {card.brief && <p className="bets-history-card-brief">{card.brief}</p>}
-          {card.risk_note && <p className="bets-history-card-risk">{card.risk_note}</p>}
-          <div className="bets-history-bets-list">
-            {card.bets.length > 0 ? card.bets.map((bet) => <BetRow key={bet.id} bet={bet} />) : (
-              <div className="bets-history-no-bets">Детализация ставок пока недоступна</div>
-            )}
-          </div>
-        </div>
-      )}
+      </div>
+      <div className="bets-match-block-bets">
+        {card.bets.length > 0 ? card.bets.map((bet) => <BetRow key={bet.id} bet={bet} showReason={false} />) : (
+          <div className="bets-history-no-bets">Детализация ставок пока недоступна</div>
+        )}
+      </div>
     </article>
   );
-}
-
-function FlatBetCard({ record }) {
-  const date = formatMoscowDateTime(record.date);
-  const result = getHistoryStatusPresentation(record.result_code);
-  const meta = [date, record.league].filter(Boolean).join(' · ');
-  return <article className="bets-flat-card">
-    <div className="bets-flat-main"><strong>{record.match || 'Матч'}</strong><span className="bets-flat-label">{record.label || record.market_name || 'Ставка'}</span>{meta && <span className="bets-flat-meta">{meta}</span>}</div>
-    <div className="bets-flat-aside"><strong>{formatOdds(record.odds_decimal)}</strong><span className={statusClass(result.code)}>{result.label}</span><span className={record.profit_units >= 0 ? 'bets-history-profit-positive' : 'bets-history-profit-negative'}>{record.profit_label}</span></div>
-  </article>;
 }
 
 function Placeholder({ title, text, navigate }) {
@@ -278,7 +328,6 @@ export function BetsPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
-  const [expandedId, setExpandedId] = useState(null);
   const requestIdRef = useRef(0);
 
   const loadHistory = useCallback(async ({ append = false } = {}) => {
@@ -303,7 +352,6 @@ export function BetsPage() {
       });
       setPagination(payload?.pagination || { limit: HISTORY_LIMIT, offset, returned: mappedItems.length, total_cards: mappedItems.length });
       setEmptyState(payload?.empty_state || null);
-      setExpandedId(null);
     } catch (err) {
       if (requestId === requestIdRef.current) setError(err?.message || 'Не удалось загрузить историю');
     } finally {
@@ -339,6 +387,7 @@ export function BetsPage() {
   const canLoadMore = useMemo(() => hasNextHistoryPage(pagination), [pagination]);
   const filteredItems = useMemo(() => filterHistoryCardsByPeriod(items, period), [items, period]);
   const filteredSummary = useMemo(() => getHistoryStatsFromCards(filteredItems), [filteredItems]);
+  const matchBlocks = useMemo(() => groupCardsByMatch(filteredItems), [filteredItems]);
 
   return (
     <div className="bets-page">
@@ -377,9 +426,9 @@ export function BetsPage() {
               <Summary summary={filteredSummary} items={filteredItems} period={period} onPeriodChange={setPeriod} />
               <BetBreakdowns items={filteredItems} />
               <div className="bets-analytics-label bets-history-all-label">ВСЕ СТАВКИ</div>
-              {filteredItems.length > 0 ? (
-                <div className="bets-flat-list">
-                  {getHistoryRecords(filteredItems).map((record) => <FlatBetCard key={record.id} record={record} />)}
+              {matchBlocks.length > 0 ? (
+                <div className="bets-match-block-list">
+                  {matchBlocks.map((card) => <MatchBetBlock key={card.id} card={card} />)}
                 </div>
               ) : (
                 <div className="bets-history-state bets-history-empty-state">

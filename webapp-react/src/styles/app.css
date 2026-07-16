@@ -1310,6 +1310,17 @@ a {
 .bets-record-row span { color: var(--text-2); font-size: 11px; }
 .bets-record-row strong { color: var(--text); font-size: 12px; text-align: right; }
 .bets-history-all-label { margin: 0 16px 8px; }
+.bets-match-block-list { display: grid; gap: 10px; margin: 0 16px; }
+.bets-match-block { overflow: hidden; border: 1px solid var(--sep); border-radius: var(--radius-sm); background: var(--surface); }
+.bets-match-block-header { display: flex; min-width: 0; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 13px; }
+.bets-match-block-main { min-width: 0; flex: 1; }
+.bets-match-block-match { overflow: hidden; color: var(--text); font-size: 13px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.bets-match-block-meta { margin-top: 4px; color: var(--text-3); font-size: 10.5px; line-height: 1.35; }
+.bets-match-block-aside { display: flex; flex: 0 0 auto; min-width: 76px; flex-direction: column; align-items: flex-end; gap: 4px; }
+.bets-match-block-aside .bets-history-status { font-size: 10px; }
+.bets-match-block-profit { color: var(--text-2); font-size: 12px; font-weight: 800; }
+.bets-match-block-bets { border-top: 1px solid var(--sep); padding: 0 13px 2px; }
+.bets-match-block-bets .bets-history-bet-row:first-child { border-top: 0; }
 .bets-flat-list { display: grid; gap: 8px; margin: 0 16px; }
 .bets-flat-card { display: flex; min-width: 0; justify-content: space-between; gap: 12px; padding: 13px; border: 1px solid var(--sep); border-radius: var(--radius-sm); background: var(--surface); }
 .bets-flat-main { min-width: 0; flex: 1; }
@@ -1324,5 +1335,5 @@ a {
 @media (max-width: 360px) {
   .bets-analytics-section { margin: 0; }
   .bets-history-all-label { margin-left: 12px; margin-right: 12px; }
-  .bets-flat-list { margin-left: 12px; margin-right: 12px; }
+  .bets-flat-list, .bets-match-block-list { margin-left: 12px; margin-right: 12px; }
 }

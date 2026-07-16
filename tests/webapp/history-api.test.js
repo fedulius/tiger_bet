@@ -48,7 +48,54 @@ test('GET /history returns published Tiger Bet prediction history from bet views
       if (/FROM bet\.v_prediction_card_history/i.test(query)) {
         if (/COUNT\(\*\)/i.test(query)) {
           assert.deepEqual(params, ['public']);
-          return [{ total_cards: '4' }];
+          return [{ total_cards: '4', total_bets: '4', won_count: '3', lost_count: '1', void_count: '0', pending_count: '0', not_supported_count: '0', profit_units: '1.240000' }];
+        }
+        if (/primary_match_id = ANY/i.test(query)) {
+          assert.deepEqual(params, ['public', [55]]);
+          return [
+            {
+              prediction_card_id: '101',
+              card_type_code: 'daily',
+              card_status_code: 'published',
+              published_at: '2026-07-15T10:00:00.000Z',
+              published_date: '2026-07-15',
+              primary_match_id: 55,
+              home_team: 'France',
+              away_team: 'Spain',
+              tournament_name: 'Чемпионат мира',
+              title: 'France — Spain',
+              headline: 'Испания сильнее по форме',
+              bets_count: '3',
+              won_count: '2',
+              lost_count: '1',
+              void_count: '0',
+              pending_count: '0',
+              not_supported_count: '0',
+              profit_units: '0.740000',
+              hit_rate_percent: '66.67',
+            },
+            {
+              prediction_card_id: '102',
+              card_type_code: 'live',
+              card_status_code: 'published',
+              published_at: '2026-07-15T10:05:00.000Z',
+              published_date: '2026-07-15',
+              primary_match_id: 55,
+              home_team: 'France',
+              away_team: 'Spain',
+              tournament_name: 'Чемпионат мира',
+              title: 'France — Spain',
+              headline: 'Live ставка по матчу',
+              bets_count: '1',
+              won_count: '1',
+              lost_count: '0',
+              void_count: '0',
+              pending_count: '0',
+              not_supported_count: '0',
+              profit_units: '0.500000',
+              hit_rate_percent: '100',
+            },
+          ];
         }
         assert.deepEqual(params, ['public', 5, 2]);
         return [{
@@ -74,7 +121,7 @@ test('GET /history returns published Tiger Bet prediction history from bet views
         }];
       }
       if (/FROM bet\.v_prediction_bet_settlements/i.test(query)) {
-        assert.deepEqual(params, [[101]]);
+        assert.deepEqual(params, [[101, 102]]);
         return [
           {
             prediction_card_id: '101',
@@ -115,6 +162,23 @@ test('GET /history returns published Tiger Bet prediction history from bet views
             ui_result_label: 'Не зашло',
             profit_factor: '-1.000000',
           },
+          {
+            prediction_card_id: '102',
+            prediction_bet_id: '203',
+            ordinal: 1,
+            kind: 'single',
+            market_type_code: 'both_to_score',
+            market_type_name: 'Обе забьют',
+            period_code: 'full_time',
+            display_label: 'ОЗ да',
+            selection_code: 'yes',
+            odds_decimal: '1.50',
+            settlement_status_code: 'settled',
+            settlement_result_code: 'win',
+            ui_result_code: 'won',
+            ui_result_label: 'Зашло',
+            profit_factor: '0.500000',
+          },
         ];
       }
       return [];
@@ -133,13 +197,13 @@ test('GET /history returns published Tiger Bet prediction history from bet views
 
     assert.equal(response.statusCode, 200);
     const payload = response.json();
-    assert.equal(payload.items.length, 1);
+    assert.equal(payload.items.length, 2);
     assert.equal(payload.empty_state, null);
     assert.equal(payload.summary.total_cards, 4);
-    assert.equal(payload.summary.total_bets, 3);
-    assert.equal(payload.summary.won_count, 2);
+    assert.equal(payload.summary.total_bets, 4);
+    assert.equal(payload.summary.won_count, 3);
     assert.equal(payload.summary.lost_count, 1);
-    assert.equal(payload.summary.profit_units, 0.74);
+    assert.equal(payload.summary.profit_units, 1.24);
     assert.deepEqual(payload.pagination, { limit: 5, offset: 2, returned: 1, total_cards: 4 });
 
     const item = payload.items[0];
@@ -152,6 +216,11 @@ test('GET /history returns published Tiger Bet prediction history from bet views
     assert.equal(item.bets.length, 2);
     assert.equal(item.bets[0].result_code, 'won');
     assert.equal(item.bets[1].result_code, 'lost');
+    const sibling = payload.items[1];
+    assert.equal(sibling.id, 'prediction-card:102');
+    assert.equal(sibling.primary_match_id, 55);
+    assert.equal(sibling.bets.length, 1);
+    assert.equal(sibling.bets[0].result_code, 'won');
   } finally {
     await app.close();
   }

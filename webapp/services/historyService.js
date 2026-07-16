@@ -198,7 +198,7 @@ async function loadPredictionHistory(pg, { visibilityScope = 'public', limit = D
   );
   const totalCards = toNumber(totalRow?.total_cards, 0);
 
-  const cardRows = await pg.connection(
+  const pageCardRows = await pg.connection(
     `SELECT *
      FROM bet.v_prediction_card_history
      WHERE card_status_code = 'published'
@@ -208,7 +208,7 @@ async function loadPredictionHistory(pg, { visibilityScope = 'public', limit = D
     [visibilityScope, safeLimit, safeOffset],
   );
 
-  if (!Array.isArray(cardRows) || cardRows.length === 0) {
+  if (!Array.isArray(pageCardRows) || pageCardRows.length === 0) {
     const emptyPayload = getEmptyHistoryPayload();
     const summary = {
       ...emptyPayload.summary,
@@ -231,6 +231,26 @@ async function loadPredictionHistory(pg, { visibilityScope = 'public', limit = D
     };
   }
 
+  const pageMatchIds = [...new Set(pageCardRows
+    .map((row) => toNumber(row.primary_match_id, null))
+    .filter((id) => id != null))];
+  const siblingCardRows = pageMatchIds.length > 0
+    ? await pg.connection(
+      `SELECT *
+       FROM bet.v_prediction_card_history
+       WHERE card_status_code = 'published'
+         AND visibility_scope = $1
+         AND primary_match_id = ANY($2::bigint[])
+       ORDER BY published_at DESC, prediction_card_id DESC`,
+      [visibilityScope, pageMatchIds],
+    )
+    : [];
+  const cardRowsById = new Map();
+  for (const row of [...pageCardRows, ...(Array.isArray(siblingCardRows) ? siblingCardRows : [])]) {
+    const cardId = toNumber(row.prediction_card_id, null);
+    if (cardId != null && !cardRowsById.has(cardId)) cardRowsById.set(cardId, row);
+  }
+  const cardRows = Array.from(cardRowsById.values());
   const cardIds = cardRows.map((row) => toNumber(row.prediction_card_id, null)).filter((id) => id != null);
   const betRows = cardIds.length > 0
     ? await pg.connection(
@@ -304,7 +324,7 @@ async function loadPredictionHistory(pg, { visibilityScope = 'public', limit = D
 
   return {
     items,
-    pagination: { limit: safeLimit, offset: safeOffset, returned: items.length, total_cards: totalCards },
+    pagination: { limit: safeLimit, offset: safeOffset, returned: pageCardRows.length, total_cards: totalCards },
     summary,
     empty_state: null,
     updated_at: new Date().toISOString(),
