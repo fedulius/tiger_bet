@@ -1152,9 +1152,9 @@ a {
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .bets-page-segments::before, .bets-page-segment { transition: none; }
-  .bets-page-segment:active { transform: none; }
-  .bets-segment-panel { animation: none; }
+  .bets-page-segments::before, .bets-page-segment, .bets-history-periods::before, .bets-history-period { transition: none; }
+  .bets-page-segment:active, .bets-history-period:active { transform: none; }
+  .bets-segment-panel, .bets-period-refresh, .bets-analytics-fill, .bets-profit-bar { animation: none; }
 }
 .bets-history-content { min-width: 0; padding-bottom: calc(82px + env(safe-area-inset-bottom, 0px)); }
 .bets-history-summary-grid {
@@ -1243,9 +1243,14 @@ a {
 .bets-history-skeleton-line-short { width: 35%; margin-top: 9px; }
 .bets-history-skeleton-line-body { width: 86%; margin-top: 20px; opacity: 0.75; }
 
-.bets-history-periods { display: flex; gap: 6px; margin: 0 16px 12px; }
-.bets-history-period { flex: 1; min-width: 0; padding: 8px 6px; border: 1px solid var(--sep); border-radius: 999px; color: var(--text-3); font-size: 11px; font-weight: 700; }
-.bets-history-period-active { border-color: color-mix(in oklch, var(--accent) 55%, var(--sep)); background: var(--accent-soft); color: var(--accent); }
+.bets-history-periods { position: relative; display: flex; gap: 6px; margin: 0 16px 12px; padding: 3px; overflow: hidden; border-radius: 999px; background: color-mix(in oklch, var(--surface) 88%, #000); border: 1px solid var(--sep); }
+.bets-history-periods::before { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc((100% - 18px) / 3); border-radius: 999px; background: var(--accent-soft); box-shadow: 0 8px 18px color-mix(in oklch, var(--accent) 12%, transparent); content: ''; transform: translateX(calc(var(--bets-period-index, 0) * (100% + 6px))); transition: transform 220ms cubic-bezier(.2, .8, .2, 1), box-shadow 220ms ease; }
+.bets-history-periods[data-active-index="0"] { --bets-period-index: 0; }
+.bets-history-periods[data-active-index="1"] { --bets-period-index: 1; }
+.bets-history-periods[data-active-index="2"] { --bets-period-index: 2; }
+.bets-history-period { position: relative; z-index: 1; flex: 1; min-width: 0; padding: 8px 6px; border-radius: 999px; color: var(--text-3); font-size: 11px; font-weight: 700; transition: color 180ms ease, transform 180ms ease; }
+.bets-history-period:active { transform: scale(0.98); }
+.bets-history-period-active { color: var(--accent); }
 .bets-history-overview { display: flex; align-items: center; gap: 22px; min-width: 0; margin: 0 16px 10px; padding: 18px; border: 1px solid var(--sep); border-radius: var(--radius); background: var(--surface); }
 .bets-history-donut { display: grid; flex: 0 0 116px; width: 116px; height: 116px; place-items: center; border-radius: 50%; background: conic-gradient(var(--green) var(--hit-rate), var(--red) var(--hit-rate) 100%); }
 .bets-history-donut::before { width: 88px; height: 88px; border-radius: 50%; background: var(--surface); content: ''; grid-area: 1 / 1; }
@@ -1327,14 +1332,28 @@ a {
 .bets-analytics-row-top span { color: var(--text-3); font-size: 10px; }
 .bets-analytics-rate { color: var(--text); font-size: 12px; }
 .bets-analytics-track { height: 4px; margin-top: 7px; overflow: hidden; border-radius: 99px; background: var(--surface-2); }
-.bets-analytics-fill { display: block; height: 100%; border-radius: inherit; }
+.bets-analytics-fill { display: block; height: 100%; border-radius: inherit; transform-origin: left center; animation: betsProgressGrow 360ms cubic-bezier(.2, .8, .2, 1) both; }
+.bets-period-refresh { animation: betsPeriodRefresh 260ms cubic-bezier(.2, .8, .2, 1) both; }
+.bets-period-refresh-delayed { animation-delay: 35ms; }
+@keyframes betsPeriodRefresh {
+  from { opacity: 0; transform: translateY(7px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes betsProgressGrow {
+  from { transform: scaleX(0.16); opacity: 0.55; }
+  to { transform: scaleX(1); opacity: 1; }
+}
+@keyframes betsProfitBarGrow {
+  from { transform: scaleY(0.18); opacity: 0.55; }
+  to { transform: scaleY(1); opacity: 1; }
+}
 .bets-analytics-empty { padding: 14px; color: var(--text-3); font-size: 11px; }
 .bets-profit-card { padding: 14px 12px 12px; }
 .bets-profit-bars { display: flex; align-items: flex-end; gap: 8px; height: 132px; }
 .bets-profit-column { display: flex; min-width: 0; flex: 1; height: 100%; flex-direction: column; align-items: center; justify-content: flex-end; }
 .bets-profit-value { min-height: 16px; font-size: 9px; font-weight: 800; }
 .bets-profit-bar-wrap { display: flex; width: 100%; height: 88px; align-items: flex-end; justify-content: center; }
-.bets-profit-bar { display: block; width: min(24px, 70%); min-height: 6px; border-radius: 5px 5px 2px 2px; }
+.bets-profit-bar { display: block; width: min(24px, 70%); min-height: 6px; border-radius: 5px 5px 2px 2px; transform-origin: bottom center; animation: betsProfitBarGrow 420ms cubic-bezier(.2, .8, .2, 1) both; }
 .bets-profit-bar-positive { background: var(--green); }
 .bets-profit-bar-negative { background: var(--red); }
 .bets-profit-label { margin-top: 6px; color: var(--text-3); font-size: 9px; font-weight: 700; }
