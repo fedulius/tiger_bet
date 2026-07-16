@@ -121,7 +121,8 @@ export function mapHistoryCard(row = {}) {
     published_at: row.published_at ?? null,
     published_date: row.published_date ?? null,
     primary_match_id: nullableNumber(row.primary_match_id),
-    starts_at: row.starts_at ?? row.match_start_at ?? null,
+    starts_at: firstValidDateValue([row.match_start_at, row.starts_at]),
+    match_start_at: firstValidDateValue([row.match_start_at, row.starts_at]),
     league: safeText(row.league ?? row.tournament_name),
     tournament_name: safeText(row.tournament_name ?? row.league),
     sport_name: safeText(row.sport_name),
@@ -216,10 +217,8 @@ export function filterHistoryCardsByPeriod(cards = [], period = 'Всё врем
   const start = end - window;
 
   return source.filter((card) => {
-    const timestamps = [card?.published_at, card?.starts_at]
-      .map((value) => new Date(value).getTime())
-      .filter((timestamp) => Number.isFinite(timestamp));
-    return timestamps.some((timestamp) => timestamp >= start && timestamp <= end);
+    const timestamp = new Date(getHistoryCardMatchDate(card)).getTime();
+    return Number.isFinite(timestamp) && timestamp >= start && timestamp <= end;
   });
 }
 
@@ -397,9 +396,17 @@ export function aggregateBetsByReferenceDirection(cards = []) {
   ];
 }
 
+function firstValidDateValue(values = []) {
+  return values.find((value) => value != null && value !== '' && Number.isFinite(new Date(value).getTime())) || null;
+}
+
+function getHistoryCardMatchDate(card) {
+  return firstValidDateValue([card?.match_start_at, card?.starts_at]);
+}
+
 export function flattenHistoryBets(cards = []) {
   return (Array.isArray(cards) ? cards : []).flatMap((card) => {
-    const date = card?.published_at || card?.starts_at || null;
+    const date = getHistoryCardMatchDate(card);
     return (Array.isArray(card?.bets) ? card.bets : []).map((bet) => {
       const profitUnits = nullableNumber(bet?.profit_units ?? bet?.profit_factor) ?? 0;
       return {

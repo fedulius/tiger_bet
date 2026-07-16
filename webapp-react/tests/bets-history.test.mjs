@@ -204,19 +204,30 @@ test('getAverageOdds averages only finite decimal odds from nested history bets'
   assert.equal(getAverageOdds([]), null);
 });
 
-test('filterHistoryCardsByPeriod filters by published_at within the selected rolling window', () => {
+test('filterHistoryCardsByPeriod filters by match start time within the selected rolling window', () => {
   const now = new Date('2026-07-15T12:00:00.000Z');
+  const mappedStartsFallback = mapHistoryCard({
+    prediction_card_id: 'starts-fallback-mapped',
+    match_start_at: null,
+    starts_at: '2026-07-13T12:00:00.000Z',
+    published_at: '2026-06-01T12:00:00.000Z',
+    bets: [{ prediction_bet_id: 'starts-fallback-bet', profit_factor: '0.5' }],
+  });
   const cards = [
-    { id: 'week', published_at: '2026-07-10T12:00:00.000Z' },
-    { id: 'month', published_at: '2026-06-20T12:00:00.000Z' },
-    { id: 'old', published_at: '2026-06-14T11:59:59.000Z' },
-    { id: 'future', starts_at: '2026-07-20T12:00:00.000Z' },
-    { id: 'fallback', published_at: 'not-a-date', starts_at: '2026-07-12T12:00:00.000Z' },
+    { id: 'week', published_at: '2026-06-01T12:00:00.000Z', match_start_at: '2026-07-10T12:00:00.000Z' },
+    { id: 'month', match_start_at: '2026-06-20T12:00:00.000Z' },
+    { id: 'old', match_start_at: '2026-06-14T11:59:59.000Z' },
+    { id: 'created-in-week-match-future', published_at: '2026-07-12T12:00:00.000Z', match_start_at: '2026-07-20T12:00:00.000Z' },
+    { id: 'published-only', published_at: '2026-07-12T12:00:00.000Z' },
+    { id: 'invalid-starts-valid-match', starts_at: 'bad-date', match_start_at: '2026-07-12T12:00:00.000Z' },
+    { id: 'starts-fallback', starts_at: '2026-07-13T12:00:00.000Z' },
+    mappedStartsFallback,
     { id: 'invalid', published_at: 'not-a-date' },
   ];
 
-  assert.deepEqual(filterHistoryCardsByPeriod(cards, 'Неделя', now).map((card) => card.id), ['week', 'fallback']);
-  assert.deepEqual(filterHistoryCardsByPeriod(cards, 'Месяц', now).map((card) => card.id), ['week', 'month', 'fallback']);
+  assert.deepEqual(filterHistoryCardsByPeriod(cards, 'Неделя', now).map((card) => card.id), ['week', 'invalid-starts-valid-match', 'starts-fallback', 'prediction-card:starts-fallback-mapped']);
+  assert.deepEqual(filterHistoryCardsByPeriod(cards, 'Месяц', now).map((card) => card.id), ['week', 'month', 'invalid-starts-valid-match', 'starts-fallback', 'prediction-card:starts-fallback-mapped']);
+  assert.deepEqual(flattenHistoryBets([mappedStartsFallback]).map((record) => record.date), ['2026-07-13T12:00:00.000Z']);
   assert.deepEqual(filterHistoryCardsByPeriod(cards, 'Всё время', now).map((card) => card.id), cards.map((card) => card.id));
 });
 
@@ -439,7 +450,8 @@ test('getProfitBuckets puts near-midnight UTC bets into the Moscow day and accep
   const records = getHistoryRecords([{
     id: 'card-msk',
     match: 'A — B',
-    published_at: '2026-07-10T21:30:00Z',
+    published_at: '2026-07-01T21:30:00Z',
+    match_start_at: '2026-07-10T21:30:00Z',
     bets: [{ id: 'bet-msk', result_code: 'won', profit_factor: 0.62 }],
   }]);
 
@@ -498,7 +510,7 @@ test('getHistoryRecordStreaks uses real record profit for current and best winni
 });
 
 test('flattenHistoryBets and getHistoryRecords expose flat screenshot-ready records', () => {
-  const cards = [{ id: 'card-1', match: 'A — B', published_at: '2026-07-15T10:00:00Z', bets: [
+  const cards = [{ id: 'card-1', match: 'A — B', published_at: '2026-07-01T10:00:00Z', starts_at: 'bad-date', match_start_at: '2026-07-15T10:00:00Z', bets: [
     { id: 'bet-1', label: 'П1', odds_decimal: 1.8, result_code: 'won', profit_units: 0.8 },
   ] }];
   const flat = flattenHistoryBets(cards);
