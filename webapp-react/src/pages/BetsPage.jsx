@@ -79,7 +79,7 @@ function Summary({ summary, items, period, onPeriodChange }) {
         ))}
       </div>
       <section className="bets-history-overview bets-period-refresh" key={`overview-${period}`} aria-label="Сводка истории">
-        <div className={`bets-history-donut ${summary.hit_rate_percent == null ? 'bets-history-donut-empty' : ''}`} style={{ '--hit-rate': `${hitRate}%` }}>
+        <div className={`bets-history-donut ${summary.hit_rate_percent == null ? 'bets-history-donut-empty' : ''}`} style={{ '--hit-rate-target': `${hitRate}%` }}>
           <div className="bets-history-donut-center"><strong>{summary.hit_rate_label}</strong><span>ЗАШЛО</span></div>
         </div>
         <div className="bets-history-legend">
