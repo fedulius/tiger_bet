@@ -314,8 +314,7 @@ function Placeholder({ title, text, navigate }) {
 export function BetsPage() {
   const navigate = useNavigate();
   const [segment, setSegment] = useState('history');
-  const [period, setPeriod] = useState('Всё время');
-  const [periodDirection, setPeriodDirection] = useState('forward');
+  const [periodTransition, setPeriodTransition] = useState({ current: 'Всё время', previous: null, direction: 'forward' });
   const [items, setItems] = useState([]);
   const [pagination, setPagination] = useState({ limit: HISTORY_LIMIT, offset: 0, returned: 0, total_cards: 0 });
   const [emptyState, setEmptyState] = useState(null);
@@ -323,6 +322,21 @@ export function BetsPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const requestIdRef = useRef(0);
+  const period = periodTransition.current;
+  const periodDirection = periodTransition.direction;
+
+  useEffect(() => {
+    if (!periodTransition.previous) return undefined;
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (reducedMotion) {
+      setPeriodTransition((transition) => ({ ...transition, previous: null }));
+      return undefined;
+    }
+    const timeoutId = window.setTimeout(() => {
+      setPeriodTransition((transition) => ({ ...transition, previous: null }));
+    }, 500);
+    return () => window.clearTimeout(timeoutId);
+  }, [periodTransition.previous]);
 
   const loadHistory = useCallback(async ({ append = false } = {}) => {
     const requestId = ++requestIdRef.current;
@@ -379,17 +393,39 @@ export function BetsPage() {
   }, []);
 
   const canLoadMore = useMemo(() => hasNextHistoryPage(pagination), [pagination]);
-  const filteredItems = useMemo(() => filterHistoryCardsByPeriod(items, period), [items, period]);
-  const filteredSummary = useMemo(() => getHistoryStatsFromCards(filteredItems), [filteredItems]);
-  const matchBlocks = useMemo(() => groupCardsByMatch(filteredItems), [filteredItems]);
   const activePeriodIndex = Math.max(0, PERIODS.indexOf(period));
   const handlePeriodChange = useCallback((nextPeriod) => {
     if (nextPeriod === period) return;
     const currentIndex = PERIODS.indexOf(period);
     const nextIndex = PERIODS.indexOf(nextPeriod);
-    setPeriodDirection(nextIndex > currentIndex ? 'forward' : 'back');
-    setPeriod(nextPeriod);
+    const direction = nextIndex > currentIndex ? 'forward' : 'back';
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    setPeriodTransition({ current: nextPeriod, previous: reducedMotion ? null : period, direction });
   }, [period]);
+
+  const renderPeriodPage = useCallback((pagePeriod) => {
+    const pageItems = filterHistoryCardsByPeriod(items, pagePeriod);
+    const pageSummary = getHistoryStatsFromCards(pageItems);
+    const pageMatchBlocks = groupCardsByMatch(pageItems);
+    return <>
+      <Summary summary={pageSummary} items={pageItems} period={pagePeriod} />
+      <BetBreakdowns items={pageItems} />
+      <div className="bets-analytics-label bets-history-all-label">ВСЕ СТАВКИ</div>
+      {pageMatchBlocks.length > 0 ? (
+        <div className="bets-match-block-list">
+          {pageMatchBlocks.map((card) => <MatchBetBlock key={card.id} card={card} />)}
+        </div>
+      ) : (
+        <div className="bets-history-state bets-history-empty-state">
+          <h2>{emptyState?.message || 'История пока пуста'}</h2>
+          <p>Сохраняйте прогнозы, чтобы видеть результаты и прибыль в одном месте.</p>
+          <button type="button" className="bets-page-cta" onClick={() => navigate('/recommendations')}>
+            {emptyState?.cta?.label || 'Открыть рекомендации'}
+          </button>
+        </div>
+      )}
+    </>;
+  }, [emptyState, items, navigate]);
 
   return (
     <div className="bets-page">
@@ -445,23 +481,9 @@ export function BetsPage() {
                   </button>
                 ))}
               </div>
-              <div className={`bets-period-page bets-period-page-${periodDirection}`} key={period}>
-                <Summary summary={filteredSummary} items={filteredItems} period={period} />
-                <BetBreakdowns items={filteredItems} />
-                <div className="bets-analytics-label bets-history-all-label">ВСЕ СТАВКИ</div>
-                {matchBlocks.length > 0 ? (
-                  <div className="bets-match-block-list">
-                    {matchBlocks.map((card) => <MatchBetBlock key={card.id} card={card} />)}
-                  </div>
-                ) : (
-                  <div className="bets-history-state bets-history-empty-state">
-                    <h2>{emptyState?.message || 'История пока пуста'}</h2>
-                    <p>Сохраняйте прогнозы, чтобы видеть результаты и прибыль в одном месте.</p>
-                    <button type="button" className="bets-page-cta" onClick={() => navigate('/recommendations')}>
-                      {emptyState?.cta?.label || 'Открыть рекомендации'}
-                    </button>
-                  </div>
-                )}
+              <div className={`bets-period-viewport bets-period-viewport-${periodDirection}`}>
+                {periodTransition.previous && <div className="bets-period-page bets-period-page-old">{renderPeriodPage(periodTransition.previous)}</div>}
+                <div className="bets-period-page bets-period-page-current">{renderPeriodPage(period)}</div>
               </div>
               {canLoadMore && (
                 <button className="bets-history-load-more" type="button" disabled={loadingMore} onClick={() => loadHistory({ append: true })}>
