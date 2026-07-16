@@ -314,7 +314,7 @@ function Placeholder({ title, text, navigate }) {
 export function BetsPage() {
   const navigate = useNavigate();
   const [segment, setSegment] = useState('history');
-  const [periodTransition, setPeriodTransition] = useState({ current: 'Всё время', previous: null, direction: 'forward', sequence: 0 });
+  const [periodTransition, setPeriodTransition] = useState({ current: 'Месяц', previous: null, direction: 'forward', sequence: 0 });
   const [items, setItems] = useState([]);
   const [pagination, setPagination] = useState({ limit: HISTORY_LIMIT, offset: 0, returned: 0, total_cards: 0 });
   const [emptyState, setEmptyState] = useState(null);
