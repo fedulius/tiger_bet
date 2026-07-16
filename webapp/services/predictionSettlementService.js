@@ -101,12 +101,18 @@ function settleEarlyPredictionBet(row, liveScore) {
   if (market.period !== 'full_time') return { settlement_status_code: 'pending', settlement_result_code: 'unknown', reason_code: 'early_period_not_supported' };
   const home = Number(liveScore.home_score); const away = Number(liveScore.away_score);
   const total = home + away;
-  if (market.market === 'total' && market.selection === 'over' && market.line !== null && total > market.line) return { settlement_status_code: 'settled', settlement_result_code: 'win', reason_code: 'early_total_over_locked' };
+  if (market.market === 'total' && market.line !== null && total > market.line) {
+    if (market.selection === 'over') return { settlement_status_code: 'settled', settlement_result_code: 'win', reason_code: 'early_total_over_locked' };
+    if (market.selection === 'under') return { settlement_status_code: 'settled', settlement_result_code: 'loss', reason_code: 'early_total_under_locked_loss' };
+  }
   if (market.market === 'both_to_score' && market.selection === 'yes' && home > 0 && away > 0) return { settlement_status_code: 'settled', settlement_result_code: 'win', reason_code: 'early_btts_yes_locked' };
-  if (market.market === 'team_total' && market.selection === 'over' && market.line !== null) {
+  if (market.market === 'team_total' && market.line !== null) {
     const scope = String(row.participant_scope || row.team_scope || row.selection_participant || '').toLowerCase();
     const teamScore = ['home', 'home_team', '1'].includes(scope) ? home : ['away', 'away_team', '2'].includes(scope) ? away : null;
-    if (teamScore !== null && teamScore > market.line) return { settlement_status_code: 'settled', settlement_result_code: 'win', reason_code: 'early_team_total_over_locked' };
+    if (teamScore !== null && teamScore > market.line) {
+      if (market.selection === 'over') return { settlement_status_code: 'settled', settlement_result_code: 'win', reason_code: 'early_team_total_over_locked' };
+      if (market.selection === 'under') return { settlement_status_code: 'settled', settlement_result_code: 'loss', reason_code: 'early_team_total_under_locked_loss' };
+    }
   }
   return { settlement_status_code: 'pending', settlement_result_code: 'unknown', reason_code: 'not_mathematically_locked' };
 }

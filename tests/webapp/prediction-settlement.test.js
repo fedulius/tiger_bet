@@ -61,6 +61,22 @@ test('early settlement closes only mathematically locked wins', () => {
   assert.equal(settleEarlyPredictionBet(bet({ market_type_code: 'team_total', participant_scope: 'home', selection_code: 'over', line_value: 1 }), { home_score: 2, away_score: 0 }).settlement_result_code, 'win');
 });
 
+test('early settlement closes total under as loss only when score is above the line', () => {
+  const outcome = settleEarlyPredictionBet(bet({ selection_code: 'under', line_value: '2.5' }), { home_score: 2, away_score: 1 });
+  assert.deepEqual(outcome, { settlement_status_code: 'settled', settlement_result_code: 'loss', reason_code: 'early_total_under_locked_loss' });
+});
+
+test('early total under stays pending at or below the line', () => {
+  assert.equal(settleEarlyPredictionBet(bet({ selection_code: 'under', line_value: '2.5' }), { home_score: 1, away_score: 1 }).settlement_status_code, 'pending');
+  assert.equal(settleEarlyPredictionBet(bet({ selection_code: 'under', line_value: '2' }), { home_score: 1, away_score: 1 }).settlement_status_code, 'pending');
+});
+
+test('early settlement closes team total under as loss only when the selected team is above the line', () => {
+  const outcome = settleEarlyPredictionBet(bet({ market_type_code: 'team_total', participant_scope: 'away', selection_code: 'under', line_value: '1.5' }), { home_score: 0, away_score: 2 });
+  assert.deepEqual(outcome, { settlement_status_code: 'settled', settlement_result_code: 'loss', reason_code: 'early_team_total_under_locked_loss' });
+  assert.equal(settleEarlyPredictionBet(bet({ market_type_code: 'team_total', participant_scope: 'away', selection_code: 'under', line_value: '2' }), { home_score: 0, away_score: 2 }).settlement_status_code, 'pending');
+});
+
 test('service loads pending rows with parameterized SQL and writes settlement through existing upsert', async () => {
   const calls = [];
   const pg = { connection: async (sql, params) => {
