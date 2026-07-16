@@ -202,7 +202,7 @@ function groupCardsByMatch(cards = []) {
   (Array.isArray(cards) ? cards : []).forEach((card) => {
     const key = card.primary_match_id != null
       ? `match:${card.primary_match_id}`
-      : `match:${card.match || 'unknown'}:${card.starts_at || card.published_at || ''}`;
+      : `match:${card.match || 'unknown'}:${card.match_start_at || card.starts_at || card.prediction_card_id || card.id || ''}`;
     const existing = groups.get(key);
     if (!existing) {
       groups.set(key, {
@@ -230,6 +230,7 @@ function groupCardsByMatch(cards = []) {
     existing.not_supported_count += Number(card.not_supported_count) || 0;
     existing.profit_units += Number(card.profit_units) || 0;
     if (!existing.headline && card.headline) existing.headline = card.headline;
+    if (!existing.match_start_at && card.match_start_at) existing.match_start_at = card.match_start_at;
     if (!existing.starts_at && card.starts_at) existing.starts_at = card.starts_at;
     if (!existing.published_at && card.published_at) existing.published_at = card.published_at;
   });
@@ -275,7 +276,7 @@ function BetRow({ bet, showReason = true }) {
 
 function MatchBetBlock({ card }) {
   const status = getHistoryStatusPresentation(card.result_code);
-  const date = formatMoscowDateTime(card.published_at || card.starts_at);
+  const date = formatMoscowDateTime(card.match_start_at || card.starts_at);
   const meta = [card.sport_name, card.league, date].filter(Boolean).join(' · ') || 'Прогноз';
   return (
     <article className="bets-match-block">
