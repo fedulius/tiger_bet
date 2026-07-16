@@ -62,23 +62,15 @@ function HistorySkeleton() {
   );
 }
 
-function Summary({ summary, items, period, onPeriodChange }) {
+function Summary({ summary, items, period }) {
   const streak = getRecentBetStreak(items);
   const averageOdds = getAverageOdds(items);
   const hitRate = Math.max(0, Math.min(100, summary.hit_rate_percent ?? 0));
   const profitTone = summary.profit_units >= 0 ? 'positive' : 'negative';
-  const activePeriodIndex = Math.max(0, PERIODS.indexOf(period));
 
   return (
     <>
-      <div className="bets-history-periods" role="tablist" aria-label="Период истории" data-active-index={activePeriodIndex}>
-        {PERIODS.map((item) => (
-          <button className={`bets-history-period ${period === item ? 'bets-history-period-active' : ''}`} key={item} type="button" role="tab" aria-selected={period === item} onClick={() => { if (period !== item) onPeriodChange(item); }}>
-            {item}
-          </button>
-        ))}
-      </div>
-      <section className="bets-history-overview bets-period-refresh" key={`overview-${period}`} aria-label="Сводка истории">
+      <section className="bets-history-overview" aria-label="Сводка истории">
         <div className={`bets-history-donut ${summary.hit_rate_percent == null ? 'bets-history-donut-empty' : ''}`} style={{ '--hit-rate-target': `${hitRate}%` }}>
           <div className="bets-history-donut-center"><strong>{summary.hit_rate_label}</strong><span>ЗАШЛО</span></div>
         </div>
@@ -93,12 +85,12 @@ function Summary({ summary, items, period, onPeriodChange }) {
           <div className="bets-history-neutral-info">Ждём {summary.pending_count} · Не рассчитываем {summary.not_supported_count}</div>
         </div>
       </section>
-      <div className="bets-history-metrics bets-period-refresh bets-period-refresh-delayed" key={`metrics-${period}`} aria-label="Метрики истории">
+      <div className="bets-history-metrics" aria-label="Метрики истории">
         <div><span>Проходимость</span><strong>{summary.hit_rate_label}</strong><small>зашло от рассчитанных</small></div>
         <div><span>Чистыми</span><strong className={`bets-history-summary-${profitTone}`}>{summary.profit_label} ед.</strong><small>по выбранному периоду</small></div>
         <div><span>Ср. коэф.</span><strong>{averageOdds == null ? '—' : averageOdds.toFixed(2)}</strong><small>по загруженным ставкам</small></div>
       </div>
-      <div className="bets-history-recent bets-period-refresh bets-period-refresh-delayed" key={`recent-${period}`}>
+      <div className="bets-history-recent">
         <div className="bets-history-section-heading"><strong>Последние ставки</strong><span>{summary.won_count} В · {summary.lost_count} П · {summary.void_count} возврат</span></div>
         <div className="bets-history-streak" aria-label="Последние результаты">
           {streak.length > 0 ? streak.map((item, index) => <span className={`bets-history-streak-square bets-history-streak-${item.code}`} key={`${item.code}-${index}`}>{item.marker}</span>) : <span className="bets-history-recent-empty">Нет рассчитанных ставок</span>}
@@ -181,11 +173,11 @@ function Records({ records, directionGroups }) {
   return <section className="bets-analytics-section" aria-label="Показатели и рекорды"><div className="bets-analytics-label">ПОКАЗАТЕЛИ И РЕКОРДЫ</div><div className="bets-records-card">{rows.map(([label, value]) => <div className="bets-record-row" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div></section>;
 }
 
-function BetBreakdowns({ items, period }) {
+function BetBreakdowns({ items }) {
   const probabilityGroups = useMemo(() => aggregateBetsByProbability(items), [items]);
   const directionGroups = useMemo(() => aggregateBetsByReferenceDirection(items).filter((group) => group.key !== 'other'), [items]);
   const records = useMemo(() => getHistoryRecords(items), [items]);
-  return <div className="bets-history-breakdowns bets-period-refresh" key={`breakdowns-${period}`}>
+  return <div className="bets-history-breakdowns">
     <AnalyticsGroup title="ПО ТИПУ СТАВОК" groups={probabilityGroups} tones={['green', 'amber', 'red']} />
     <AnalyticsGroup title="ПО НАПРАВЛЕНИЮ" groups={directionGroups} tones={['green', 'amber', 'amber', 'red', 'red']} />
     <ProfitChart records={records} />
@@ -323,6 +315,7 @@ export function BetsPage() {
   const navigate = useNavigate();
   const [segment, setSegment] = useState('history');
   const [period, setPeriod] = useState('Всё время');
+  const [periodDirection, setPeriodDirection] = useState('forward');
   const [items, setItems] = useState([]);
   const [pagination, setPagination] = useState({ limit: HISTORY_LIMIT, offset: 0, returned: 0, total_cards: 0 });
   const [emptyState, setEmptyState] = useState(null);
@@ -389,6 +382,14 @@ export function BetsPage() {
   const filteredItems = useMemo(() => filterHistoryCardsByPeriod(items, period), [items, period]);
   const filteredSummary = useMemo(() => getHistoryStatsFromCards(filteredItems), [filteredItems]);
   const matchBlocks = useMemo(() => groupCardsByMatch(filteredItems), [filteredItems]);
+  const activePeriodIndex = Math.max(0, PERIODS.indexOf(period));
+  const handlePeriodChange = useCallback((nextPeriod) => {
+    if (nextPeriod === period) return;
+    const currentIndex = PERIODS.indexOf(period);
+    const nextIndex = PERIODS.indexOf(nextPeriod);
+    setPeriodDirection(nextIndex > currentIndex ? 'forward' : 'back');
+    setPeriod(nextPeriod);
+  }, [period]);
 
   return (
     <div className="bets-page">
@@ -437,22 +438,31 @@ export function BetsPage() {
           )}
           {!loading && !error && (
             <>
-              <Summary summary={filteredSummary} items={filteredItems} period={period} onPeriodChange={setPeriod} />
-              <BetBreakdowns key={`breakdowns-${period}`} items={filteredItems} period={period} />
-              <div className="bets-analytics-label bets-history-all-label">ВСЕ СТАВКИ</div>
-              {matchBlocks.length > 0 ? (
-                <div className="bets-match-block-list">
-                  {matchBlocks.map((card) => <MatchBetBlock key={card.id} card={card} />)}
-                </div>
-              ) : (
-                <div className="bets-history-state bets-history-empty-state">
-                  <h2>{emptyState?.message || 'История пока пуста'}</h2>
-                  <p>Сохраняйте прогнозы, чтобы видеть результаты и прибыль в одном месте.</p>
-                  <button type="button" className="bets-page-cta" onClick={() => navigate('/recommendations')}>
-                    {emptyState?.cta?.label || 'Открыть рекомендации'}
+              <div className="bets-history-periods" role="tablist" aria-label="Период истории" data-active-index={activePeriodIndex}>
+                {PERIODS.map((item) => (
+                  <button className={`bets-history-period ${period === item ? 'bets-history-period-active' : ''}`} key={item} type="button" role="tab" aria-selected={period === item} onClick={() => handlePeriodChange(item)}>
+                    {item}
                   </button>
-                </div>
-              )}
+                ))}
+              </div>
+              <div className={`bets-period-page bets-period-page-${periodDirection}`} key={period}>
+                <Summary summary={filteredSummary} items={filteredItems} period={period} />
+                <BetBreakdowns items={filteredItems} />
+                <div className="bets-analytics-label bets-history-all-label">ВСЕ СТАВКИ</div>
+                {matchBlocks.length > 0 ? (
+                  <div className="bets-match-block-list">
+                    {matchBlocks.map((card) => <MatchBetBlock key={card.id} card={card} />)}
+                  </div>
+                ) : (
+                  <div className="bets-history-state bets-history-empty-state">
+                    <h2>{emptyState?.message || 'История пока пуста'}</h2>
+                    <p>Сохраняйте прогнозы, чтобы видеть результаты и прибыль в одном месте.</p>
+                    <button type="button" className="bets-page-cta" onClick={() => navigate('/recommendations')}>
+                      {emptyState?.cta?.label || 'Открыть рекомендации'}
+                    </button>
+                  </div>
+                )}
+              </div>
               {canLoadMore && (
                 <button className="bets-history-load-more" type="button" disabled={loadingMore} onClick={() => loadHistory({ append: true })}>
                   {loadingMore ? 'Загрузка…' : 'Показать ещё'}
