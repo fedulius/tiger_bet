@@ -30,6 +30,22 @@ test('pure rules settle total over/under with exact line as push', () => {
   assert.equal(settlePredictionBet(bet({ selection_code: 'under' }), score(2, 1)).settlement_result_code, 'loss');
 });
 
+test('pure rules settle team total over under and push', () => {
+  assert.equal(settlePredictionBet(bet({ market_type_code: 'team_total', participant_scope: 'home_team', selection_code: 'over', line_value: '1.5' }), score(2, 1)).settlement_result_code, 'win');
+  assert.equal(settlePredictionBet(bet({ market_type_code: 'team_total', participant_scope: 'home_team', selection_code: 'under', line_value: '1.5' }), score(2, 1)).settlement_result_code, 'loss');
+  assert.equal(settlePredictionBet(bet({ market_type_code: 'team_total', participant_scope: 'away_team', selection_code: 'under', line_value: '1.5' }), score(2, 1)).settlement_result_code, 'win');
+  assert.equal(settlePredictionBet(bet({ market_type_code: 'team_total', participant_scope: 'away_team', selection_code: 'over', line_value: '1' }), score(2, 1)).settlement_result_code, 'push');
+});
+
+test('pure rules reject invalid team total inputs without marking loss', () => {
+  assert.deepEqual(settlePredictionBet(bet({ market_type_code: 'team_total', participant_scope: 'match', selection_code: 'over', line_value: '1.5' }), score(2, 1)), {
+    settlement_status_code: 'not_supported', settlement_result_code: 'unknown', reason_code: 'unsupported_selection',
+  });
+  assert.deepEqual(settlePredictionBet(bet({ market_type_code: 'team_total', participant_scope: 'home_team', selection_code: 'yes', line_value: '1.5' }), score(2, 1)), {
+    settlement_status_code: 'not_supported', settlement_result_code: 'unknown', reason_code: 'invalid_team_total',
+  });
+});
+
 test('pure rules settle BTTS and exact correct score', () => {
   assert.equal(settlePredictionBet(bet({ market_type_code: 'both_to_score', selection_code: 'yes', line_value: null }), score(1, 1)).settlement_result_code, 'win');
   assert.equal(settlePredictionBet(bet({ market_type_code: 'both_to_score', selection_code: 'no', line_value: null }), score(1, 0)).settlement_result_code, 'win');

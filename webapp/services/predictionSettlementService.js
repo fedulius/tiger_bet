@@ -2,7 +2,7 @@
 
 const sstatsApi = require('../../lib/sstatsApi');
 
-const SUPPORTED_MARKETS = new Set(['one_x_two', 'double_chance', 'total', 'both_to_score', 'correct_score', 'handicap']);
+const SUPPORTED_MARKETS = new Set(['one_x_two', 'double_chance', 'total', 'team_total', 'both_to_score', 'correct_score', 'handicap']);
 const FINAL_STATUSES = new Set(['finished', 'completed', 'ft', 'full_time', 'final']);
 
 function numberOrNull(value) {
@@ -116,6 +116,16 @@ function settleHandicap(row, market, home, away) {
   return { settlement_status_code: 'settled', settlement_result_code: adjusted > 0 ? 'win' : 'loss', reason_code: adjusted > 0 ? 'rule_match' : 'rule_mismatch' };
 }
 
+function settleTeamTotal(row, market, home, away) {
+  if (market.line === null || !['over', 'under'].includes(market.selection)) return unsupported('invalid_team_total');
+  const side = resolveParticipantScope(row, market);
+  if (!side) return unsupported('unsupported_selection');
+  const teamScore = side === 'home' ? home : away;
+  if (teamScore === market.line) return { settlement_status_code: 'settled', settlement_result_code: 'push', reason_code: 'team_total_equals_line' };
+  const won = market.selection === 'over' ? teamScore > market.line : teamScore < market.line;
+  return { settlement_status_code: 'settled', settlement_result_code: won ? 'win' : 'loss', reason_code: won ? 'rule_match' : 'rule_mismatch' };
+}
+
 function settleEarlyPredictionBet(row, liveScore) {
   const market = parseMarket(row);
   if (!liveScore || numberOrNull(liveScore.home_score) === null || numberOrNull(liveScore.away_score) === null) {
@@ -171,6 +181,8 @@ function settlePredictionBet(row, finalScore) {
     if (market.line === null || !['over', 'under'].includes(market.selection)) return unsupported('invalid_total');
     if (total === market.line) return { settlement_status_code: 'settled', settlement_result_code: 'push', reason_code: 'total_equals_line' };
     won = market.selection === 'over' ? total > market.line : total < market.line;
+  } else if (market.market === 'team_total') {
+    return settleTeamTotal(row, market, home, away);
   } else if (market.market === 'both_to_score') {
     if (!['yes', 'no'].includes(market.selection)) return unsupported('unsupported_selection');
     const actual = home > 0 && away > 0;
