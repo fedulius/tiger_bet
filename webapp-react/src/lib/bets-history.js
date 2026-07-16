@@ -438,11 +438,41 @@ export function getHistoryRecordStreaks(records = []) {
   return { current, best };
 }
 
-export function getProfitBuckets(records = []) {
+const MSK_OFFSET_MS = 3 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function getMoscowDayKey(timestamp) {
+  return new Date(timestamp + MSK_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+function getMoscowDayLabelFromKey(key) {
+  const [, month, day] = key.split('-');
+  return `${day}.${month}`;
+}
+
+function getWeeklyProfitBuckets(dated, now = new Date()) {
+  const end = now instanceof Date ? new Date(now) : new Date(now);
+  if (!Number.isFinite(end.getTime())) return [];
+  const endMoscowDay = Math.floor((end.getTime() + MSK_OFFSET_MS) / DAY_MS) * DAY_MS;
+  const buckets = [];
+  for (let offset = 6; offset >= 0; offset -= 1) {
+    const key = new Date(endMoscowDay - offset * DAY_MS).toISOString().slice(0, 10);
+    buckets.push({ key, label: getMoscowDayLabelFromKey(key), value: 0 });
+  }
+  const byDay = new Map(buckets.map((bucket) => [bucket.key, bucket]));
+  dated.forEach(({ record, timestamp }) => {
+    const bucket = byDay.get(getMoscowDayKey(timestamp));
+    if (bucket) bucket.value += finiteNumber(record?.profit_units ?? record?.profit_factor) * 100;
+  });
+  return buckets.map(({ label, value }) => ({ label, value: Math.round(value) }));
+}
+
+export function getProfitBuckets(records = [], { period = 'Всё время', now = new Date() } = {}) {
   const dated = (Array.isArray(records) ? records : [])
     .map((record, index) => ({ record, index, timestamp: new Date(record?.date).getTime() }))
     .filter(({ timestamp }) => Number.isFinite(timestamp))
     .sort((a, b) => a.timestamp - b.timestamp);
+  if (period === 'Неделя') return getWeeklyProfitBuckets(dated, now);
   if (dated.length === 0) return [];
   const bucketSize = Math.max(1, Math.ceil(dated.length / 8));
   const buckets = [];

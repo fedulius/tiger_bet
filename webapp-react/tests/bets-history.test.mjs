@@ -416,6 +416,58 @@ test('getProfitBuckets creates chronological buckets from real bet profit', () =
   ]);
 });
 
+test('getProfitBuckets groups the week period by Moscow calendar days', () => {
+  const buckets = getProfitBuckets([
+    { date: '2026-07-10T10:00:00Z', profit_units: 0.62 },
+    { date: '2026-07-10T20:00:00Z', profit_units: -1 },
+    { date: '2026-07-12T12:00:00Z', profit_units: 0.79 },
+    { date: '2026-07-01T12:00:00Z', profit_units: 10 },
+  ], { period: 'Неделя', now: new Date('2026-07-15T12:00:00Z') });
+
+  assert.deepEqual(buckets, [
+    { label: '09.07', value: 0 },
+    { label: '10.07', value: -38 },
+    { label: '11.07', value: 0 },
+    { label: '12.07', value: 79 },
+    { label: '13.07', value: 0 },
+    { label: '14.07', value: 0 },
+    { label: '15.07', value: 0 },
+  ]);
+});
+
+test('getProfitBuckets puts near-midnight UTC bets into the Moscow day and accepts profit_factor records', () => {
+  const records = getHistoryRecords([{
+    id: 'card-msk',
+    match: 'A — B',
+    published_at: '2026-07-10T21:30:00Z',
+    bets: [{ id: 'bet-msk', result_code: 'won', profit_factor: 0.62 }],
+  }]);
+
+  const buckets = getProfitBuckets(records, { period: 'Неделя', now: new Date('2026-07-11T09:00:00Z') });
+
+  assert.deepEqual(buckets, [
+    { label: '05.07', value: 0 },
+    { label: '06.07', value: 0 },
+    { label: '07.07', value: 0 },
+    { label: '08.07', value: 0 },
+    { label: '09.07', value: 0 },
+    { label: '10.07', value: 0 },
+    { label: '11.07', value: 62 },
+  ]);
+});
+
+test('getProfitBuckets keeps chronological buckets outside the week period', () => {
+  const buckets = getProfitBuckets([
+    { date: '2026-07-01T00:00:00Z', profit_units: 1.6 },
+    { date: '2026-07-02T00:00:00Z', profit_units: 0.2 },
+  ], { period: 'Месяц', now: new Date('2026-07-15T12:00:00Z') });
+
+  assert.deepEqual(buckets, [
+    { label: 'W1', value: 160 },
+    { label: 'W2', value: 20 },
+  ]);
+});
+
 test('flattenHistoryBets normalizes profit_factor into screenshot-ready records', () => {
   const records = getHistoryRecords([{
     id: 'card-factor',

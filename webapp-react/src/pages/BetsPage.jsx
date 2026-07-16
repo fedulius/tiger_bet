@@ -131,8 +131,8 @@ function AnalyticsGroup({ title, groups, tones = [] }) {
   );
 }
 
-function ProfitChart({ records }) {
-  const buckets = getProfitBuckets(records);
+function ProfitChart({ records, period }) {
+  const buckets = getProfitBuckets(records, { period });
   const max = Math.max(1, ...buckets.map((bucket) => Math.abs(bucket.value)));
   return (
     <section className="bets-analytics-section" aria-label="Динамика профита">
@@ -173,14 +173,14 @@ function Records({ records, directionGroups }) {
   return <section className="bets-analytics-section" aria-label="Показатели и рекорды"><div className="bets-analytics-label">ПОКАЗАТЕЛИ И РЕКОРДЫ</div><div className="bets-records-card">{rows.map(([label, value]) => <div className="bets-record-row" key={label}><span>{label}</span><strong>{value}</strong></div>)}</div></section>;
 }
 
-function BetBreakdowns({ items }) {
+function BetBreakdowns({ items, period }) {
   const probabilityGroups = useMemo(() => aggregateBetsByProbability(items), [items]);
   const directionGroups = useMemo(() => aggregateBetsByReferenceDirection(items).filter((group) => group.key !== 'other'), [items]);
   const records = useMemo(() => getHistoryRecords(items), [items]);
   return <div className="bets-history-breakdowns">
     <AnalyticsGroup title="ПО ТИПУ СТАВОК" groups={probabilityGroups} tones={['green', 'amber', 'red']} />
     <AnalyticsGroup title="ПО НАПРАВЛЕНИЮ" groups={directionGroups} tones={['green', 'amber', 'amber', 'red', 'red']} />
-    <ProfitChart records={records} />
+    <ProfitChart records={records} period={period} />
     <Records records={records} directionGroups={directionGroups} />
   </div>;
 }
@@ -418,7 +418,7 @@ export function BetsPage() {
     const pageMatchBlocks = groupCardsByMatch(pageItems);
     return <>
       <Summary summary={pageSummary} items={pageItems} period={pagePeriod} />
-      <BetBreakdowns items={pageItems} />
+      <BetBreakdowns items={pageItems} period={pagePeriod} />
       <div className="bets-analytics-label bets-history-all-label">ВСЕ СТАВКИ</div>
       {pageMatchBlocks.length > 0 ? (
         <div className="bets-match-block-list">
