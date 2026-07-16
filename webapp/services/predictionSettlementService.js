@@ -155,6 +155,24 @@ function buildPendingQuery({ limit, predictionBetId }) {
   };
 }
 
+async function writeSettlement(pg, row, outcome, finalScore, sourcePayload) {
+  await pg.connection(
+    `SELECT bet.bet_settlement_upsert($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+    [row.prediction_bet_id, outcome.settlement_status_code, outcome.settlement_result_code,
+      outcome.settlement_status_code === 'settled' ? new Date().toISOString() : null, 'v1',
+      finalScore || {}, outcome, profitFactorFor(row, outcome),
+      outcome.reason_code, outcome.reason_code, 'rule_engine', sourcePayload || {}, true],
+  );
+}
+
+function accumulateSettlementSummary(summary, row, outcome, finalScore) {
+  summary.processed += 1;
+  if (outcome.settlement_status_code === 'settled') summary.settled += 1;
+  else if (outcome.settlement_status_code === 'not_supported') summary.not_supported += 1;
+  else summary.pending += 1;
+  summary.results.push({ prediction_bet_id: row.prediction_bet_id, ...outcome, score: finalScore });
+}
+
 async function settlePredictionBets(pg, { dryRun = true, limit = 100, predictionBetId = null, fetchSstatsGame = null } = {}) {
   const query = buildPendingQuery({ limit, predictionBetId });
   const rows = await pg.connection(query.sql, query.params);
@@ -164,20 +182,27 @@ async function settlePredictionBets(pg, { dryRun = true, limit = 100, prediction
     const finalScore = resolved.score;
     const sourcePayload = resolved.sourcePayload;
     const outcome = settlePredictionBet(row, finalScore);
-    summary.processed += 1;
-    if (outcome.settlement_status_code === 'settled') summary.settled += 1;
-    else if (outcome.settlement_status_code === 'not_supported') summary.not_supported += 1;
-    else summary.pending += 1;
-    if (!dryRun && outcome.settlement_status_code !== 'pending') {
-      await pg.connection(
-        `SELECT bet.bet_settlement_upsert($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-        [row.prediction_bet_id, outcome.settlement_status_code, outcome.settlement_result_code,
-          outcome.settlement_status_code === 'settled' ? new Date().toISOString() : null, 'v1',
-          finalScore || {}, outcome, profitFactorFor(row, outcome),
-          outcome.reason_code, outcome.reason_code, 'rule_engine', sourcePayload || {}, true],
-      );
-    }
-    summary.results.push({ prediction_bet_id: row.prediction_bet_id, ...outcome, score: finalScore });
+    accumulateSettlementSummary(summary, row, outcome, finalScore);
+    if (!dryRun && outcome.settlement_status_code !== 'pending') await writeSettlement(pg, row, outcome, finalScore, sourcePayload);
+  }
+  summary.would_settle = summary.settled + summary.not_supported;
+  return summary;
+}
+
+async function settlePredictionBetsForMatch(pg, { matchId, finalScore, sourcePayload = {}, dryRun = false } = {}) {
+  if (!matchId) throw new Error('matchId is required');
+  const rows = await pg.connection(`
+    SELECT *
+    FROM bet.v_prediction_bet_settlements
+    WHERE settlement_status_code = 'pending'
+      AND match_id = $1
+    ORDER BY prediction_bet_id
+  `, [matchId]);
+  const summary = { processed: 0, settled: 0, pending: 0, not_supported: 0, dry_run: dryRun, results: [] };
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const outcome = settlePredictionBet(row, finalScore);
+    accumulateSettlementSummary(summary, row, outcome, finalScore);
+    if (!dryRun && outcome.settlement_status_code !== 'pending') await writeSettlement(pg, row, outcome, finalScore, sourcePayload);
   }
   summary.would_settle = summary.settled + summary.not_supported;
   return summary;
@@ -208,4 +233,4 @@ function parseArgs(argv) {
   return args;
 }
 
-module.exports = { extractFinalScore, isFinalSourcePayload, resolveFinalScore, settlePredictionBet, settlePredictionBets, parseArgs, buildPendingQuery };
+module.exports = { extractFinalScore, isFinalSourcePayload, resolveFinalScore, settlePredictionBet, settlePredictionBets, settlePredictionBetsForMatch, parseArgs, buildPendingQuery };

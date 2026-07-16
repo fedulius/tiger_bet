@@ -5,6 +5,7 @@ const {
   defaultFetchSstats,
 } = require('./matchFollowService');
 const { enqueueNotificationForMatchEvent: enqueueNotificationForMatchEventService } = require('./notificationDeliveryService');
+const { settlePredictionBetsForMatch: settlePredictionBetsForMatchService } = require('./predictionSettlementService');
 
 function statusIdFromGame(game) {
   return game?.status?.id ?? game?.statusId ?? game?.status ?? game?.gameStatus?.id ?? null;
@@ -16,6 +17,11 @@ function scoreFromGame(game) {
     home: score.home ?? score.homeScore ?? score.home_team ?? game?.homeScore ?? game?.homeResult ?? null,
     away: score.away ?? score.awayScore ?? score.away_team ?? game?.awayScore ?? game?.awayResult ?? null,
   };
+}
+
+function finalScoreFromEventScore(score) {
+  if (score?.home == null || score?.away == null) return null;
+  return { home_score: score.home, away_score: score.away };
 }
 
 function elapsedFromGame(game) {
@@ -41,8 +47,17 @@ function eventForSnapshot({ game, status, previous }) {
 
 async function fetchActiveMatches(pg) {
   return pg.connection(`
-    SELECT match_id, sstats_match_id
-    FROM public.v_match_follow_active_sstats_matches
+    SELECT DISTINCT match_id, sstats_match_id
+    FROM (
+      SELECT match_id, sstats_match_id
+      FROM public.v_match_follow_active_sstats_matches
+      UNION ALL
+      SELECT pbs.match_id, epm.system_match_id AS sstats_match_id
+      FROM bet.v_prediction_bet_settlements pbs
+      JOIN external.public_match epm ON epm.match_id = pbs.match_id AND epm.system_id = 3
+      WHERE pbs.settlement_status_code = 'pending'
+    ) matches
+    WHERE sstats_match_id IS NOT NULL
     ORDER BY match_id
   `, []);
 }
@@ -66,9 +81,30 @@ async function enqueueNotificationsForMatchEvent({ pg, matchEventId, matchId, ev
   return enqueueNotificationForMatchEventService({ pg, matchEventId, matchId, eventKind, occurredAt, scoreHome, scoreAway, data });
 }
 
-async function processFollowedMatches({ pg, fetcher = defaultFetchSstats, dryRun = false } = {}) {
+async function defaultSettlePredictionBetsForMatch({ pg, matchId, finalScore, sourcePayload, dryRun }) {
+  return settlePredictionBetsForMatchService(pg, { matchId, finalScore, sourcePayload, dryRun });
+}
+
+async function settleFinishedMatch({ pg, match, score, gamePayload, dryRun, settlePredictionBetsForMatch, summary }) {
+  if (typeof settlePredictionBetsForMatch !== 'function') return;
+  const finalScore = finalScoreFromEventScore(score);
+  if (!finalScore) return;
+  const settlement = await settlePredictionBetsForMatch({
+    pg,
+    matchId: match.match_id,
+    finalScore,
+    sourcePayload: gamePayload,
+    dryRun,
+  });
+  summary.settlement.processed += Number(settlement?.processed || 0);
+  summary.settlement.settled += Number(settlement?.settled || 0);
+  summary.settlement.pending += Number(settlement?.pending || 0);
+  summary.settlement.not_supported += Number(settlement?.not_supported || 0);
+}
+
+async function processFollowedMatches({ pg, fetcher = defaultFetchSstats, dryRun = false, settlePredictionBetsForMatch = defaultSettlePredictionBetsForMatch } = {}) {
   const availability = await assertMatchFollowFeatureAvailable(pg);
-  const summary = { available: availability.available, reason: availability.reason, matches: 0, fetched: 0, events_created: 0, skipped: 0 };
+  const summary = { available: availability.available, reason: availability.reason, matches: 0, fetched: 0, events_created: 0, skipped: 0, settlement: { processed: 0, settled: 0, pending: 0, not_supported: 0 } };
   if (!availability.available) return summary;
 
   const matches = await fetchActiveMatches(pg);
@@ -91,6 +127,9 @@ async function processFollowedMatches({ pg, fetcher = defaultFetchSstats, dryRun
     if (!status) { summary.skipped += 1; continue; }
     const previous = await getPreviousEvent(pg, match.match_id);
     const event = eventForSnapshot({ game, status, previous });
+    if (status.is_finished) {
+      await settleFinishedMatch({ pg, match, score: scoreFromGame(game), gamePayload, dryRun, settlePredictionBetsForMatch, summary });
+    }
     if (!event) continue;
     if (dryRun) { summary.skipped += 1; continue; }
     const score = event.score;
