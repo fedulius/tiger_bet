@@ -394,7 +394,12 @@ export function BetsPage() {
       <div className="page-header bets-page-header">
         <div className="page-title">Ставки</div>
       </div>
-      <div className="bets-page-segments" role="tablist" aria-label="Раздел ставок">
+      <div
+        className="bets-page-segments"
+        role="tablist"
+        aria-label="Раздел ставок"
+        data-active-index={SEGMENTS.findIndex((item) => item.id === segment)}
+      >
         {SEGMENTS.map((item) => (
           <button
             className={`bets-page-segment ${segment === item.id ? 'bets-page-segment-active' : ''}`}
@@ -402,18 +407,26 @@ export function BetsPage() {
             role="tab"
             aria-selected={segment === item.id}
             key={item.id}
-            onClick={() => setSegment(item.id)}
+            onClick={() => { if (segment !== item.id) setSegment(item.id); }}
           >
             {item.label}
           </button>
         ))}
       </div>
 
-      {segment === 'active' && <Placeholder title="Активные ставки" text="Здесь появятся ваши открытые ставки. Сейчас активные ставки ещё не подключены." navigate={navigate} />}
-      {segment === 'express' && <Placeholder title="Экспрессы" text="Раздел экспрессов готовится. Мы покажем его только после подключения реальных данных." navigate={navigate} />}
+      {segment === 'active' && (
+        <div className="bets-segment-panel" key="active">
+          <Placeholder title="Активные ставки" text="Здесь появятся ваши открытые ставки. Сейчас активные ставки ещё не подключены." navigate={navigate} />
+        </div>
+      )}
+      {segment === 'express' && (
+        <div className="bets-segment-panel" key="express">
+          <Placeholder title="Экспрессы" text="Раздел экспрессов готовится. Мы покажем его только после подключения реальных данных." navigate={navigate} />
+        </div>
+      )}
 
       {segment === 'history' && (
-        <div className="bets-history-content">
+        <div className="bets-history-content bets-segment-panel" key="history">
           {loading && <HistorySkeleton />}
           {!loading && error && (
             <div className="bets-history-state bets-history-state-error">

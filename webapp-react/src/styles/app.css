@@ -1105,15 +1105,35 @@ a {
 .bets-page { width: 100%; min-width: 0; padding-bottom: 12px; }
 .bets-page-header { padding-bottom: 12px; }
 .bets-page-segments {
+  position: relative;
   display: flex;
   gap: 4px;
   margin: 0 16px 16px;
   padding: 4px;
+  overflow: hidden;
   border: 1px solid var(--sep);
   border-radius: var(--radius-sm);
   background: var(--surface);
 }
+.bets-page-segments::before {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc((100% - 16px) / 3);
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: var(--accent-soft);
+  box-shadow: 0 8px 18px color-mix(in oklch, var(--accent) 14%, transparent);
+  content: '';
+  transform: translateX(calc(var(--bets-segment-index, 0) * (100% + 4px)));
+  transition: transform 220ms cubic-bezier(.2, .8, .2, 1), box-shadow 220ms ease;
+}
+.bets-page-segments[data-active-index="0"] { --bets-segment-index: 0; }
+.bets-page-segments[data-active-index="1"] { --bets-segment-index: 1; }
+.bets-page-segments[data-active-index="2"] { --bets-segment-index: 2; }
 .bets-page-segment {
+  position: relative;
+  z-index: 1;
   min-width: 0;
   flex: 1;
   padding: 9px 5px;
@@ -1122,8 +1142,20 @@ a {
   font-size: 12.5px;
   font-weight: 700;
   white-space: nowrap;
+  transition: color 180ms ease, transform 180ms ease, opacity 180ms ease;
 }
-.bets-page-segment-active { background: var(--accent-soft); color: var(--accent); }
+.bets-page-segment:active { transform: scale(0.98); }
+.bets-page-segment-active { color: var(--accent); }
+.bets-segment-panel { animation: betsSegmentIn 240ms cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes betsSegmentIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bets-page-segments::before, .bets-page-segment { transition: none; }
+  .bets-page-segment:active { transform: none; }
+  .bets-segment-panel { animation: none; }
+}
 .bets-history-content { min-width: 0; padding-bottom: calc(82px + env(safe-area-inset-bottom, 0px)); }
 .bets-history-summary-grid {
   display: grid;
