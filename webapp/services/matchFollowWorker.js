@@ -81,8 +81,19 @@ async function enqueueNotificationsForMatchEvent({ pg, matchEventId, matchId, ev
   return enqueueNotificationForMatchEventService({ pg, matchEventId, matchId, eventKind, occurredAt, scoreHome, scoreAway, data });
 }
 
-async function defaultSettlePredictionBetsForMatch({ pg, matchId, finalScore, sourcePayload, dryRun }) {
-  return settlePredictionBetsForMatchService(pg, { matchId, finalScore, sourcePayload, dryRun });
+async function defaultSettlePredictionBetsForMatch({ pg, matchId, finalScore, sourcePayload, dryRun, early }) {
+  return settlePredictionBetsForMatchService(pg, { matchId, finalScore, sourcePayload, dryRun, early });
+}
+
+async function settleLiveMatch({ pg, match, score, gamePayload, dryRun, settlePredictionBetsForMatch, summary }) {
+  if (typeof settlePredictionBetsForMatch !== 'function') return;
+  const liveScore = finalScoreFromEventScore(score);
+  if (!liveScore) return;
+  const settlement = await settlePredictionBetsForMatch({ pg, matchId: match.match_id, finalScore: liveScore, sourcePayload: gamePayload, dryRun, early: true });
+  summary.settlement.processed += Number(settlement?.processed || 0);
+  summary.settlement.settled += Number(settlement?.settled || 0);
+  summary.settlement.pending += Number(settlement?.pending || 0);
+  summary.settlement.not_supported += Number(settlement?.not_supported || 0);
 }
 
 async function settleFinishedMatch({ pg, match, score, gamePayload, dryRun, settlePredictionBetsForMatch, summary }) {
@@ -129,6 +140,8 @@ async function processFollowedMatches({ pg, fetcher = defaultFetchSstats, dryRun
     const event = eventForSnapshot({ game, status, previous });
     if (status.is_finished) {
       await settleFinishedMatch({ pg, match, score: scoreFromGame(game), gamePayload, dryRun, settlePredictionBetsForMatch, summary });
+    } else if (status.is_live) {
+      await settleLiveMatch({ pg, match, score: scoreFromGame(game), gamePayload, dryRun, settlePredictionBetsForMatch, summary });
     }
     if (!event) continue;
     if (dryRun) { summary.skipped += 1; continue; }

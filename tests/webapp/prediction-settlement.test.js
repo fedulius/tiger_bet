@@ -9,6 +9,7 @@ const {
   resolveFinalScore,
   isFinalSourcePayload,
   parseArgs,
+  settleEarlyPredictionBet,
 } = require('../../webapp/services/predictionSettlementService');
 
 const score = (home, away) => ({ home_score: home, away_score: away, status: 'finished' });
@@ -50,6 +51,14 @@ test('missing final score remains pending and unknown, never loss', () => {
   const result = settlePredictionBet(bet(), null);
   assert.equal(result.settlement_status_code, 'pending');
   assert.equal(result.settlement_result_code, 'unknown');
+});
+
+test('early settlement closes only mathematically locked wins', () => {
+  assert.equal(settleEarlyPredictionBet(bet(), { home_score: 2, away_score: 1 }).settlement_result_code, 'win');
+  assert.equal(settleEarlyPredictionBet(bet({ line_value: '3' }), { home_score: 2, away_score: 1 }).settlement_status_code, 'pending');
+  assert.equal(settleEarlyPredictionBet(bet({ market_type_code: 'both_to_score', selection_code: 'yes', line_value: null }), { home_score: 1, away_score: 1 }).settlement_result_code, 'win');
+  assert.equal(settleEarlyPredictionBet(bet({ market_type_code: 'both_to_score', selection_code: 'no', line_value: null }), { home_score: 1, away_score: 0 }).settlement_status_code, 'pending');
+  assert.equal(settleEarlyPredictionBet(bet({ market_type_code: 'team_total', participant_scope: 'home', selection_code: 'over', line_value: 1 }), { home_score: 2, away_score: 0 }).settlement_result_code, 'win');
 });
 
 test('service loads pending rows with parameterized SQL and writes settlement through existing upsert', async () => {

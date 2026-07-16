@@ -76,6 +76,21 @@ test('match follow worker settles prediction bets when a followed match finishes
   assert.deepEqual(result.settlement, { processed: 2, settled: 2, pending: 0, not_supported: 0 });
 });
 
+test('match follow worker attempts early settlement for live matches', async () => {
+  const pg = { connection: async (query) => {
+    if (/assert/i.test(query) || /to_regclass/i.test(query)) return [{ available: true }];
+    if (/FROM public\.v_match_follow_active_sstats_matches/i.test(query)) return [{ match_id: 42, sstats_match_id: '1586077' }];
+    if (/FROM external\.public_match_status/i.test(query)) return [{ match_status_id: 3, is_live: true, is_finished: false, is_cancelled: false }];
+    if (/FROM public\.match_event/i.test(query)) return [];
+    if (/INSERT INTO public\.match_event/i.test(query)) return [];
+    return [];
+  } };
+  const calls = [];
+  await processFollowedMatches({ pg, fetcher: async () => ({ game: { id: 1586077, status: 3, homeResult: 2, awayResult: 1 } }), settlePredictionBetsForMatch: async (args) => { calls.push(args); return { processed: 1, settled: 1, pending: 0, not_supported: 0 }; } });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].early, true);
+});
+
 test('match follow worker settles pending prediction bets even when finish event already exists', async () => {
   const pg = {
     connection: async (query) => {
