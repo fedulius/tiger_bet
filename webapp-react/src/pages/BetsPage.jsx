@@ -314,7 +314,7 @@ function Placeholder({ title, text, navigate }) {
 export function BetsPage() {
   const navigate = useNavigate();
   const [segment, setSegment] = useState('history');
-  const [periodTransition, setPeriodTransition] = useState({ current: 'Всё время', previous: null, direction: 'forward' });
+  const [periodTransition, setPeriodTransition] = useState({ current: 'Всё время', previous: null, direction: 'forward', sequence: 0 });
   const [items, setItems] = useState([]);
   const [pagination, setPagination] = useState({ limit: HISTORY_LIMIT, offset: 0, returned: 0, total_cards: 0 });
   const [emptyState, setEmptyState] = useState(null);
@@ -333,10 +333,12 @@ export function BetsPage() {
       return undefined;
     }
     const timeoutId = window.setTimeout(() => {
-      setPeriodTransition((transition) => ({ ...transition, previous: null }));
-    }, 500);
+      setPeriodTransition((transition) => (
+        transition.sequence === periodTransition.sequence ? { ...transition, previous: null } : transition
+      ));
+    }, 520);
     return () => window.clearTimeout(timeoutId);
-  }, [periodTransition.previous]);
+  }, [periodTransition.previous, periodTransition.sequence]);
 
   const loadHistory = useCallback(async ({ append = false } = {}) => {
     const requestId = ++requestIdRef.current;
@@ -395,13 +397,20 @@ export function BetsPage() {
   const canLoadMore = useMemo(() => hasNextHistoryPage(pagination), [pagination]);
   const activePeriodIndex = Math.max(0, PERIODS.indexOf(period));
   const handlePeriodChange = useCallback((nextPeriod) => {
-    if (nextPeriod === period) return;
-    const currentIndex = PERIODS.indexOf(period);
-    const nextIndex = PERIODS.indexOf(nextPeriod);
-    const direction = nextIndex > currentIndex ? 'forward' : 'back';
-    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    setPeriodTransition({ current: nextPeriod, previous: reducedMotion ? null : period, direction });
-  }, [period]);
+    setPeriodTransition((transition) => {
+      if (nextPeriod === transition.current) return transition;
+      const currentIndex = PERIODS.indexOf(transition.current);
+      const nextIndex = PERIODS.indexOf(nextPeriod);
+      const direction = nextIndex > currentIndex ? 'forward' : 'back';
+      const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      return {
+        current: nextPeriod,
+        previous: reducedMotion ? null : transition.current,
+        direction,
+        sequence: transition.sequence + 1,
+      };
+    });
+  }, []);
 
   const renderPeriodPage = useCallback((pagePeriod) => {
     const pageItems = filterHistoryCardsByPeriod(items, pagePeriod);
@@ -482,8 +491,14 @@ export function BetsPage() {
                 ))}
               </div>
               <div className={`bets-period-viewport bets-period-viewport-${periodDirection}`}>
-                {periodTransition.previous && <div className="bets-period-page bets-period-page-old">{renderPeriodPage(periodTransition.previous)}</div>}
-                <div className="bets-period-page bets-period-page-current">{renderPeriodPage(period)}</div>
+                {periodTransition.previous && (
+                  <div className="bets-period-page bets-period-page-old" key={`old-${periodTransition.previous}-${periodTransition.sequence}`}>
+                    {renderPeriodPage(periodTransition.previous)}
+                  </div>
+                )}
+                <div className="bets-period-page bets-period-page-current" key={`current-${period}-${periodTransition.sequence}`}>
+                  {renderPeriodPage(period)}
+                </div>
               </div>
               {canLoadMore && (
                 <button className="bets-history-load-more" type="button" disabled={loadingMore} onClick={() => loadHistory({ append: true })}>
