@@ -140,11 +140,14 @@ async function persistAnalysisSnapshot(pg, { matchSourceId, snapshot }) {
   const analysisHash = snapshot.analysis_hash ?? buildAnalysisHash(snapshot);
   const recommendedBetsJson = JSON.stringify(recommendedBets);
 
+  const analysisTypeCode = snapshot.analysis_type_code ?? 'daily_pick';
+
   const [analysisRow = {}] = await pg.connection(
-    'SELECT * FROM public.match_analysis_create($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
+    'SELECT * FROM public.match_analysis_create_v2($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)',
     [
       matchSourceId,
       statusName,
+      analysisTypeCode,
       snapshot.headline ?? null,
       snapshot.brief ?? null,
       snapshot.risk_note ?? null,
@@ -163,6 +166,7 @@ async function persistAnalysisSnapshot(pg, { matchSourceId, snapshot }) {
       ?? analysisRow.analysis_id
       ?? analysisRow.match_analysis_id
       ?? analysisRow.out_match_analysis_id
+      ?? analysisRow.match_analysis_create_v2
       ?? analysisRow.match_analysis_create
       ?? null,
     analysisHash,

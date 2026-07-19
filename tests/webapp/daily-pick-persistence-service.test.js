@@ -348,10 +348,10 @@ describe('persistAnalysisSnapshot – SQL call order', () => {
     assert.equal(pg.calls.length, 1);
   });
 
-  it('calls match_analysis_create', async () => {
+  it('calls match_analysis_create_v2 so analysis_type_id is populated', async () => {
     const pg = createFakePg({ rows: [{ id: 'an-1' }] });
     await persistAnalysisSnapshot(pg, { matchSourceId: 'src-99', snapshot: makeSnapshot() });
-    assert.match(pg.calls[0].query, /match_analysis_create/);
+    assert.match(pg.calls[0].query, /match_analysis_create_v2/);
   });
 });
 
@@ -377,26 +377,33 @@ describe('persistAnalysisSnapshot – parameter mapping', () => {
     const { params } = pg.calls[0];
     assert.equal(params[0], 'src-42');                           // matchSourceId
     assert.equal(params[1], 'ready');                            // analysis_status_name
-    assert.equal(params[2], 'Great pick');                       // headline
-    assert.equal(params[3], 'Here is the brief');               // brief
-    assert.equal(params[4], 'Some risk');                        // risk_note
-    assert.equal(params[5], JSON.stringify([{ market: 'W1' }]));  // recommended_bets
-    assert.equal(params[6], 'claude-sonnet-4-6');               // model_name
-    assert.equal(params[7], 'v2');                               // prompt_version
-    assert.equal(params[8], 'provided-hash');                    // analysis_hash
-    assert.equal(params[9], null);                               // error_message
-    assert.equal(params[10], null);                              // skip_reason
+    assert.equal(params[2], 'daily_pick');                       // analysis_type_code
+    assert.equal(params[3], 'Great pick');                       // headline
+    assert.equal(params[4], 'Here is the brief');                // brief
+    assert.equal(params[5], 'Some risk');                        // risk_note
+    assert.equal(params[6], JSON.stringify([{ market: 'W1' }]));  // recommended_bets
+    assert.equal(params[7], 'claude-sonnet-4-6');                // model_name
+    assert.equal(params[8], 'v2');                               // prompt_version
+    assert.equal(params[9], 'provided-hash');                    // analysis_hash
+    assert.equal(params[10], null);                              // error_message
+    assert.equal(params[11], null);                              // skip_reason
+  });
+
+  it('allows an explicit analysis_type_code override', async () => {
+    const pg = createFakePg({ rows: [{ id: 'an-1' }] });
+    await persistAnalysisSnapshot(pg, { matchSourceId: 'src-42', snapshot: { status: 'ready', analysis_type_code: 'strategy_candidate' } });
+    assert.equal(pg.calls[0].params[2], 'strategy_candidate');
   });
 
   it('passes null for absent optional string fields', async () => {
     const pg = createFakePg({ rows: [{ id: 'an-1' }] });
     await persistAnalysisSnapshot(pg, { matchSourceId: 'src-1', snapshot: { status: 'ready' } });
     const { params } = pg.calls[0];
-    assert.equal(params[2], null);   // headline
-    assert.equal(params[3], null);   // brief
-    assert.equal(params[4], null);   // risk_note
-    assert.equal(params[6], null);   // model_name
-    assert.equal(params[7], null);   // prompt_version
+    assert.equal(params[3], null);   // headline
+    assert.equal(params[4], null);   // brief
+    assert.equal(params[5], null);   // risk_note
+    assert.equal(params[7], null);   // model_name
+    assert.equal(params[8], null);   // prompt_version
   });
 });
 
@@ -426,7 +433,7 @@ describe('persistAnalysisSnapshot – defaults', () => {
   it('defaults recommended_bets to empty array when absent', async () => {
     const pg = createFakePg({ rows: [{ id: 'an-1' }] });
     await persistAnalysisSnapshot(pg, { matchSourceId: 'src-1', snapshot: {} });
-    assert.equal(pg.calls[0].params[5], '[]');
+    assert.equal(pg.calls[0].params[6], '[]');
   });
 });
 
@@ -438,7 +445,7 @@ describe('persistAnalysisSnapshot – hash handling', () => {
     const snapshot = { status: 'ready', analysis_hash: 'explicit-hash-value' };
     const result = await persistAnalysisSnapshot(pg, { matchSourceId: 'src-1', snapshot });
     assert.equal(result.analysisHash, 'explicit-hash-value');
-    assert.equal(pg.calls[0].params[8], 'explicit-hash-value');
+    assert.equal(pg.calls[0].params[9], 'explicit-hash-value');
   });
 
   it('derives hash from snapshot content when analysis_hash is absent', async () => {
@@ -447,7 +454,7 @@ describe('persistAnalysisSnapshot – hash handling', () => {
     const result = await persistAnalysisSnapshot(pg, { matchSourceId: 'src-1', snapshot });
     const expected = buildAnalysisHash(snapshot);
     assert.equal(result.analysisHash, expected);
-    assert.equal(pg.calls[0].params[8], expected);
+    assert.equal(pg.calls[0].params[9], expected);
   });
 
   it('derived hash is stable for equal snapshots', async () => {
@@ -489,8 +496,8 @@ describe('persistAnalysisSnapshot – return values', () => {
     assert.equal(result.analysisId, 'ma-alt');
   });
 
-  it('falls back to match_analysis_create scalar return when other keys are absent', async () => {
-    const pg = createFakePg({ rows: [{ match_analysis_create: 'ma-scalar' }] });
+  it('falls back to match_analysis_create_v2 scalar return when other keys are absent', async () => {
+    const pg = createFakePg({ rows: [{ match_analysis_create_v2: 'ma-scalar' }] });
     const result = await persistAnalysisSnapshot(pg, { matchSourceId: 9001, snapshot: {} });
     assert.equal(result.analysisId, 'ma-scalar');
   });
