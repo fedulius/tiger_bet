@@ -5,7 +5,8 @@ const sstatsApi = require('../lib/sstatsApi');
 const { normalizeCandidate, getCandidateMatchesForDate } = require('../webapp/services/dailyPickCandidateService');
 const { rankCandidateMatches } = require('../webapp/services/dailyPickRankingService');
 const { resolveDbContextForCandidate, resolveSystemIdForDailyPickSource } = require('../webapp/services/dailyPickMappingService');
-const { persistBundleSnapshot, persistAnalysisSnapshot, persistExternalMatchMapping } = require('../webapp/services/dailyPickPersistenceService');
+const { persistBundleSnapshot, persistExternalMatchMapping, persistAnalysisSnapshot } = require('../webapp/services/dailyPickPersistenceService');
+const { backfillPredictionHistory } = require('../webapp/services/predictionHistoryBackfillService');
 const { getMoscowDate } = require('../webapp/services/dailyPickReadService');
 const { extractAnalyticsFeatures } = require('../webapp/services/matchAnalyticsFeatureService');
 const { scoreMatch } = require('../webapp/services/matchAnalyticsScoringService');
@@ -468,7 +469,7 @@ async function runDailyPicks(pg, options = {}) {
       try {
         const genResult = await generator({ sourcePayload: enrichedPayload, modelName, promptVersion, provider: generatorProvider });
         if (genResult && genResult.status === 'ready') {
-          await persistAnalysisSnapshot(pg, {
+          const analysisResult = await persistAnalysisSnapshot(pg, {
             matchSourceId: sourceId,
             snapshot: {
               status: 'ready',
@@ -480,6 +481,10 @@ async function runDailyPicks(pg, options = {}) {
               prompt_version: genResult.prompt_version || promptVersion,
             },
           });
+
+          if (analysisResult?.analysisId != null) {
+            await backfillPredictionHistory(pg, { matchAnalysisId: analysisResult.analysisId, limit: 1 });
+          }
           snapshotsCreated++;
         }
       } catch (err) {
