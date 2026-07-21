@@ -91,6 +91,10 @@ export function getHomeMatches() {
   return getJson('/home');
 }
 
+export function getRecommendedPick() {
+  return getJson('/home/recommended-pick');
+}
+
 export function getPrediction(slug) {
   return getJson(`/prediction/${encodeURIComponent(slug)}`);
 }

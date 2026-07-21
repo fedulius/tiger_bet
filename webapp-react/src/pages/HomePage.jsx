@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, getHomeMatches } from '../lib/api.js';
+import { auth, getHomeMatches, getRecommendedPick } from '../lib/api.js';
 import { resolveLeague, resolveRound, resolveTeamName } from '../lib/locale.js';
 import { getTeamBadge } from '../lib/teamVisuals.js';
 
@@ -131,6 +131,39 @@ function EmptyDay({ message }) {
   );
 }
 
+function RecommendedPickCard({ payload }) {
+  const item = payload?.item;
+  if (!item) {
+    const empty = payload?.empty_state;
+    if (!empty) return null;
+    return (
+      <section className="recommended-pick-card recommended-pick-card--empty">
+        <div className="recommended-pick-kicker">🎯 Ставка дня</div>
+        <div className="recommended-pick-match">{empty.title}</div>
+        <div className="recommended-pick-reason">{empty.description}</div>
+      </section>
+    );
+  }
+  const riskText = item.bet?.risk_level === 'low' ? 'Низкий риск' : item.bet?.risk_level === 'medium' ? 'Средний риск' : item.bet?.risk_label || 'Риск указан в прогнозе';
+  const warning = Array.isArray(item.warnings) && item.warnings.length ? item.warnings[0] : '';
+  return (
+    <section className="recommended-pick-card">
+      <div className="recommended-pick-kicker">🎯 Ставка дня</div>
+      <div className="recommended-pick-match">{item.match}</div>
+      <div className="recommended-pick-meta">
+        {item.league}{item.starts_at ? ` · ${formatTime(item.starts_at)}` : ''}
+      </div>
+      <div className="recommended-pick-bet">
+        <span>{item.bet?.label || item.headline}</span>
+        {item.bet?.odds_decimal ? <strong>Кэф {item.bet.odds_decimal}</strong> : null}
+      </div>
+      <div className="recommended-pick-risk">{riskText}</div>
+      {warning ? <div className="recommended-pick-warning">{warning}</div> : null}
+      {item.bet?.reason ? <div className="recommended-pick-reason">{item.bet.reason}</div> : null}
+    </section>
+  );
+}
+
 let currentHomeTab = 'today';
 
 function rememberHomeTab(dayKey) {
@@ -142,6 +175,7 @@ function rememberHomeTab(dayKey) {
 export function HomePage() {
   const [activeTab, setActiveTab] = useState(() => currentHomeTab);
   const [data, setData] = useState(null);
+  const [recommendedPick, setRecommendedPick] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authState, setAuthState] = useState('pending');
   const [loadError, setLoadError] = useState('');
@@ -153,8 +187,12 @@ export function HomePage() {
       setLoadError('');
       await auth();
       setAuthState('ok');
-      const result = await getHomeMatches();
-      setData(result);
+      const [matchesResult, pickResult] = await Promise.all([
+        getHomeMatches(),
+        getRecommendedPick().catch(() => null),
+      ]);
+      setData(matchesResult);
+      setRecommendedPick(pickResult);
     } catch (err) {
       if (err.status === 401) {
         setAuthState('unauthorized');
@@ -288,6 +326,8 @@ export function HomePage() {
           <span className="accent">Bet</span>
         </div>
       </div>
+
+      <RecommendedPickCard payload={recommendedPick} />
 
       {loadError && !data ? (
         <div style={{ padding: '56px 24px', textAlign: 'center' }}>

@@ -95,9 +95,9 @@ function normalizeRecommendedBet(rawBet = {}, ordinal = 1) {
   return base;
 }
 
-function buildPublicationHash({ matchAnalysisId, analysisHash, editionNo = 1 }) {
+function buildPublicationHash({ matchAnalysisId, analysisHash, editionNo = 1, cardTypeCode = 'daily' }) {
   return crypto.createHash('sha256')
-    .update(['daily', matchAnalysisId, analysisHash || '', editionNo].join('|'))
+    .update([cardTypeCode, matchAnalysisId, analysisHash || '', editionNo].join('|'))
     .digest('hex');
 }
 
@@ -160,7 +160,7 @@ async function loadReadyAnalyses(pg, { limit = 100, matchAnalysisId = null } = {
   );
 }
 
-async function insertAnalysisCard(pg, row, dictionaries, { dryRun = false } = {}) {
+async function insertAnalysisCard(pg, row, dictionaries, { dryRun = false, cardTypeCode = 'daily' } = {}) {
   const rawBets = Array.isArray(row.recommended_bets) ? row.recommended_bets : [];
   const normalizedBets = rawBets.map((bet, index) => normalizeRecommendedBet(bet, index + 1)).filter(Boolean);
   if (normalizedBets.length === 0) {
@@ -191,11 +191,16 @@ async function insertAnalysisCard(pg, row, dictionaries, { dryRun = false } = {}
       sport_name: row.sport_name,
     },
   };
-  const publicationHash = buildPublicationHash({ matchAnalysisId: row.match_analysis_id, analysisHash: row.analysis_hash });
+  const publicationHash = buildPublicationHash({
+    matchAnalysisId: row.match_analysis_id,
+    analysisHash: row.analysis_hash,
+    cardTypeCode,
+  });
   const payload = {
     ...snapshot,
     match_analysis_id: row.match_analysis_id,
     match_id: row.match_id,
+    card_type_code: cardTypeCode,
     published_at: row.analysis_create_at || new Date().toISOString(),
     publication_hash: publicationHash,
     normalized_bets: normalizedBets,
@@ -216,11 +221,11 @@ async function insertAnalysisCard(pg, row, dictionaries, { dryRun = false } = {}
   };
 }
 
-async function backfillPredictionHistory(pg, { limit = 100, dryRun = false, matchAnalysisId = null } = {}) {
+async function backfillPredictionHistory(pg, { limit = 100, dryRun = false, matchAnalysisId = null, cardTypeCode = 'daily' } = {}) {
   const rows = await loadReadyAnalyses(pg, { limit, matchAnalysisId });
   const results = [];
   for (const row of rows) {
-    results.push(await insertAnalysisCard(pg, row, null, { dryRun }));
+    results.push(await insertAnalysisCard(pg, row, null, { dryRun, cardTypeCode }));
   }
   return {
     dry_run: dryRun,

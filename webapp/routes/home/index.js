@@ -1,6 +1,7 @@
 const SSTATS_BASE = 'https://api.sstats.net';
 const { resolveLeague, resolveRound, resolveTeamName, resolveTeamCode } = require('../../services/locale');
 const { getDailyPicksFeed } = require('../../services/dailyPickReadService');
+const { getRecommendedPick } = require('../../services/globalRecommendedPickReadService');
 const { logUserEvent } = require('../../services/eventLogService');
 const { checkHeavyRouteAccess } = require('../../services/accessCheck');
 const { rememberSstatsListMatches } = require('../../services/sstatsMatchListCache');
@@ -219,6 +220,25 @@ async function loadFavoriteSports(fastify, userId) {
 
 // ── Route ──────────────────────────────────────────────────
 async function homeRoutes(fastify) {
+  fastify.get('/recommended-pick', async (request, reply) => {
+    const access = await checkHeavyRouteAccess(fastify, request);
+    if (!access.allowed) {
+      return reply.status(403).send({ error: 'Access denied' });
+    }
+
+    const payload = await getRecommendedPick({ pg: fastify.pg });
+    await logUserEvent(fastify, request, {
+      eventName: 'screen.recommended_pick_open',
+      statusCode: 200,
+      entityId: 'recommended_pick',
+      meta: {
+        screen: 'recommended_pick',
+        exists: Boolean(payload?.item),
+      },
+    });
+    return payload;
+  });
+
   fastify.get('/daily-picks', async (request, reply) => {
     const access = await checkHeavyRouteAccess(fastify, request);
     if (!access.allowed) {
