@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { fetchAllMatches, resolveSport } = require('../../lib/stavkaApi');
 const sstatsApi = require('../../lib/sstatsApi');
 const { extractAnalyticsFeatures } = require('./matchAnalyticsFeatureService');
+const { aiBriefLlmProvider } = require('./aiBriefLlmProvider');
 const { resolveDbContextForCandidate } = require('./dailyPickMappingService');
 const {
   persistBundleSnapshot,
@@ -360,6 +361,210 @@ function selectGlobalRecommendedPick(matches, { now = new Date() } = {}) {
   return { ...best, quality, warnings };
 }
 
+function buildAvailableOddsOptions(match) {
+  const odds = match?.odds || {};
+  const options = [];
+  const push = ({ market, selection_code, participant_scope = null, line = null, label, odd }) => {
+    const value = toNumber(odd);
+    if (value == null || value < MIN_ODDS || value > MAX_ODDS) return;
+    options.push({ market, selection_code, participant_scope, line, label, odds_decimal: value });
+  };
+  const oneXTwo = readOddObject(odds, ['one_x_two', '1x2', 'winner']) || odds;
+  push({ market: 'one_x_two', selection_code: 'home', participant_scope: null, label: 'Победа хозяев', odd: oneXTwo.w1 ?? oneXTwo.home ?? oneXTwo.home_win });
+  push({ market: 'one_x_two', selection_code: 'draw', participant_scope: null, label: 'Ничья', odd: oneXTwo.x ?? oneXTwo.draw });
+  push({ market: 'one_x_two', selection_code: 'away', participant_scope: null, label: 'Победа гостей', odd: oneXTwo.w2 ?? oneXTwo.away ?? oneXTwo.away_win });
+  const btts = readOddObject(odds, ['both_to_score', 'btts']);
+  push({ market: 'both_to_score', selection_code: 'yes', label: 'Обе забьют — да', odd: btts?.yes ?? btts?.YES });
+  push({ market: 'both_to_score', selection_code: 'no', label: 'Обе забьют — нет', odd: btts?.no ?? btts?.NO });
+  const totals = Array.isArray(odds.totals) ? odds.totals : Array.isArray(odds.total) ? odds.total : [];
+  for (const item of totals) {
+    const line = toNumber(item.line ?? item.line_value ?? item.value);
+    push({ market: 'total', selection_code: 'over', line, label: `Тотал больше ${line}`, odd: item.over ?? item.tb ?? item.more });
+    push({ market: 'total', selection_code: 'under', line, label: `Тотал меньше ${line}`, odd: item.under ?? item.tm ?? item.less });
+  }
+  const handicap = odds.handicap || odds.handicaps;
+  for (const [line, odd] of Object.entries(handicap?.home || handicap?.w1 || {})) {
+    push({ market: 'handicap', selection_code: 'home', participant_scope: 'home', line: toNumber(line), label: `Ф1 ${line}`, odd });
+  }
+  for (const [line, odd] of Object.entries(handicap?.away || handicap?.w2 || {})) {
+    push({ market: 'handicap', selection_code: 'away', participant_scope: 'away', line: toNumber(line), label: `Ф2 ${line}`, odd });
+  }
+  return options;
+}
+
+function sanitizeSstatsForLlm(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  const { odds, ...rest } = payload;
+  return rest;
+}
+
+function buildLlmCandidatePayload(match) {
+  return {
+    match_id: String(match.match_id || match.id || ''),
+    slug: match.match_slug || match.slug || '',
+    starts_at: parseCandidateDate(match)?.toISOString() || null,
+    league: getLeagueName(match),
+    home_team: getHomeTeamName(match),
+    away_team: getAwayTeamName(match),
+    available_odds: buildAvailableOddsOptions(match),
+    raw_odds_note: 'Выбирай только из available_odds. SStats odds удалены из payload и не являются источником коэффициентов.',
+    analytics_features: getAnalyticsFeatures(match),
+    sstats_data: sanitizeSstatsForLlm(match.sstats_data),
+  };
+}
+
+function buildLlmSelectionPrompts(candidates, { now = new Date() } = {}) {
+  const payload = {
+    task: 'choose_one_global_recommended_pick',
+    product_rule: 'LLM делает прогноз. Код только валидирует, что выбранный рынок и коэффициент существуют в odds, а факты есть в SStats payload.',
+    date_moscow: getMoscowDateKey(now),
+    odds_provider: 'stavka_only_for_odds',
+    analytics_source: 'sstats',
+    constraints: {
+      choose_exactly_one: true,
+      allowed_markets: [...ALLOWED_MARKETS],
+      odds_decimal_min: MIN_ODDS,
+      odds_decimal_max: MAX_ODDS,
+      use_only_available_odds: true,
+      no_external_facts: true,
+      no_popular_bets_as_reason: true,
+    },
+    candidates: candidates.map(buildLlmCandidatePayload),
+  };
+  return {
+    systemPrompt: [
+      'Ты — спортивный аналитик Tiger Bet. Твоя задача — выбрать один лучший прогноз дня из переданных футбольных матчей.',
+      'SStats/team_stats/xG/форма — аналитическая база прогноза. Stavka odds — только список доступных коэффициентов, не источник выбора.',
+      'Нельзя выдумывать рынки, коэффициенты, факты, травмы, составы или мотивацию. Выбирай только рынок/исход из candidate.available_odds и копируй odds_decimal точно.',
+      'Если сильной ставки нет, всё равно выбери наиболее приемлемую low/medium risk ставку и явно укажи warning/low_confidence.',
+      'Верни только JSON без markdown.',
+    ].join('\n'),
+    userPrompt: `Выбери одну Ставку дня.\n\nВерни JSON строго такого вида:\n{\n  "match_id": "...",\n  "market": "one_x_two|double_chance|total|both_to_score|handicap|team_total",\n  "selection_code": "home|away|draw|yes|no|over|under|...",\n  "participant_scope": "home|away|null",\n  "line": 2.5,\n  "label": "человекочитаемое название ставки",\n  "odds_decimal": 1.85,\n  "confidence": 0-100,\n  "risk": "low|medium",\n  "quality": "strong|low_confidence",\n  "headline": "короткий заголовок",\n  "brief": "аналитическое объяснение выбора",\n  "risk_note": "главный риск",\n  "reason": "почему выбран именно этот рынок"\n}\n\nPayload:\n${JSON.stringify(payload, null, 2)}`,
+  };
+}
+
+function parseJsonObject(text) {
+  if (!text || typeof text !== 'string') return null;
+  try { return JSON.parse(text); } catch {}
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) return null;
+  try { return JSON.parse(match[0]); } catch { return null; }
+}
+
+function oddsEqual(a, b) {
+  const left = toNumber(a);
+  const right = toNumber(b);
+  return left != null && right != null && Math.abs(left - right) < 0.001;
+}
+
+function findAvailableOdd(candidate, selection) {
+  const market = inferMarket(selection.market);
+  const code = normalizeText(selection.selection_code || selection.outcome || '');
+  const line = toNumber(selection.line ?? selection.line_value);
+  const odds = candidate?.odds || {};
+  if (market === 'one_x_two') {
+    const oneXTwo = readOddObject(odds, ['one_x_two', '1x2', 'winner']) || odds;
+    const map = { home: oneXTwo.w1 ?? oneXTwo.home ?? oneXTwo.home_win, away: oneXTwo.w2 ?? oneXTwo.away ?? oneXTwo.away_win, draw: oneXTwo.x ?? oneXTwo.draw };
+    return map[code] ?? null;
+  }
+  if (market === 'both_to_score') {
+    const btts = readOddObject(odds, ['both_to_score', 'btts']);
+    return code === 'yes' ? (btts?.yes ?? btts?.YES) : code === 'no' ? (btts?.no ?? btts?.NO) : null;
+  }
+  if (market === 'total') {
+    const totals = Array.isArray(odds.totals) ? odds.totals : Array.isArray(odds.total) ? odds.total : [];
+    const item = totals.find((row) => line != null && toNumber(row.line ?? row.line_value ?? row.value) === line);
+    if (!item) return null;
+    return code === 'over' ? (item.over ?? item.tb ?? item.more) : code === 'under' ? (item.under ?? item.tm ?? item.less) : null;
+  }
+  if (market === 'handicap') {
+    const handicap = odds.handicap || odds.handicaps;
+    const scope = normalizeText(selection.participant_scope || code);
+    const rows = scope === 'home' ? (handicap?.home || handicap?.w1 || {}) : scope === 'away' ? (handicap?.away || handicap?.w2 || {}) : {};
+    return Object.entries(rows).find(([key]) => toNumber(key) === line)?.[1] ?? null;
+  }
+  return null;
+}
+
+function validateLlmSelection(selection, candidates) {
+  if (!selection || typeof selection !== 'object') return null;
+  const matchId = String(selection.match_id || selection.id || '');
+  const match = candidates.find((candidate) => String(candidate.match_id || candidate.id || '') === matchId || String(candidate.id || '') === matchId);
+  if (!match) return null;
+  const market = inferMarket(selection.market);
+  if (!ALLOWED_MARKETS.has(market)) return null;
+  const odds = toNumber(selection.odds_decimal ?? selection.rate ?? selection.odds);
+  if (odds == null || odds < MIN_ODDS || odds > MAX_ODDS) return null;
+  const availableOdd = findAvailableOdd(match, { ...selection, market });
+  if (!oddsEqual(availableOdd, odds)) return null;
+  const confidence = Math.max(0, Math.min(100, Math.round(toNumber(selection.confidence) ?? 60)));
+  const risk = normalizeRisk(selection.risk || (confidence >= 76 ? 'low' : 'medium'));
+  if (risk === 'high') return null;
+  const selectedBet = {
+    type: market,
+    market,
+    outcome: selection.selection_code || selection.outcome || null,
+    selection_code: selection.selection_code || selection.outcome || null,
+    participant_scope: selection.participant_scope ?? null,
+    line: selection.line ?? null,
+    line_value: selection.line ?? null,
+    label: selection.label || market,
+    rate: odds,
+    odds_decimal: odds,
+    risk,
+    risk_label: risk === 'low' ? 'низкий' : 'средний',
+    confidence,
+    source: 'llm_forecast',
+    reason: selection.reason || selection.brief || 'LLM-прогноз по SStats analytics и доступным коэффициентам.',
+  };
+  const quality = selection.quality === 'strong' || confidence >= STRONG_SCORE_THRESHOLD ? 'strong' : 'low_confidence';
+  const warnings = quality === 'low_confidence'
+    ? [selection.risk_note || 'Сегодня сильной ставки нет — выбран наиболее приемлемый вариант с повышенной осторожностью.']
+    : [];
+  return {
+    match,
+    selectedBet,
+    score: confidence,
+    reasons: [selection.reason || 'LLM-прогноз по SStats analytics'],
+    quality,
+    warnings,
+    llm: {
+      headline: selection.headline || null,
+      brief: selection.brief || null,
+      risk_note: selection.risk_note || null,
+    },
+  };
+}
+
+async function defaultLlmSelector({ candidates, now, provider = aiBriefLlmProvider, modelName = process.env.OPENROUTER_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini', previousSelection = null, validationError = null }) {
+  const prompts = buildLlmSelectionPrompts(candidates, { now });
+  const userPrompt = validationError
+    ? `${prompts.userPrompt}\n\nПредыдущий ответ был отклонён валидатором: ${validationError}.\nПредыдущий JSON: ${JSON.stringify(previousSelection)}\nВерни новый JSON. Скопируй odds_decimal ТОЧНО из payload odds, без округления и без пересчёта.`
+    : prompts.userPrompt;
+  const result = await provider({ systemPrompt: prompts.systemPrompt, userPrompt, modelName, fewShots: [] });
+  return parseJsonObject(result?.text);
+}
+
+async function selectGlobalRecommendedPickWithLlm(candidates, { now = new Date(), llmSelector = defaultLlmSelector, modelName } = {}) {
+  const selectableCandidates = candidates.filter((candidate) => buildAvailableOddsOptions(candidate).length > 0);
+  if (!llmSelector || !selectableCandidates.length) return { selected: null, reason: !llmSelector ? 'no_llm_selector' : 'no_available_stavka_odds' };
+  let raw = await llmSelector({ candidates: selectableCandidates.map(buildLlmCandidatePayload), rawCandidates: selectableCandidates, now, modelName });
+  let selected = validateLlmSelection(raw, selectableCandidates);
+  if (!selected && raw) {
+    raw = await llmSelector({
+      candidates: selectableCandidates.map(buildLlmCandidatePayload),
+      rawCandidates: selectableCandidates,
+      now,
+      modelName,
+      previousSelection: raw,
+      validationError: 'selected market/selection must exist and odds_decimal must exactly match payload odds',
+    });
+    selected = validateLlmSelection(raw, selectableCandidates);
+  }
+  if (!selected) return { selected: null, reason: 'llm_selection_invalid', raw_selection: raw || null };
+  return { selected, raw_selection: raw };
+}
+
 function getHomeTeamName(candidate) {
   return candidate?.home_team || candidate?.teams?.home?.name || candidate?.home?.name || '';
 }
@@ -413,16 +618,16 @@ function buildAnalysisSnapshot(selected) {
   return {
     status: 'ready',
     analysis_type_code: ANALYSIS_TYPE_CODE,
-    headline: `Ставка дня: ${selected.selectedBet.label}`,
-    brief: `${matchTitle}. Выбрана одна prematch-ставка по всему футболу: ${selected.selectedBet.label} за ${selected.selectedBet.rate}.`,
-    risk_note: riskNote,
+    headline: selected.llm?.headline || `Ставка дня: ${selected.selectedBet.label}`,
+    brief: selected.llm?.brief || `${matchTitle}. LLM выбрал одну prematch-ставку по всему футболу: ${selected.selectedBet.label} за ${selected.selectedBet.rate}.`,
+    risk_note: selected.llm?.risk_note || riskNote,
     recommended_bets: [{
       ...selected.selectedBet,
       risk_level: selected.selectedBet.risk,
       reason: selected.selectedBet.reason,
     }],
-    model_name: 'global-recommended-pick-scorer-v1',
-    prompt_version: 'global-recommended-pick-v1',
+    model_name: selected.model_name || 'llm-global-recommended-pick',
+    prompt_version: 'global-recommended-pick-llm-v1',
   };
 }
 
@@ -580,7 +785,7 @@ async function defaultSstatsMatchLoader(match, { dateKey } = {}) {
   return sstatsApi.buildMatchPayload(gameId);
 }
 
-async function runGlobalRecommendedPick({ pg, now = new Date(), dryRun = false, force = false, matches = null, sstatsMatchLoader = defaultSstatsMatchLoader } = {}) {
+async function runGlobalRecommendedPick({ pg, now = new Date(), dryRun = false, force = false, matches = null, sstatsMatchLoader = defaultSstatsMatchLoader, llmSelector = defaultLlmSelector, modelName = process.env.OPENROUTER_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini' } = {}) {
   if (!dryRun && !force && pg) {
     const existing = await findExistingRecommendedPick(pg, now);
     if (existing) {
@@ -612,7 +817,8 @@ async function runGlobalRecommendedPick({ pg, now = new Date(), dryRun = false, 
       // Skip candidates without reliable SStats analytics. Stavka odds alone are not enough.
     }
   }
-  const selected = selectGlobalRecommendedPick(analyticsCandidates, { now });
+  const llmResult = await selectGlobalRecommendedPickWithLlm(analyticsCandidates, { now, llmSelector, modelName });
+  const selected = llmResult.selected;
   const summary = {
     candidates_scanned: allMatches.length,
     football_candidates: footballCandidates.length,
@@ -622,6 +828,7 @@ async function runGlobalRecommendedPick({ pg, now = new Date(), dryRun = false, 
     analysis_created: false,
     card_created: false,
     prediction_card_id: null,
+    ...(selected ? {} : { reason: llmResult.reason, raw_selection: llmResult.raw_selection || null }),
   };
 
   if (!selected || dryRun) return summary;
@@ -668,5 +875,8 @@ module.exports = {
     normalizeBet,
     buildAnalysisSnapshot,
     buildSourcePayload,
+    buildLlmSelectionPrompts,
+    validateLlmSelection,
+    selectGlobalRecommendedPickWithLlm,
   },
 };

@@ -70,18 +70,57 @@ test('normalizes odds-only analytical bet candidates', () => {
   assert.ok(!bets.some((bet) => bet.label.includes('Ставки')));
 });
 
-test('does not call Stavka popular bets loader when selecting global pick', async () => {
+test('runGlobalRecommendedPick uses LLM selector as forecast maker and keeps runtime as validator', async () => {
   let calls = 0;
   const result = await service.runGlobalRecommendedPick({
     dryRun: true,
     now: NOW,
-    matches: [candidate({ id: 'odds-only' })],
-    popularBetsLoader: async () => { calls += 1; throw new Error('must not be called'); },
+    matches: [candidate({ id: 'llm-match' })],
+    llmSelector: async ({ candidates }) => {
+      calls += 1;
+      assert.equal(candidates.length, 1);
+      return {
+        match_id: 'llm-match',
+        market: 'both_to_score',
+        selection_code: 'yes',
+        label: 'Обе забьют — да',
+        odds_decimal: 1.82,
+        confidence: 74,
+        risk: 'medium',
+        headline: 'Обе команды выглядят достаточно активными впереди',
+        brief: 'LLM выбрал рынок обе забьют на основе SStats и доступного коэффициента.',
+        risk_note: 'Основной риск — ограниченность свежей формы в payload.',
+        reason: 'Обе команды имеют атакующий профиль, а коэффициент 1.82 есть в Stavka odds.',
+      };
+    },
   });
 
-  assert.equal(calls, 0);
-  assert.equal(result.selected.match.id, 'odds-only');
-  assert.equal(result.selected.selectedBet.source, 'analytics_odds');
+  assert.equal(calls, 1);
+  assert.equal(result.selected.match.id, 'llm-match');
+  assert.equal(result.selected.selectedBet.market, 'both_to_score');
+  assert.equal(result.selected.selectedBet.source, 'llm_forecast');
+  assert.equal(result.selected.selectedBet.label, 'Обе забьют — да');
+});
+
+test('runGlobalRecommendedPick rejects invalid LLM-selected odds instead of falling back to code-made forecast', async () => {
+  const result = await service.runGlobalRecommendedPick({
+    dryRun: true,
+    now: NOW,
+    matches: [candidate({ id: 'invalid-llm' })],
+    llmSelector: async () => ({
+      match_id: 'invalid-llm',
+      market: 'both_to_score',
+      selection_code: 'yes',
+      label: 'Обе забьют — да',
+      odds_decimal: 1.77,
+      confidence: 74,
+      risk: 'medium',
+      reason: 'bad odds',
+    }),
+  });
+
+  assert.equal(result.selected, null);
+  assert.equal(result.reason, 'llm_selection_invalid');
 });
 
 test('selects one best eligible analytical bet and marks weak fallback with warning', () => {
