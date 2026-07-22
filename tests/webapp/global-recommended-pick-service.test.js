@@ -426,3 +426,51 @@ test('selects one best eligible analytical bet and marks weak fallback with warn
   assert.equal(weak.quality, 'low_confidence');
   assert.ok(weak.warnings.some((warning) => warning.includes('сильной ставки')));
 });
+
+test('loads an English SStats fixture for a Russian Stavka pair and bootstraps the proven mapping after analytics payload succeeds', async () => {
+  const candidateMatch = candidate({
+    id: 'stavka-omonia-kairat',
+    match_id: 'stavka-omonia-kairat',
+    slug: 'omonia-nicosia-kairat-almaty',
+    home_team: 'Омония Никосия',
+    away_team: 'Кайрат Алматы',
+  });
+  const game = {
+    id: 1591936,
+    date: '2026-07-21T18:00:00+03:00',
+    homeTeam: { id: 101, name: 'Omonia Nicosia' },
+    awayTeam: { id: 202, name: 'Kairat Almaty' },
+  };
+  const calls = [];
+  const payload = await service.__private.defaultSstatsMatchLoader(candidateMatch, {
+    dateKey: '2026-07-21',
+    pg: { connection: async () => [] },
+    sstatsClient: {
+      hasApiKey: () => true,
+      apiGet: async () => [game],
+      buildMatchPayload: async (gameId) => {
+        calls.push(['payload', gameId]);
+        return { fixture_id: gameId, game: { id: gameId } };
+      },
+    },
+    resolver: {
+      resolveProviderFixture: async () => ({ status: 'unresolved', method: 'canonical_pair_time' }),
+      bootstrapCanonicalPair: async (_pg, input) => {
+        calls.push(['bootstrap', input]);
+        return { status: 'resolved', matchId: 700 };
+      },
+    },
+    persistExternalMatchMapping: async (_pg, input) => calls.push(['mapping', input]),
+  });
+
+  assert.equal(payload.fixture_id, 1591936);
+  assert.deepEqual(calls.map(([kind]) => kind), ['payload', 'bootstrap', 'mapping']);
+  assert.equal(calls[1][1].source.home.systemTeamName, 'Омония Никосия');
+  assert.equal(calls[1][1].target.away.systemTeamName, 'Kairat Almaty');
+  assert.deepEqual(calls[2][1], {
+    systemId: 3,
+    internalMatchId: 700,
+    systemMatchId: 1591936,
+    systemMatchSlug: 'omonia-nicosia-kairat-almaty',
+  });
+});

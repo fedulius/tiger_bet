@@ -8,9 +8,11 @@ const { aiBriefLlmProvider } = require('./aiBriefLlmProvider');
 const { resolveDbContextForCandidate } = require('./dailyPickMappingService');
 const {
   persistBundleSnapshot,
+  persistExternalMatchMapping,
   persistAnalysisSnapshot,
 } = require('./dailyPickPersistenceService');
 const { backfillPredictionHistory } = require('./predictionHistoryBackfillService');
+const matchResolutionService = require('./matchResolutionService');
 
 const MIN_ODDS = 1.6;
 const MAX_ODDS = 2.3;
@@ -861,12 +863,12 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function enrichWithSstatsAnalytics(match, { sstatsMatchLoader = defaultSstatsMatchLoader } = {}) {
+async function enrichWithSstatsAnalytics(match, { pg = null, sstatsMatchLoader = defaultSstatsMatchLoader } = {}) {
   if (getAnalyticsFeatures(match)?.coverage) return match;
   if (!sstatsMatchLoader) return null;
   const startsAt = parseCandidateDate(match);
   const dateKey = startsAt ? getMoscowDateKey(startsAt) : null;
-  const payload = await sstatsMatchLoader(match, { dateKey });
+  const payload = await sstatsMatchLoader(match, { dateKey, pg });
   if (!payload) return null;
   const features = extractAnalyticsFeatures({ sport: 'soccer', sstatsData: payload });
   if (analyticsCoverageScore(features) <= 0) return null;
@@ -916,22 +918,81 @@ async function loadSstatsDayList(dateKey) {
   return rows;
 }
 
-async function defaultSstatsMatchLoader(match, { dateKey } = {}) {
-  if (!sstatsApi.hasApiKey()) return null;
+function gameStartAt(game) {
+  const date = new Date(game?.date || game?.starts_at || game?.startAt || game?.game?.date || '');
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function hasCompatibleFixtureContext(match, game) {
+  const matchStart = parseCandidateDate(match);
+  const targetStart = gameStartAt(game);
+  if (!matchStart || !targetStart || Math.abs(matchStart.getTime() - targetStart.getTime()) > 15 * 60 * 1000) return false;
+  const targetSport = normalizeText(game?.sport?.name || game?.sport?.slug || game?.sportName || '');
+  if (targetSport && !['football', 'soccer', 'футбол'].includes(targetSport)) return false;
+  const matchGender = normalizeText(match?.gender || match?.gender_code || '');
+  const targetGender = normalizeText(game?.gender || game?.genderCode || game?.season?.gender || '');
+  return !matchGender || !targetGender || matchGender === targetGender;
+}
+
+function makeResolverFixture(match, game) {
+  const sourceMatchId = String(match?.match_id || match?.id || '');
+  const targetMatchId = game?.id || game?.gameId;
+  if (!sourceMatchId || !targetMatchId) return null;
+  const slug = match?.match_slug || match?.slug || null;
+  return {
+    source: {
+      systemId: 4, matchId: sourceMatchId, matchSlug: slug,
+      home: { systemId: 4, systemTeamId: match?.home_team_id || null, systemTeamSlug: match?.home_team_slug || null, systemTeamName: getHomeTeamName(match) },
+      away: { systemId: 4, systemTeamId: match?.away_team_id || null, systemTeamSlug: match?.away_team_slug || null, systemTeamName: getAwayTeamName(match) },
+    },
+    target: {
+      systemId: 3, matchId: String(targetMatchId), matchSlug: slug,
+      home: { systemId: 3, systemTeamId: game?.homeTeam?.id || null, systemTeamSlug: game?.homeTeam?.slug || null, systemTeamName: game?.homeTeam?.name || '' },
+      away: { systemId: 3, systemTeamId: game?.awayTeam?.id || null, systemTeamSlug: game?.awayTeam?.slug || null, systemTeamName: game?.awayTeam?.name || '' },
+    },
+    sportId: 1,
+    startAt: gameStartAt(game).toISOString(),
+    genderCode: normalizeText(match?.gender || match?.gender_code || game?.gender || game?.genderCode || 'unknown') || 'unknown',
+  };
+}
+
+async function defaultSstatsMatchLoader(match, { dateKey, pg = null, sstatsClient = sstatsApi, resolver = matchResolutionService, persistExternalMatchMapping: persistMapping = persistExternalMatchMapping } = {}) {
+  if (!sstatsClient.hasApiKey()) return null;
   const existingId = match.sstats_match_id || match.sstats_id || match.sstatsGameId;
-  if (existingId) return sstatsApi.buildMatchPayload(existingId);
+  if (existingId) return sstatsClient.buildMatchPayload(existingId);
 
-  const games = await loadSstatsDayList(dateKey);
-  const slugMatch = games.find((game) => slugMatchesSstatsGame(match, game));
-  if (slugMatch?.id) return sstatsApi.buildMatchPayload(slugMatch.id);
+  const games = sstatsClient === sstatsApi
+    ? await loadSstatsDayList(dateKey)
+    : await sstatsClient.apiGet('/Games/list', { from: `${dateKey}T00:00:00+03:00`, to: `${dateKey}T23:59:59+03:00`, limit: '500', TimeZone: '3' });
+  const candidates = (Array.isArray(games) ? games : []).filter((game) => slugMatchesSstatsGame(match, game) && hasCompatibleFixtureContext(match, game));
+  if (candidates.length !== 1) return null;
+  const game = candidates[0];
+  const fixture = makeResolverFixture(match, game);
+  if (!fixture) return null;
 
-  const home = getHomeTeamName(match);
-  const away = getAwayTeamName(match);
-  if (!home || !away) return null;
-  const found = await sstatsApi.findGameByTeams(home, away, dateKey);
-  const gameId = found?.id || found?.gameId;
-  if (!gameId) return null;
-  return sstatsApi.buildMatchPayload(gameId);
+  let resolution = null;
+  if (pg && resolver?.resolveProviderFixture) {
+    try {
+      resolution = await resolver.resolveProviderFixture(pg, fixture);
+    } catch {
+      return null;
+    }
+    if (resolution?.status === 'error' || resolution?.status === 'ambiguous') return null;
+  }
+  const payload = await sstatsClient.buildMatchPayload(game.id || game.gameId);
+  if (!payload) return null;
+  if (pg && resolution?.status !== 'resolved' && resolver?.bootstrapCanonicalPair) {
+    try {
+      resolution = await resolver.bootstrapCanonicalPair(pg, { ...fixture, sourcePayload: { proven: 'slug_pair_time', sstatsGameId: game.id || game.gameId } });
+    } catch {
+      return null;
+    }
+    if (resolution?.status !== 'resolved') return null;
+  }
+  if (pg && resolution?.matchId != null && persistMapping) {
+    await persistMapping(pg, { systemId: 3, internalMatchId: resolution.matchId, systemMatchId: game.id || game.gameId, systemMatchSlug: fixture.target.matchSlug });
+  }
+  return payload;
 }
 
 async function runGlobalRecommendedPick({ pg, now = new Date(), dryRun = false, force = false, matches = null, sstatsMatchLoader = defaultSstatsMatchLoader, llmSelector = defaultLlmSelector, modelName = process.env.OPENROUTER_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini' } = {}) {
@@ -959,7 +1020,7 @@ async function runGlobalRecommendedPick({ pg, now = new Date(), dryRun = false, 
   const analyticsCandidates = [];
   for (const match of meaningful.slice(0, 20)) {
     try {
-      const enriched = await enrichWithSstatsAnalytics(match, { sstatsMatchLoader });
+      const enriched = await enrichWithSstatsAnalytics(match, { pg: dryRun ? null : pg, sstatsMatchLoader });
       if (enriched) analyticsCandidates.push(enriched);
       if (!matches) await sleep(900);
     } catch {
@@ -997,6 +1058,15 @@ async function runGlobalRecommendedPick({ pg, now = new Date(), dryRun = false, 
     candidate: persistenceCandidate,
     sourcePayload,
   });
+  const sstatsMatchId = selected.match?.sstats_match_id;
+  if (persistedSource.matchId != null && sstatsMatchId != null) {
+    await persistExternalMatchMapping(pg, {
+      systemId: 3,
+      internalMatchId: persistedSource.matchId,
+      systemMatchId: sstatsMatchId,
+      systemMatchSlug: persistenceCandidate.match_slug || persistenceCandidate.slug || '',
+    });
+  }
   const analysisResult = await persistAnalysisSnapshot(pg, {
     matchSourceId: persistedSource.sourceId,
     snapshot: buildAnalysisSnapshot(selected),
@@ -1027,6 +1097,8 @@ module.exports = {
     buildLlmCandidatePayload,
     buildLlmSelectionPrompts,
     defaultLlmSelector,
+    defaultSstatsMatchLoader,
+    enrichWithSstatsAnalytics,
     validateLlmSelection,
     selectGlobalRecommendedPickWithLlm,
   },
