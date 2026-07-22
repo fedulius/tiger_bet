@@ -159,6 +159,41 @@ test('builds deterministic odds ids and server assembles the selected Stavka odd
   assert.equal(result.selected.selectedBet.estimated_edge_pp, 6.05);
 });
 
+test('v2 selector sends strict JSON schema and exact odds allowlist to the LLM provider', async () => {
+  const raw = candidate({ id: 'llm-match' });
+  let request = null;
+  const selection = await service.__private.defaultLlmSelector({
+    candidates: [raw],
+    now: NOW,
+    provider: async (input) => {
+      request = input;
+      return { text: JSON.stringify(llmSelection()) };
+    },
+  });
+
+  assert.deepEqual(selection, llmSelection());
+  assert.match(request.userPrompt, /VALID_ODDS_ID_ALLOWLIST/);
+  assert.match(request.userPrompt, /llm-match\|both_to_score\|yes\|match\|none/);
+  assert.deepEqual(request.responseFormat, {
+    type: 'json_schema',
+    json_schema: {
+      name: 'global_recommended_pick_v2',
+      strict: true,
+      schema: request.responseFormat.json_schema.schema,
+    },
+  });
+  const schema = request.responseFormat.json_schema.schema;
+  assert.deepEqual(schema.required, ['match_id', 'odds_id', 'estimated_probability', 'confidence', 'risk', 'quality', 'warning', 'headline', 'brief', 'risk_note', 'reason', 'evidence']);
+  assert.equal(schema.additionalProperties, false);
+  assert.deepEqual(schema.properties.warning.type, ['string', 'null']);
+  assert.equal(schema.properties.evidence.minItems, 2);
+  assert.equal(schema.properties.evidence.maxItems, 5);
+  assert.equal(schema.properties.evidence.items.additionalProperties, false);
+  assert.deepEqual(schema.properties.odds_id.enum, ['llm-match|one_x_two|home|match|none', 'llm-match|one_x_two|away|match|none', 'llm-match|both_to_score|yes|match|none', 'llm-match|both_to_score|no|match|none', 'llm-match|total|over|match|2.5', 'llm-match|total|under|match|2.5']);
+  assert.equal(Object.hasOwn(schema.properties, 'odds_decimal'), false);
+  assert.equal(Object.hasOwn(schema.properties, 'market'), false);
+});
+
 test('strictly rejects extra fields, invalid quality-warning coupling, and evidence not backed by payload scalar', () => {
   const raw = candidate({ id: 'llm-match' });
   assert.equal(service.__private.validateLlmSelection(llmSelection({ market: 'both_to_score' }), [raw]), null);

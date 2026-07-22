@@ -159,6 +159,22 @@ test('createAiBriefLlmProvider: shapes request with correct model and messages',
     ]);
   }));
 
+test('createAiBriefLlmProvider: includes response_format only when supplied', () =>
+  withEnv({ ...CLEAN_ENV, OPENAI_API_KEY: 'sk-key' }, async () => {
+    const calls = [];
+    const provider = createAiBriefLlmProvider(async (call) => {
+      calls.push(call);
+      return { choices: [{ message: { content: '{}' } }], usage: {} };
+    });
+    const responseFormat = { type: 'json_schema', json_schema: { name: 'pick', strict: true, schema: { type: 'object' } } };
+
+    await provider({ systemPrompt: 'S', userPrompt: 'U', fewShots: [] });
+    await provider({ systemPrompt: 'S', userPrompt: 'U', fewShots: [], responseFormat });
+
+    assert.equal(Object.hasOwn(calls[0].body, 'response_format'), false);
+    assert.deepEqual(calls[1].body.response_format, responseFormat);
+  }));
+
 test('createAiBriefLlmProvider: modelName overrides config default', () =>
   withEnv({ ...CLEAN_ENV, OPENAI_API_KEY: 'sk-key' }, async () => {
     let capturedModel = null;

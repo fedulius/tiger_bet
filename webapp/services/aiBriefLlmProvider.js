@@ -110,7 +110,7 @@ async function defaultHttpClient({ url, apiKey, body }) {
 }
 
 function createAiBriefLlmProvider(httpClient = defaultHttpClient) {
-  return async function({ systemPrompt, userPrompt, modelName, fewShots }) {
+  return async function({ systemPrompt, userPrompt, modelName, fewShots, responseFormat }) {
     const config = resolveProviderConfig();
     if (!config) throw new Error('no_llm_provider_key');
 
@@ -119,7 +119,11 @@ function createAiBriefLlmProvider(httpClient = defaultHttpClient) {
     const response = await httpClient({
       url: config.baseUrl,
       apiKey: config.apiKey,
-      body: { model: resolvedModel, messages },
+      body: {
+        model: resolvedModel,
+        messages,
+        ...(responseFormat ? { response_format: responseFormat } : {}),
+      },
     });
 
     return {
