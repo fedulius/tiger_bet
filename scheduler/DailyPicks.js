@@ -11,8 +11,10 @@ const { getMoscowDate } = require('../webapp/services/dailyPickReadService');
 const { extractAnalyticsFeatures } = require('../webapp/services/matchAnalyticsFeatureService');
 const { scoreMatch } = require('../webapp/services/matchAnalyticsScoringService');
 const { buildPartialMarketCatalog, selectMarketFits } = require('../webapp/services/marketFitService');
+const { normalizeProviderTeamKey } = require('../webapp/services/matchResolutionService');
 
 const MATCHES_PER_DAY = 3; // максимум матчей на слот (today + tomorrow)
+const SSTATS_FIXTURE_TIME_TOLERANCE_MS = 15 * 60 * 1000;
 
 // ── Load users with favorites ──────────────────────────────
 async function loadUsersWithFavorites(pg) {
@@ -150,6 +152,11 @@ async function buildSourcePayload(match, popularBetsLoader, matchDetailLoader, r
     match_id: match.match_id || match.id,
     match_slug: slug,
     sport_slug: match.sport_slug || match.sportSlug || null,
+    fixture_context: {
+      home_team: match.home_team || match.homeTeam?.name || null,
+      away_team: match.away_team || match.awayTeam?.name || null,
+      starts_at: match.starts_at || match.startsAt || null,
+    },
     source_mode: sourceMode,
     source_url: 'https://stavka.tv/matches/' + (match.sport_slug || 'soccer') + '/' + slug,
     market_catalog: marketCatalog,
@@ -159,6 +166,31 @@ async function buildSourcePayload(match, popularBetsLoader, matchDetailLoader, r
     summary_snippet: summarySnippet,
     source_hash: sourceHash,
   };
+}
+
+function findSstatsFixtureFromDayList(payload, games) {
+  const context = payload?.fixture_context || {};
+  const homeKey = normalizeProviderTeamKey(context.home_team);
+  const awayKey = normalizeProviderTeamKey(context.away_team);
+  const kickoff = Date.parse(context.starts_at || '');
+  if (!homeKey || !awayKey || !Number.isFinite(kickoff)) return { status: 'unresolved' };
+
+  const sourceSlugKey = normalizeProviderTeamKey(payload?.match_slug);
+  const candidates = (Array.isArray(games) ? games : []).filter((game) => {
+    const gameHomeKey = normalizeProviderTeamKey(game?.homeTeam?.name);
+    const gameAwayKey = normalizeProviderTeamKey(game?.awayTeam?.name);
+    const gameKickoff = Date.parse(game?.date || game?.starts_at || game?.startAt || '');
+    const exactDisplayPair = gameHomeKey === homeKey && gameAwayKey === awayKey;
+    // Stavka may localize display names. Its slug is the provider's ordered
+    // English pair, so accept it only when both complete normalized SStats
+    // names appear contiguously and in home→away order.
+    const exactSlugPair = !!sourceSlugKey && sourceSlugKey.includes(`${gameHomeKey}-${gameAwayKey}`);
+    return (exactDisplayPair || exactSlugPair)
+      && Number.isFinite(gameKickoff)
+      && Math.abs(gameKickoff - kickoff) <= SSTATS_FIXTURE_TIME_TOLERANCE_MS;
+  });
+  if (candidates.length === 1 && (candidates[0].id || candidates[0].gameId)) return { status: 'resolved', gameId: candidates[0].id || candidates[0].gameId };
+  return { status: candidates.length > 1 ? 'ambiguous' : 'unresolved' };
 }
 
 // ── Enrich payload with SStats data ────────────────────────
@@ -182,51 +214,43 @@ async function enrichPayloadWithSStatsData(payload, pg) {
       }
     }
 
-    // 2. If not in DB, search by team names
+    // 2. If not in DB, inspect the relevant Moscow day list. Never infer a
+    // fixture from slug fragments or pin the lookup to one competition.
     if (!sstatsGameId) {
-      const parts = slug.split('-').filter(p => !/^\d+$/.test(p) && p.length > 1);
-      if (parts.length < 2) return payload;
-
-      const homeSearch = parts[parts.length - 2];
-      const awaySearch = parts[parts.length - 1];
-
-      // Search WC games
-      const wcGames = await sstatsApi.apiGet('/Games/list', {
-        LeagueId: '1',
-        Year: '2026',
+      const startsAt = payload.fixture_context?.starts_at;
+      const start = new Date(startsAt || '');
+      if (Number.isNaN(start.getTime())) return { ...payload, sstats_fixture_resolution: 'unresolved' };
+      const dateKey = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(start);
+      const dayGames = await sstatsApi.apiGet('/Games/list', {
+        from: `${dateKey}T00:00:00+03:00`,
+        to: `${dateKey}T23:59:59+03:00`,
         limit: '200',
         TimeZone: '3',
       });
-
-      if (wcGames?.length) {
-        for (const g of wcGames) {
-          const home = (g.homeTeam?.name || '').toLowerCase();
-          const away = (g.awayTeam?.name || '').toLowerCase();
-          if (home.includes(homeSearch) && away.includes(awaySearch)) {
-            sstatsGameId = g.id;
-            // Store SStats game ID in DB (separate row from Stavka)
-            if (pg) {
-              const matchRow = await pg.connection(
-                'SELECT match_id FROM external.public_match WHERE system_match_slug = $1 AND system_id = 4 LIMIT 1',
-                [slug],
-              ).catch(() => []);
-              const internalMatchId = matchRow[0]?.match_id;
-              if (internalMatchId) {
-                await pg.connection(
-                  `INSERT INTO external.public_match (system_match_id, system_match_slug, match_id, system_id)
-                   VALUES ($1, $2, $3, 3)
-                   ON CONFLICT (system_id, match_id) DO UPDATE SET system_match_id = EXCLUDED.system_match_id, system_match_slug = EXCLUDED.system_match_slug`,
-                  [String(sstatsGameId), slug, internalMatchId],
-                ).catch(() => {});
-              }
-            }
-            break;
-          }
+      const fixture = findSstatsFixtureFromDayList(payload, dayGames);
+      if (fixture.status !== 'resolved') return { ...payload, sstats_fixture_resolution: fixture.status };
+      sstatsGameId = fixture.gameId;
+      // Store SStats game ID in DB (separate row from Stavka)
+      if (pg) {
+        const matchRow = await pg.connection(
+          'SELECT match_id FROM external.public_match WHERE system_match_slug = $1 AND system_id = 4 LIMIT 1',
+          [slug],
+        ).catch(() => []);
+        const internalMatchId = matchRow[0]?.match_id;
+        if (internalMatchId) {
+          await pg.connection(
+            `INSERT INTO external.public_match (system_match_id, system_match_slug, match_id, system_id)
+             VALUES ($1, $2, $3, 3)
+             ON CONFLICT (system_id, match_id) DO UPDATE SET system_match_id = EXCLUDED.system_match_id, system_match_slug = EXCLUDED.system_match_slug`,
+            [String(sstatsGameId), slug, internalMatchId],
+          ).catch(() => {});
         }
       }
     }
 
-    if (!sstatsGameId) return payload;
+    if (!sstatsGameId) return { ...payload, sstats_fixture_resolution: 'unresolved' };
 
     // 3. Build full payload with lineups, form, statistics
     const sstatsPayload = await sstatsApi.buildMatchPayload(sstatsGameId);
@@ -248,7 +272,7 @@ async function enrichPayloadWithSStatsData(payload, pg) {
       },
     };
   } catch {
-    return payload;
+    return { ...payload, sstats_fixture_resolution: 'unresolved' };
   }
 }
 
@@ -277,12 +301,17 @@ function buildAnalyticsFirstPayload(payload) {
     skip_reason: 'analytics_not_supported_for_sport',
     source_hash: buildAnalyticsSourceHash({ skipReason: 'analytics_not_supported_for_sport' }),
   };
-  if (!payload.sstats_data) return {
-    ...payload,
-    source_mode: 'skip',
-    skip_reason: 'analytics_sstats_fixture_unresolved',
-    source_hash: buildAnalyticsSourceHash({ skipReason: 'analytics_sstats_fixture_unresolved' }),
-  };
+  if (!payload.sstats_data) {
+    const skipReason = payload.sstats_fixture_resolution === 'ambiguous'
+      ? 'analytics_sstats_fixture_ambiguous'
+      : 'analytics_sstats_fixture_unresolved';
+    return {
+      ...payload,
+      source_mode: 'skip',
+      skip_reason: skipReason,
+      source_hash: buildAnalyticsSourceHash({ skipReason }),
+    };
+  }
 
   const analyticsFeatures = extractAnalyticsFeatures({ sport: payload.sport_slug, sstatsData: payload.sstats_data });
   const matchAnalytics = scoreMatch(analyticsFeatures);

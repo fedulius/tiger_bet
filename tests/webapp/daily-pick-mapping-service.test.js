@@ -91,6 +91,29 @@ test('resolveTournamentIdForCandidate: falls back to league_slug when external i
   assert.deepEqual(pg.calls[1].params, [3, 'cct-south-america-series-3-']);
 });
 
+test('resolveTournamentIdForCandidate: resolves a Stavka league label that is a prefix of the canonical tournament name', async () => {
+  const pg = createFakePg({
+    handler(query) {
+      if (/external\.public_tournament/i.test(query)) return [];
+      if (/lower\(tournament_name\) LIKE lower\(\$1\) \|\| '%'/i.test(query)) return [{ tournament_id: 90 }];
+      return [];
+    },
+  });
+
+  const result = await resolveTournamentIdForCandidate(pg, {
+    systemId: 4,
+    candidate: makeCandidate({
+      league_slug: 'international-clubs-uefa-champions-league',
+      external_league_id: '7',
+      league_label: 'Лига чемпионов',
+    }),
+  });
+
+  assert.equal(result, 90);
+  assert.equal(pg.calls.length, 3);
+  assert.deepEqual(pg.calls[2].params, ['Лига чемпионов']);
+});
+
 test('resolveTournamentIdForCandidate: returns null when neither external id nor slug resolves', async () => {
   const pg = createFakePg({ rows: [] });
   const result = await resolveTournamentIdForCandidate(pg, {

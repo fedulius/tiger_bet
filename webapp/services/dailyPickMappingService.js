@@ -38,13 +38,20 @@ async function resolveTournamentIdForCandidate(pg, { systemId, candidate }) {
     if (row) return row.tournament_id ?? null;
   }
 
-  // Fallback: match by league name directly against public.tournament
+  // Fallback: match by league name directly against public.tournament.
+  // Stavka shortens canonical names (for example, "Лига чемпионов" vs
+  // "Лига чемпионов УЕФА"), so accept only canonical names extending the
+  // provider label and choose the shortest one to avoid broad fuzzy matches.
   const leagueName = candidate.league_label;
   if (leagueName) {
     const [row] = await pg.connection(
       `SELECT tournament_id FROM public.tournament
        WHERE lower(tournament_name) = lower($1)
-          OR lower(tournament_name_en) = lower($1)`,
+          OR lower(tournament_name_en) = lower($1)
+          OR lower(tournament_name) LIKE lower($1) || '%'
+          OR lower(tournament_name_en) LIKE lower($1) || '%'
+       ORDER BY length(tournament_name) ASC, tournament_id ASC
+       LIMIT 1`,
       [leagueName],
     );
     if (row) return row.tournament_id ?? null;
