@@ -92,46 +92,6 @@ test('normalizes odds-only analytical bet candidates', () => {
   assert.ok(!bets.some((bet) => bet.label.includes('Ставки')));
 });
 
-test('runGlobalRecommendedPick uses LLM selector as forecast maker and keeps runtime as validator', async () => {
-  let calls = 0;
-  const result = await service.runGlobalRecommendedPick({
-    dryRun: true,
-    now: NOW,
-    matches: [candidate({ id: 'llm-match' })],
-    llmSelector: async ({ candidates }) => {
-      calls += 1;
-      assert.equal(candidates.length, 1);
-      return llmSelection();
-    },
-  });
-
-  assert.equal(calls, 1);
-  assert.equal(result.selected.match.id, 'llm-match');
-  assert.equal(result.selected.selectedBet.market, 'both_to_score');
-  assert.equal(result.selected.selectedBet.source, 'llm_forecast');
-  assert.equal(result.selected.selectedBet.label, 'Обе забьют — да');
-});
-
-test('runGlobalRecommendedPick rejects invalid LLM-selected odds instead of falling back to code-made forecast', async () => {
-  const result = await service.runGlobalRecommendedPick({
-    dryRun: true,
-    now: NOW,
-    matches: [candidate({ id: 'invalid-llm' })],
-    llmSelector: async () => ({
-      match_id: 'invalid-llm',
-      market: 'both_to_score',
-      selection_code: 'yes',
-      label: 'Обе забьют — да',
-      odds_decimal: 1.77,
-      confidence: 74,
-      risk: 'medium',
-      reason: 'bad odds',
-    }),
-  });
-
-  assert.equal(result.selected, null);
-  assert.equal(result.reason, 'llm_selection_invalid');
-});
 
 test('builds deterministic odds ids and server assembles the selected Stavka odd with edge', async () => {
   const raw = candidate({ id: 'llm-match' });
@@ -266,27 +226,6 @@ test('builds data quality from explicit coverage and lineup source states', () =
   }
 });
 
-test('retries after null first output and retains bounded source contract trace', async () => {
-  const raw = candidate({ id: 'llm-match' });
-  const attempts = [];
-  const result = await service.__private.selectGlobalRecommendedPickWithLlm([raw], {
-    now: NOW,
-    llmSelector: async (input) => {
-      attempts.push(input);
-      return attempts.length === 1 ? null : llmSelection();
-    },
-  });
-
-  assert.equal(attempts.length, 2);
-  assert.match(attempts[1].validationError, /response must be a JSON object/);
-  assert.equal(result.selected.selectedBet.source, 'llm_forecast');
-  assert.equal(result.selected.llm.trace.first_output, null);
-  assert.deepEqual(result.selected.llm.trace.retry_output, llmSelection());
-  assert.deepEqual(result.selected.llm.trace.validation_errors, ['response must be a JSON object']);
-  const source = service.__private.buildSourcePayload(result.selected);
-  assert.equal(source.source_contract, 'sstats_analytics_plus_stavka_odds_v2');
-  assert.equal(source.llm_trace.prompt_version, 'global-recommended-pick-llm-v2');
-});
 
 test('returns no pick after a thrown first attempt and null retry without code fallback', async () => {
   const attempts = [];
@@ -365,40 +304,6 @@ test('builds LLM selected bets accepted by prediction history normalizer for sup
   }
 });
 
-test('bounds persisted LLM text and trace selection output', async () => {
-  const oversized = 'x'.repeat(5000);
-  const result = await service.__private.selectGlobalRecommendedPickWithLlm([candidate({ id: 'llm-match' })], {
-    now: NOW,
-    llmSelector: async () => llmSelection({
-      headline: oversized,
-      brief: oversized,
-      risk_note: oversized,
-      reason: oversized,
-      evidence: [{ path: 'analytics_features.home.avg_scored', value: 1.9, interpretation: oversized }, { path: 'analytics_features.away.avg_scored', value: 1.2, interpretation: oversized }],
-    }),
-  });
-  const source = service.__private.buildSourcePayload(result.selected);
-
-  assert.ok(source.selected.llm.headline.length <= 180);
-  assert.ok(source.selected.llm.brief.length <= 1200);
-  assert.ok(source.selected.llm.risk_note.length <= 500);
-  assert.ok(source.selected.selectedBet.reason.length <= 1200);
-  assert.ok(source.selected.llm.evidence.every((item) => item.interpretation.length <= 500));
-  assert.ok(JSON.stringify(source.llm_trace).length <= 13000);
-});
-
-test('includes llm trace in failed run summary for dry-run diagnostics', async () => {
-  const result = await service.runGlobalRecommendedPick({
-    now: NOW,
-    dryRun: true,
-    matches: [candidate({ id: 'llm-match' })],
-    sstatsMatchLoader: async () => null,
-    llmSelector: async () => null,
-  });
-
-  assert.equal(result.reason, 'llm_selection_invalid');
-  assert.equal(result.llm_trace.prompt_version, 'global-recommended-pick-llm-v2');
-});
 
 test('selects one best eligible analytical bet and marks weak fallback with warning', () => {
   const selected = service.selectGlobalRecommendedPick([
@@ -474,3 +379,55 @@ test('loads an English SStats fixture for a Russian Stavka pair and bootstraps t
     systemMatchSlug: 'omonia-nicosia-kairat-almaty',
   });
 });
+
+function expectedGlobalDataQuality() {
+  return { team_stats: 'complete', recent_form: 'complete', lineups: 'missing', h2h: 'missing', ratings: 'missing', overall_coverage: 0.4 };
+}
+
+function analystSnapshotForGlobal(matchRef = 0) {
+  return { match_ref: matchRef, match_assessment: 'Хозяева стабильнее в атаке по доступной статистике.', market_estimates: [{ market_key: 'both_to_score:yes', estimated_probability: 0.61, confidence: 74, rationale: 'Обе команды регулярно создают моменты.', evidence: [{ path: 'analytics_features.home.avg_scored', value: 1.9, interpretation: 'Хозяева забивают стабильно.' }] }], uncertainty: null, data_quality: expectedGlobalDataQuality(), analyst_version: 'recommended-pick-analyst-v1' };
+}
+
+function writerOutputForGlobal() {
+  return { headline: 'Обе команды способны забить в этом матче', brief: 'Обе команды регулярно создают моменты, поэтому голы с обеих сторон выглядят реалистично.', risk_note: 'Составы до стартового свистка могут изменить картину матча.', writer_version: 'recommended-pick-writer-v1' };
+}
+
+test('three-stage pipeline isolates analyst, selector, writer inputs and builds a server-mapped selected bet', async () => {
+  const seen = {};
+  const result = await service.runGlobalRecommendedPick({
+    dryRun: true, now: NOW, matches: [candidate({ id: 'three-stage' })],
+    pipeline: {
+      analyst: async (input) => { seen.analyst = input; return { snapshot: analystSnapshotForGlobal(0), trace: { prompt_version: 'recommended-pick-analyst-v1' } }; },
+      selector: async (snapshots, options) => { seen.selector = { snapshots, options }; return { selection: { match_ref: 0, option_ref: options.find((item) => item.market_key === 'both_to_score:yes').option_ref, selection_confidence: 74, selection_quality: 'strong', warning: null, selector_version: 'recommended-pick-value-selector-v1' }, trace: { prompt_version: 'recommended-pick-value-selector-v1' } }; },
+      writer: async (input) => { seen.writer = input; return { writer_output: writerOutputForGlobal(), trace: { prompt_version: 'recommended-pick-writer-v1' } }; },
+    },
+  });
+  assert.equal(result.selected.selectedBet.market, 'both_to_score');
+  assert.equal(result.selected.selectedBet.selection_code, 'yes');
+  assert.equal(result.selected.selectedBet.source, 'llm_three_stage');
+  assert.doesNotMatch(JSON.stringify(seen.analyst), /"odds"|available_odds|odds_id|odds_decimal/i);
+  assert.doesNotMatch(JSON.stringify(seen.selector), /sstats_data|avg_scored|evidence|rationale/i);
+  assert.doesNotMatch(JSON.stringify(seen.writer), /sstats_data|avg_scored|evidence/i);
+  const source = service.__private.buildSourcePayload(result.selected);
+  assert.equal(source.source_contract, 'sstats_analytics_plus_stavka_odds_three_stage_v1');
+  assert.deepEqual(Object.keys(source.pipeline_traces).sort(), ['analyst', 'selector', 'writer']);
+  assert.deepEqual(source.pipeline_versions, { analyst: 'recommended-pick-analyst-v1', selector: 'recommended-pick-value-selector-v1', writer: 'recommended-pick-writer-v1' });
+});
+
+for (const failedStage of ['analyst', 'selector', 'writer']) {
+  test(`three-stage pipeline does not persist a card when ${failedStage} fails`, async () => {
+    const calls = { analyst: 0, selector: 0, writer: 0 };
+    const result = await service.runGlobalRecommendedPick({
+      dryRun: true, now: NOW, matches: [candidate({ id: `failed-${failedStage}` })],
+      pipeline: {
+        analyst: async () => { calls.analyst += 1; return failedStage === 'analyst' ? { snapshot: null, trace: {} } : { snapshot: analystSnapshotForGlobal(0), trace: {} }; },
+        selector: async (_snapshots, options) => { calls.selector += 1; return failedStage === 'selector' ? { selection: null, trace: {} } : { selection: { match_ref: 0, option_ref: options.find((item) => item.market_key === 'both_to_score:yes').option_ref, selection_confidence: 74, selection_quality: 'strong', warning: null, selector_version: 'recommended-pick-value-selector-v1' }, trace: {} }; },
+        writer: async () => { calls.writer += 1; return failedStage === 'writer' ? { writer_output: null, trace: {} } : { writer_output: writerOutputForGlobal(), trace: {} }; },
+      },
+    });
+    assert.equal(result.selected, null);
+    assert.equal(result.analysis_created, false);
+    assert.equal(result.card_created, false);
+    assert.equal(calls[failedStage], 1);
+  });
+}

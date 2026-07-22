@@ -5,6 +5,9 @@ const { fetchAllMatches, resolveSport } = require('../../lib/stavkaApi');
 const sstatsApi = require('../../lib/sstatsApi');
 const { extractAnalyticsFeatures } = require('./matchAnalyticsFeatureService');
 const { aiBriefLlmProvider } = require('./aiBriefLlmProvider');
+const { ANALYST_VERSION, analyzeRecommendedPickMatch } = require('./recommendedPickAnalystService');
+const { SELECTOR_VERSION, selectRecommendedPickValue } = require('./recommendedPickValueSelectorService');
+const { WRITER_VERSION, writeRecommendedPick } = require('./recommendedPickWriterService');
 const { resolveDbContextForCandidate } = require('./dailyPickMappingService');
 const {
   persistBundleSnapshot,
@@ -747,7 +750,7 @@ function toPersistenceCandidate(candidate) {
 function buildSourcePayload(selected) {
   const source = {
     source: 'global_recommended_pick',
-    source_contract: 'sstats_analytics_plus_stavka_odds_v2',
+    source_contract: 'sstats_analytics_plus_stavka_odds_three_stage_v1',
     source_hash: crypto.createHash('sha256').update(JSON.stringify({
       match: selected.match.match_id || selected.match.id,
       sstats_match_id: selected.match.sstats_match_id || null,
@@ -758,7 +761,8 @@ function buildSourcePayload(selected) {
     sstats_data: selected.match.sstats_data || null,
     odds_provider: 'stavka',
     odds_snapshot: selected.match.odds || null,
-    llm_trace: selected.llm?.trace || { prompt_version: 'global-recommended-pick-llm-v2' },
+    pipeline_versions: selected.pipeline_versions || { analyst: ANALYST_VERSION, selector: SELECTOR_VERSION, writer: WRITER_VERSION },
+    pipeline_traces: selected.pipeline_traces || {},
   };
   return source;
 }
@@ -778,7 +782,7 @@ function buildAnalysisSnapshot(selected) {
       reason: selected.selectedBet.reason,
     }],
     model_name: selected.model_name || 'llm-global-recommended-pick',
-    prompt_version: 'global-recommended-pick-llm-v2',
+    prompt_version: `${ANALYST_VERSION}|${SELECTOR_VERSION}|${WRITER_VERSION}`,
   };
 }
 
@@ -995,7 +999,94 @@ async function defaultSstatsMatchLoader(match, { dateKey, pg = null, sstatsClien
   return payload;
 }
 
-async function runGlobalRecommendedPick({ pg, now = new Date(), dryRun = false, force = false, matches = null, sstatsMatchLoader = defaultSstatsMatchLoader, llmSelector = defaultLlmSelector, modelName = process.env.OPENROUTER_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini' } = {}) {
+function pipelineAnalystInput(match, matchRef) {
+  return {
+    match_ref: matchRef,
+    match: { sport: 'football', starts_at: parseCandidateDate(match)?.toISOString() || null, league: getLeagueName(match), home_team: getHomeTeamName(match), away_team: getAwayTeamName(match) },
+    analytics_features: getAnalyticsFeatures(match),
+    sstats_data: sanitizeSstatsForLlm(match.sstats_data) || {},
+    data_quality: buildDataQuality(match),
+  };
+}
+
+function pipelineOptions(matches) {
+  return matches.flatMap((match, matchRef) => buildAvailableOddsOptions(match).map((option) => ({
+    match_ref: matchRef,
+    option_ref: option.odds_id,
+    market_key: `${option.market}:${option.selection_code}${option.line === 'none' ? '' : `:${option.line}`}`,
+    label: option.label,
+    odds_decimal: option.odds_decimal,
+    implied_probability: option.implied_probability,
+    original: option,
+  })));
+}
+
+function compactAnalystSnapshots(snapshots) {
+  return snapshots.map((snapshot) => ({
+    match_ref: snapshot.match_ref,
+    market_estimates: snapshot.market_estimates.map(({ market_key, estimated_probability, confidence }) => ({ market_key, estimated_probability, confidence })),
+  }));
+}
+
+function buildThreeStageSelected(matches, snapshots, selection, writerOutput, traces) {
+  const selectedOption = pipelineOptions(matches).find((option) => option.option_ref === selection.option_ref && option.match_ref === selection.match_ref);
+  const analystSnapshot = snapshots.find((snapshot) => snapshot.match_ref === selection.match_ref);
+  const estimate = analystSnapshot?.market_estimates.find((item) => item.market_key === selectedOption?.market_key);
+  if (!selectedOption || !analystSnapshot || !estimate) return null;
+  const option = selectedOption.original;
+  const historyType = option.market === 'total' ? `total_${option.selection_code}` : option.market === 'handicap' ? (option.participant_scope === 'home' ? 'handicap1' : 'handicap2') : option.market;
+  const historyOutcome = ['total', 'handicap'].includes(option.market) ? String(option.line) : option.selection_code;
+  const selectedBet = {
+    type: historyType, market: option.market, outcome: historyOutcome, selection_code: option.selection_code,
+    participant_scope: option.participant_scope, line: option.line, line_value: option.line,
+    label: option.label, rate: option.odds_decimal, odds_decimal: option.odds_decimal, implied_probability: option.implied_probability,
+    estimated_edge_pp: Math.round((estimate.estimated_probability - option.implied_probability) * 10000) / 100,
+    risk: selection.selection_confidence >= 72 ? 'low' : 'medium', risk_label: selection.selection_confidence >= 72 ? 'низкий' : 'средний',
+    confidence: selection.selection_confidence, source: 'llm_three_stage', reason: estimate.rationale,
+  };
+  return {
+    match: matches[selection.match_ref], selectedBet, score: selection.selection_confidence, reasons: [estimate.rationale],
+    quality: selection.selection_quality, warnings: selection.warning ? [selection.warning] : [],
+    llm: { headline: writerOutput.headline, brief: writerOutput.brief, risk_note: writerOutput.risk_note },
+    pipeline_versions: { analyst: ANALYST_VERSION, selector: SELECTOR_VERSION, writer: WRITER_VERSION },
+    pipeline_traces: Object.fromEntries(Object.entries(traces).map(([key, trace]) => [key, boundedTraceOutput(trace, 2000)])),
+  };
+}
+
+async function selectGlobalRecommendedPickWithPipeline(matches, { pipeline = {}, modelName } = {}) {
+  const stages = { analyst: pipeline.analyst || analyzeRecommendedPickMatch, selector: pipeline.selector || selectRecommendedPickValue, writer: pipeline.writer || writeRecommendedPick };
+  const traces = { analyst: [], selector: null, writer: null };
+  const snapshots = [];
+  for (const [matchRef, match] of matches.entries()) {
+    let result;
+    try { result = await stages.analyst(pipelineAnalystInput(match, matchRef), { modelName }); } catch (error) { result = { snapshot: null, trace: { error: String(error?.message || error).slice(0, 300) } }; }
+    traces.analyst.push(result?.trace || null);
+    if (result?.snapshot) snapshots.push(result.snapshot);
+  }
+  if (!snapshots.length) return { selected: null, reason: 'analyst_snapshot_invalid', pipeline_traces: traces };
+  const options = pipelineOptions(matches);
+  let selectorResult;
+  try { selectorResult = await stages.selector(compactAnalystSnapshots(snapshots), options.map(({ original, ...option }) => option), { modelName }); } catch (error) { selectorResult = { selection: null, trace: { error: String(error?.message || error).slice(0, 300) } }; }
+  traces.selector = selectorResult?.trace || null;
+  if (!selectorResult?.selection) return { selected: null, reason: 'value_selection_invalid', pipeline_traces: traces };
+  const chosenOption = options.find((option) => option.option_ref === selectorResult.selection.option_ref && option.match_ref === selectorResult.selection.match_ref);
+  const chosenSnapshot = snapshots.find((snapshot) => snapshot.match_ref === selectorResult.selection.match_ref);
+  const chosenEstimate = chosenSnapshot?.market_estimates.find((item) => item.market_key === chosenOption?.market_key);
+  if (!chosenOption || !chosenSnapshot || !chosenEstimate) return { selected: null, reason: 'value_selection_invalid', pipeline_traces: traces };
+  const writerMarket = { market_key: chosenEstimate.market_key, estimated_probability: chosenEstimate.estimated_probability, rationale: chosenEstimate.rationale };
+  const writerInput = {
+    analyst_snapshot: { match_ref: chosenSnapshot.match_ref, match_assessment: chosenSnapshot.match_assessment, market_estimates: [writerMarket], uncertainty: chosenSnapshot.uncertainty },
+    selected_option: { match_ref: chosenOption.match_ref, option_ref: chosenOption.option_ref, market_key: chosenOption.market_key, label: chosenOption.label, odds_decimal: chosenOption.odds_decimal, implied_probability: chosenOption.implied_probability, estimated_probability: chosenEstimate.estimated_probability },
+    selector_metadata: { selection_confidence: selectorResult.selection.selection_confidence, selection_quality: selectorResult.selection.selection_quality, warning: selectorResult.selection.warning },
+  };
+  let writerResult;
+  try { writerResult = await stages.writer(writerInput, { modelName }); } catch (error) { writerResult = { writer_output: null, trace: { error: String(error?.message || error).slice(0, 300) } }; }
+  traces.writer = writerResult?.trace || null;
+  if (!writerResult?.writer_output) return { selected: null, reason: 'writer_output_invalid', pipeline_traces: traces };
+  return { selected: buildThreeStageSelected(matches, snapshots, selectorResult.selection, writerResult.writer_output, traces) };
+}
+
+async function runGlobalRecommendedPick({ pg, now = new Date(), dryRun = false, force = false, matches = null, sstatsMatchLoader = defaultSstatsMatchLoader, pipeline = {}, modelName = process.env.OPENROUTER_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini' } = {}) {
   if (!dryRun && !force && pg) {
     const existing = await findExistingRecommendedPick(pg, now);
     if (existing) {
@@ -1027,8 +1118,8 @@ async function runGlobalRecommendedPick({ pg, now = new Date(), dryRun = false, 
       // Skip candidates without reliable SStats analytics. Stavka odds alone are not enough.
     }
   }
-  const llmResult = await selectGlobalRecommendedPickWithLlm(analyticsCandidates, { now, llmSelector, modelName });
-  const selected = llmResult.selected;
+  const pipelineResult = await selectGlobalRecommendedPickWithPipeline(analyticsCandidates, { pipeline, modelName });
+  const selected = pipelineResult.selected;
   const summary = {
     candidates_scanned: allMatches.length,
     football_candidates: footballCandidates.length,
@@ -1038,7 +1129,7 @@ async function runGlobalRecommendedPick({ pg, now = new Date(), dryRun = false, 
     analysis_created: false,
     card_created: false,
     prediction_card_id: null,
-    ...(selected ? {} : { reason: llmResult.reason, raw_selection: llmResult.raw_selection || null, llm_trace: llmResult.llm_trace || null }),
+    ...(selected ? {} : { reason: pipelineResult.reason, pipeline_traces: pipelineResult.pipeline_traces || null }),
   };
 
   if (!selected || dryRun) return summary;
