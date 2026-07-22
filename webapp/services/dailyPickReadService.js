@@ -4,6 +4,21 @@ function normalizeName(value = '') {
   return String(value || '').trim().toLowerCase().replace(/^.*?:\s*/, '');
 }
 
+const LEAGUE_ALIAS_GROUPS = [
+  ['champions league', 'uefa champions league', 'лига чемпионов', 'лига чемпионов уефа'],
+  ['premier league', 'премьер-лига', 'апл'],
+  ['world cup', 'чемпионат мира', 'world championship'],
+  ['fifa club world cup', 'клубный чемпионат мира'],
+];
+
+function expandLeagueAliases(value = '') {
+  const normalized = normalizeName(value);
+  if (!normalized) return [];
+
+  const group = LEAGUE_ALIAS_GROUPS.find((aliases) => aliases.includes(normalized));
+  return group ? [...group] : [normalized];
+}
+
 function buildFavoriteLeagueMap(favoriteSports = []) {
   const entries = new Map();
 
@@ -15,8 +30,7 @@ function buildFavoriteLeagueMap(favoriteSports = []) {
       sportName,
       new Set(
         (Array.isArray(sport?.leagues) ? sport.leagues : [])
-          .map(normalizeName)
-          .filter(Boolean),
+          .flatMap(expandLeagueAliases),
       ),
     );
   }
@@ -34,8 +48,9 @@ function filterRowsByFavoriteLeagues(rows = [], favoriteSports = []) {
     if (!selectedLeagues) return false;
     if (selectedLeagues.size === 0) return true;
 
-    const leagueName = normalizeName(row?.tournament_name_en || row?.tournament_name);
-    return selectedLeagues.has(leagueName);
+    return [row?.tournament_name_en, row?.tournament_name]
+      .flatMap(expandLeagueAliases)
+      .some((leagueName) => selectedLeagues.has(leagueName));
   });
 }
 
@@ -91,8 +106,7 @@ function buildSlotMap(rows = []) {
 
 async function getDailyPicksByDateRange(pg, { startDate, endDate, favoriteSports = [] }) {
   const rows = await pg.connection(
-    `WITH ranked AS (
-      SELECT
+    `SELECT
         to_char(m.match_start_at AT TIME ZONE 'Europe/Moscow', 'YYYY-MM-DD') AS slot_date,
         ma.match_analysis_id,
         ma.analysis_status_id,
@@ -113,11 +127,7 @@ async function getDailyPicksByDateRange(pg, { startDate, endDate, favoriteSports
         t.tournament_name,
         t.tournament_name_en,
         ms.source_payload,
-        pm.system_match_id,
-        ROW_NUMBER() OVER (
-          PARTITION BY to_char(m.match_start_at AT TIME ZONE 'Europe/Moscow', 'YYYY-MM-DD')
-          ORDER BY m.match_start_at ASC, ma.analysis_create_at ASC, ma.match_analysis_id ASC
-        ) AS row_rank
+        pm.system_match_id
       FROM public.match_analysis ma
       JOIN public.analysis_status ast ON ast.analysis_status_id = ma.analysis_status_id
       JOIN public.match_source ms ON ms.match_source_id = ma.match_source_id
@@ -128,11 +138,7 @@ async function getDailyPicksByDateRange(pg, { startDate, endDate, favoriteSports
       WHERE ast.analysis_status_name = 'ready'
         AND COALESCE(s.is_active, 0) = 1
         AND to_char(m.match_start_at AT TIME ZONE 'Europe/Moscow', 'YYYY-MM-DD') BETWEEN $1 AND $2
-    )
-    SELECT *
-    FROM ranked
-    WHERE row_rank = 1
-    ORDER BY slot_date ASC`,
+      ORDER BY slot_date ASC, m.match_start_at ASC, ma.analysis_create_at ASC, ma.match_analysis_id ASC`,
     [startDate, endDate],
   );
 
@@ -155,6 +161,7 @@ async function getDailyPicksFeed(pg, { now = new Date(), favoriteSports = [] } =
 
 module.exports = {
   buildFavoriteLeagueMap,
+  expandLeagueAliases,
   filterRowsByFavoriteLeagues,
   getMoscowDate,
   buildSlotMap,

@@ -16,7 +16,7 @@ test('buildFavoriteLeagueMap: empty leagues mean all leagues for that sport', ()
     { sport_name: 'Теннис', leagues: [] },
   ]);
 
-  assert.deepEqual([...map.get('футбол')], ['premier league']);
+  assert.deepEqual([...map.get('футбол')], ['premier league', 'премьер-лига', 'апл']);
   assert.equal(map.get('теннис').size, 0);
 });
 
@@ -52,6 +52,20 @@ test('filterRowsByFavoriteLeagues: same league name in another sport does not ma
   assert.deepEqual(filtered, [
     { sport_name: 'Футбол', tournament_name_en: 'World Cup' },
   ]);
+});
+
+test('filterRowsByFavoriteLeagues: accepts explicit Russian and English canonical tournament aliases', () => {
+  const rows = [
+    { sport_name: 'Футбол', tournament_name: 'Лига чемпионов УЕФА' },
+    { sport_name: 'Футбол', tournament_name: 'Премьер-лига' },
+    { sport_name: 'Футбол', tournament_name: 'Лига 1' },
+  ];
+
+  const filtered = filterRowsByFavoriteLeagues(rows, [
+    { sport_name: 'Футбол', leagues: ['Champions League', 'Premier League'] },
+  ]);
+
+  assert.deepEqual(filtered, rows.slice(0, 2));
 });
 
 test('buildSlotMap: formats today/tomorrow cards and keeps first row per slot_date', () => {
@@ -193,6 +207,77 @@ test('getDailyPicksFeed: returns today/tomorrow slots and latest updated_at', as
   assert.match(pg.calls[0].query, /match_analysis/);
   assert.match(pg.calls[0].query, /ma\.analysis_create_at ASC/);
   assert.deepEqual(pg.calls[0].params, ['2026-07-03', '2026-07-04']);
+});
+
+test('getDailyPicksFeed: selects the first favorite-league row for a day before choosing its daily slot', async () => {
+  const pg = createFakePg({
+    rows: [
+      {
+        slot_date: '2026-07-03',
+        match_analysis_id: 1,
+        match_id: 101,
+        home_team: 'Unrelated FC',
+        away_team: 'Other FC',
+        sport_name: 'Футбол',
+        tournament_name_en: 'La Liga',
+        match_start_at: '2026-07-03T12:00:00.000Z',
+        analysis_status_name: 'ready',
+        analysis_headline: 'Не выбранная лига',
+        recommended_bets: [],
+        source_payload: {},
+        analysis_create_at: '2026-07-03T09:00:00.000Z',
+      },
+      {
+        slot_date: '2026-07-03',
+        match_analysis_id: 2,
+        match_id: 102,
+        home_team: 'Favorite FC',
+        away_team: 'Selected FC',
+        sport_name: 'Футбол',
+        tournament_name: 'АПЛ',
+        tournament_name_en: 'Premier League',
+        match_start_at: '2026-07-03T15:00:00.000Z',
+        analysis_status_name: 'ready',
+        analysis_headline: 'Выбранная лига',
+        recommended_bets: [],
+        source_payload: {},
+        analysis_create_at: '2026-07-03T10:00:00.000Z',
+      },
+    ],
+  });
+
+  const feed = await getDailyPicksFeed(pg, {
+    now: new Date('2026-07-03T12:00:00.000Z'),
+    favoriteSports: [{ sport_name: 'Футбол', leagues: ['Premier League'] }],
+  });
+
+  assert.equal(feed.today?.match_id, 102);
+  assert.equal(feed.today?.headline, 'Выбранная лига');
+  assert.doesNotMatch(pg.calls[0].query, /ROW_NUMBER|row_rank/i);
+});
+
+test('getDailyPicksFeed: returns no cards when the user has no favorites', async () => {
+  const pg = createFakePg({
+    rows: [{
+      slot_date: '2026-07-03',
+      match_analysis_id: 1,
+      match_id: 101,
+      sport_name: 'Футбол',
+      tournament_name_en: 'Premier League',
+      match_start_at: '2026-07-03T12:00:00.000Z',
+      analysis_status_name: 'ready',
+      recommended_bets: [],
+      source_payload: {},
+    }],
+  });
+
+  const feed = await getDailyPicksFeed(pg, {
+    now: new Date('2026-07-03T12:00:00.000Z'),
+    favoriteSports: [],
+  });
+
+  assert.equal(feed.today, null);
+  assert.equal(feed.tomorrow, null);
 });
 
 test('getMoscowDate: uses Moscow calendar date', () => {
