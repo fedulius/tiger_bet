@@ -337,7 +337,7 @@ export function BetsPage() {
       setPeriodTransition((transition) => (
         transition.sequence === periodTransition.sequence ? { ...transition, previous: null } : transition
       ));
-    }, 520);
+    }, 640);
     return () => window.clearTimeout(timeoutId);
   }, [periodTransition.previous, periodTransition.sequence]);
 
