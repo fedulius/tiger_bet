@@ -3,7 +3,7 @@
 const { aiBriefLlmProvider } = require('./aiBriefLlmProvider');
 
 const SELECTOR_VERSION = 'recommended-pick-value-selector-v1';
-const OUTPUT_FIELDS = new Set(['match_ref', 'option_ref', 'selection_confidence', 'selection_quality', 'warning', 'selector_version']);
+const OUTPUT_FIELDS = new Set(['match_ref', 'option_ref', 'selection_confidence', 'selection_quality', 'selector_version']);
 const OPTION_FIELDS = ['match_ref', 'option_ref', 'market_key', 'label', 'odds_decimal', 'implied_probability'];
 const MAX_MATCHES = 6;
 const MAX_OPTIONS_PER_MATCH = 4;
@@ -105,7 +105,6 @@ function buildResponseFormat() {
           option_ref: { type: 'string', minLength: 1 },
           selection_confidence: { type: 'integer', minimum: 0, maximum: 100 },
           selection_quality: { type: 'string', enum: ['strong', 'fallback'] },
-          warning: { type: ['string', 'null'] },
           selector_version: { type: 'string', const: SELECTOR_VERSION },
         },
       },
@@ -125,7 +124,7 @@ function buildValueSelectorPrompts(snapshots, options) {
       'Choose only one option from the supplied whitelist by comparing its server-supplied implied_probability with the corresponding immutable analyst estimated_probability.',
       'You cannot invent sports facts, write evidence, rationale, headlines, briefs, or market analysis, and cannot modify analyst probability.',
       'No provider odds IDs: do not use or request them. Return only the exact JSON schema.',
-      'Use strong only when confidence is not low and warning is null. Use fallback only with a concrete nonempty warning.',
+      'Use strong only when confidence is not low. Use fallback only when the option is usable but lower confidence.',
     ].join('\n'),
     userPrompt: `Prompt version: ${SELECTOR_VERSION}\nSelect at most one value option. No selection is preferable to an unsupported choice.\n\nAnalyst snapshots:\n${JSON.stringify(analystSnapshots)}\n\nOption whitelist:\n${JSON.stringify(whitelist)}`,
   };
@@ -143,10 +142,7 @@ function validateSelection(selection, analystSnapshots, whitelist) {
   if (!Number.isInteger(selection.selection_confidence) || selection.selection_confidence < 0 || selection.selection_confidence > 100) return { error: 'selection_confidence must be an integer from 0 to 100' };
   if (!['strong', 'fallback'].includes(selection.selection_quality)) return { error: 'selection_quality must be strong or fallback' };
   if (selection.selector_version !== SELECTOR_VERSION) return { error: `selector_version must be ${SELECTOR_VERSION}` };
-  if (selection.selection_quality === 'strong' && selection.warning !== null) return { error: 'strong selection requires warning to be null' };
-  if (selection.selection_quality === 'fallback' && (typeof selection.warning !== 'string' || !selection.warning.trim())) return { error: 'fallback selection requires a nonempty warning' };
   if (selection.selection_quality === 'strong' && selection.selection_confidence < LOW_CONFIDENCE_THRESHOLD) return { error: 'low confidence selection cannot be strong' };
-  if (selection.warning !== null && (typeof selection.warning !== 'string' || !selection.warning.trim())) return { error: 'warning must be null or a nonempty string' };
   const option = whitelist.find((item) => item.option_ref === selection.option_ref);
   if (!option) return { error: 'option_ref must resolve to an option in the whitelist' };
   if (option.match_ref !== selection.match_ref) return { error: 'option_ref must belong to match_ref' };
@@ -154,7 +150,14 @@ function validateSelection(selection, analystSnapshots, whitelist) {
   const estimate = snapshot?.market_estimates.find((item) => item.market_key === option.market_key);
   if (!estimate) return { error: 'option market_key must have a corresponding analyst market_estimate' };
   if (estimate.estimated_probability <= option.implied_probability) return { error: 'selected option must have analyst estimated_probability above implied_probability' };
-  return { selection };
+  return {
+    selection: {
+      ...selection,
+      warning: selection.selection_quality === 'fallback'
+        ? 'Выбор сделан с пониженным уровнем уверенности; учитывайте дополнительную неопределённость.'
+        : null,
+    },
+  };
 }
 
 async function selectRecommendedPickValue(snapshots, options, { provider = aiBriefLlmProvider, modelName } = {}) {

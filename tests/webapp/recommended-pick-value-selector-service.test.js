@@ -38,7 +38,6 @@ function selection(overrides = {}) {
     option_ref: 'a-home',
     selection_confidence: 76,
     selection_quality: 'strong',
-    warning: null,
     selector_version: 'recommended-pick-value-selector-v1',
     ...overrides,
   };
@@ -59,13 +58,20 @@ test('option whitelist retains only analyst-estimated market keys and applies co
   assert.equal(whitelist.some((option) => option.market_key === 'one_x_two:away'), false);
 });
 
+test('selector schema omits warning and runtime derives it from the selected quality', () => {
+  const schema = buildValueSelectorPrompts([analystSnapshot(42)], sourceOptions()).responseFormat.json_schema.schema;
+
+  assert.equal(schema.properties.warning, undefined);
+  assert.equal(schema.allOf, undefined);
+});
+
 test('valid selector result maps to an existing whitelisted option and analyst market estimate', async () => {
   const snapshots = [analystSnapshot(42)];
   const result = await selectRecommendedPickValue(snapshots, sourceOptions(), {
     provider: async () => ({ text: JSON.stringify(selection()) }),
   });
 
-  assert.deepEqual(result.selection, selection());
+  assert.deepEqual(result.selection, { ...selection(), warning: null });
   assert.equal(Object.isFrozen(result.selection), true);
   assert.equal(result.trace.prompt_version, 'recommended-pick-value-selector-v1');
 });
@@ -90,8 +96,8 @@ test('selector retries once after invalid response and accepts a valid selection
   });
 
   assert.equal(calls.length, 2);
-  assert.match(calls[1].userPrompt, /Previous response was rejected: strong selection requires warning to be null/);
-  assert.deepEqual(result.selection, selection());
+  assert.match(calls[1].userPrompt, /Previous response was rejected: unexpected field: warning/);
+  assert.deepEqual(result.selection, { ...selection(), warning: null });
 });
 
 test('selector returns no selection after two invalid responses and never uses a code fallback', async () => {

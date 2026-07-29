@@ -41,8 +41,7 @@ function snapshot(overrides = {}) {
         rationale: 'Home scoring average is higher in the supplied analytics.',
         evidence: [
           {
-            path: 'analytics_features.home.avg_scored',
-            value: 1.8,
+            evidence_id: 'e1',
             interpretation: 'The supplied home scoring average is higher.',
           },
         ],
@@ -54,8 +53,7 @@ function snapshot(overrides = {}) {
         rationale: 'Both supplied averages are above one goal.',
         evidence: [
           {
-            path: 'analytics_features.away.avg_scored',
-            value: 1.1,
+            evidence_id: 'e2',
             interpretation: 'The supplied away scoring average is above one.',
           },
         ],
@@ -66,6 +64,17 @@ function snapshot(overrides = {}) {
     analyst_version: 'recommended-pick-analyst-v1',
     ...overrides,
   };
+}
+
+function resolvedSnapshot(overrides = {}) {
+  const value = snapshot(overrides);
+  for (const market of value.market_estimates) {
+    for (const evidence of market.evidence) {
+      if (evidence.evidence_id === 'e1') Object.assign(evidence, { path: 'analytics_features.home.avg_scored', value: 1.8 });
+      if (evidence.evidence_id === 'e2') Object.assign(evidence, { path: 'analytics_features.away.avg_scored', value: 1.1 });
+    }
+  }
+  return value;
 }
 
 test('analyst prompt contains only the whitelisted SStats payload and never leaks odds inputs', () => {
@@ -88,12 +97,22 @@ test('analyst strict response schema closes the data-quality object for the prov
   assert.deepEqual(schema.properties.data_quality.required, ['team_stats', 'recent_form', 'lineups', 'h2h', 'ratings', 'overall_coverage']);
 });
 
+test('analyst response schema accepts only catalog evidence IDs, never free paths or values', () => {
+  const schema = buildAnalystPrompts(analystInput()).responseFormat.json_schema.schema;
+  const evidence = schema.properties.market_estimates.items.properties.evidence.items;
+
+  assert.deepEqual(evidence.required, ['evidence_id', 'interpretation']);
+  assert.equal(evidence.properties.evidence_id.enum.includes('e1'), true);
+  assert.equal(evidence.properties.path, undefined);
+  assert.equal(evidence.properties.value, undefined);
+});
+
 test('analyst accepts only exact snapshot schema with exact scalar evidence paths', async () => {
   const result = await analyzeRecommendedPickMatch(analystInput(), {
     provider: async () => ({ text: JSON.stringify(snapshot()) }),
   });
 
-  assert.deepEqual(result.snapshot, snapshot());
+  assert.deepEqual(result.snapshot, resolvedSnapshot());
   assert.equal(Object.isFrozen(result.snapshot), true);
   assert.equal(Object.isFrozen(result.snapshot.market_estimates), true);
   assert.equal(result.trace.prompt_version, 'recommended-pick-analyst-v1');
@@ -107,7 +126,7 @@ test('analyst rejects missing snapshot fields and invented evidence paths', asyn
       return {
         text: JSON.stringify(calls === 1
           ? (() => { const value = snapshot(); delete value.uncertainty; return value; })()
-          : snapshot({ market_estimates: [{ ...snapshot().market_estimates[0], evidence: [{ path: 'analytics_features.home.invented', value: 1.8, interpretation: 'not sourced' }] }, snapshot().market_estimates[1]] })),
+          : snapshot({ market_estimates: [{ ...snapshot().market_estimates[0], evidence: [{ evidence_id: 'invented', interpretation: 'not sourced' }] }, snapshot().market_estimates[1]] })),
       };
     },
   });
@@ -115,7 +134,7 @@ test('analyst rejects missing snapshot fields and invented evidence paths', asyn
   assert.equal(result.snapshot, null);
   assert.deepEqual(result.trace.validation_errors, [
     'missing required field: uncertainty',
-    'evidence path must reference an exact scalar analyst input value: analytics_features.home.invented',
+    'evidence_id must reference a supplied analyst fact: invented',
   ]);
 });
 
@@ -130,7 +149,7 @@ test('analyst retries once with the concrete validation error then returns valid
 
   assert.equal(calls.length, 2);
   assert.match(calls[1].userPrompt, /Previous response was rejected: unexpected field: extra/);
-  assert.deepEqual(result.snapshot, snapshot());
+  assert.deepEqual(result.snapshot, resolvedSnapshot());
   assert.deepEqual(result.trace.validation_errors, ['unexpected field: extra']);
 });
 
@@ -141,7 +160,7 @@ test('analyst returns no snapshot after malformed and then invalid output withou
       calls += 1;
       return calls === 1
         ? { text: 'not json' }
-        : { text: JSON.stringify(snapshot({ market_estimates: [{ ...snapshot().market_estimates[0], evidence: [{ path: 'analytics_features.home.made_up', value: 99, interpretation: 'invented' }] }] })) };
+        : { text: JSON.stringify(snapshot({ market_estimates: [{ ...snapshot().market_estimates[0], evidence: [{ evidence_id: 'made_up', interpretation: 'invented' }] }] })) };
     },
   });
 
