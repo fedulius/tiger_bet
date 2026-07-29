@@ -410,3 +410,17 @@ test('getCandidateMatchesForDate: all valid in-scope matches for date are return
   const ids = result.map(c => c.match_id).sort();
   assert.deepEqual(ids, ['1', '2', '3']);
 });
+
+test('getCandidateMatchesForDate: does not treat a truncated league display name as a favorite tournament match', () => {
+  const ambiguous = makeRawMatch({
+    league: { id: null, name: 'Лига чемпионов', slug: null },
+  });
+  const result = getCandidateMatchesForDate({
+    allMatches: [ambiguous],
+    userLeagueScope: { leagueIds: [], leagueSlugs: ['лига чемпионов уефа'] },
+    targetDateMsk: TARGET_DATE,
+    nowMs: NOW_BEFORE,
+  });
+
+  assert.deepEqual(result, []);
+});

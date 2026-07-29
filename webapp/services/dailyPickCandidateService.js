@@ -127,16 +127,6 @@ function isInLeagueScope(match, userLeagueScope) {
   if (hasIds && matchLeagueId != null && leagueIds.some(lid => Number(lid) === matchLeagueId)) return true;
   if (hasSlugs && matchLeagueSlug && leagueSlugs.indexOf(matchLeagueSlug) !== -1) return true;
 
-  // Fallback: match by league display name (API name vs DB tournament name)
-  const matchLeagueName = leagueObj ? (leagueObj.name || '').toLowerCase().trim() : null;
-  if (hasSlugs && matchLeagueName) {
-    for (const slug of leagueSlugs) {
-      if (matchLeagueName === slug || matchLeagueName.includes(slug) || slug.includes(matchLeagueName)) {
-        return true;
-      }
-    }
-  }
-
   return false;
 }
 
