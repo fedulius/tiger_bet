@@ -131,7 +131,7 @@ function EmptyDay({ message }) {
   );
 }
 
-function RecommendedPickCard({ payload }) {
+function RecommendedPickCard({ payload, onOpenMatch }) {
   const item = payload?.item;
   if (!item) {
     const empty = payload?.empty_state;
@@ -147,7 +147,18 @@ function RecommendedPickCard({ payload }) {
   const riskText = item.bet?.risk_level === 'low' ? 'Низкий риск' : item.bet?.risk_level === 'medium' ? 'Средний риск' : item.bet?.risk_label || 'Риск указан в прогнозе';
   const warning = Array.isArray(item.warnings) && item.warnings.length ? item.warnings[0] : '';
   return (
-    <section className="recommended-pick-card">
+    <section
+      className={`recommended-pick-card${item.match_id ? ' recommended-pick-card--clickable' : ''}`}
+      role={item.match_id ? 'button' : undefined}
+      tabIndex={item.match_id ? 0 : undefined}
+      onClick={item.match_id ? () => onOpenMatch(item.match_id) : undefined}
+      onKeyDown={item.match_id ? (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onOpenMatch(item.match_id);
+        }
+      } : undefined}
+    >
       <div className="recommended-pick-kicker">🎯 Ставка дня</div>
       <div className="recommended-pick-match">{item.match}</div>
       <div className="recommended-pick-meta">
@@ -327,7 +338,10 @@ export function HomePage() {
         </div>
       </div>
 
-      <RecommendedPickCard payload={recommendedPick} />
+      <RecommendedPickCard
+        payload={recommendedPick}
+        onOpenMatch={(matchId) => navigate(`/match/${matchId}`, { state: { fromTab: activeTab } })}
+      />
 
       {loadError && !data ? (
         <div style={{ padding: '56px 24px', textAlign: 'center' }}>

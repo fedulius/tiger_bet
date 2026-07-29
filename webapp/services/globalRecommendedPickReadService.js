@@ -30,6 +30,7 @@ async function getRecommendedPick({ pg, cardTypeCode = CARD_TYPE_CODE } = {}) {
             card_status_code,
             visibility_scope,
             published_at,
+            primary_match_id,
             match_start_at,
             home_team,
             away_team,
@@ -74,6 +75,7 @@ async function getRecommendedPick({ pg, cardTypeCode = CARD_TYPE_CODE } = {}) {
     item: {
       prediction_card_id: card.prediction_card_id,
       card_type_code: card.card_type_code,
+      match_id: toNumber(card.primary_match_id),
       match: formatMatch(card),
       league: card.tournament_name || '',
       starts_at: card.match_start_at,
