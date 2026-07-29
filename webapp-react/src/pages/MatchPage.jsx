@@ -154,7 +154,9 @@ export function MatchPage() {
       navigate(-1);
       return;
     }
-    navigate('/', { replace: true });
+    // A match opened from a Telegram WebApp button has no in-app history.
+    // Reload the home route so its authenticated match feed is fetched afresh.
+    window.location.assign('/webapp/');
   };
 
   const startSwipeBackGesture = (clientX, clientY) => {
