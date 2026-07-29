@@ -144,7 +144,11 @@ function RecommendedPickCard({ payload, onOpenMatch }) {
       </section>
     );
   }
-  const riskText = item.bet?.risk_level === 'low' ? 'Низкий риск' : item.bet?.risk_level === 'medium' ? 'Средний риск' : item.bet?.risk_label || 'Риск указан в прогнозе';
+  const riskText = item.bet?.risk_level === 'low'
+    ? 'Низкий риск'
+    : item.bet?.risk_level === 'medium'
+      ? 'Средний риск'
+      : item.bet?.risk_label || '';
   const warning = Array.isArray(item.warnings) && item.warnings.length ? item.warnings[0] : '';
   return (
     <section
@@ -168,7 +172,7 @@ function RecommendedPickCard({ payload, onOpenMatch }) {
         <span>{item.bet?.label || item.headline}</span>
         {item.bet?.odds_decimal ? <strong>Кэф {item.bet.odds_decimal}</strong> : null}
       </div>
-      <div className="recommended-pick-risk">{riskText}</div>
+      {riskText ? <div className="recommended-pick-risk">{riskText}</div> : null}
       {warning ? <div className="recommended-pick-warning">{warning}</div> : null}
       {item.bet?.reason ? <div className="recommended-pick-reason">{item.bet.reason}</div> : null}
     </section>
