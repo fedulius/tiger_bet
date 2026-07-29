@@ -31,6 +31,7 @@ async function getRecommendedPick({ pg, cardTypeCode = CARD_TYPE_CODE } = {}) {
             visibility_scope,
             published_at,
             primary_match_id,
+            pm.system_match_id AS sstats_match_id,
             match_start_at,
             home_team,
             away_team,
@@ -39,7 +40,9 @@ async function getRecommendedPick({ pg, cardTypeCode = CARD_TYPE_CODE } = {}) {
             brief,
             risk_note,
             snapshot
-     FROM bet.v_prediction_card_history
+     FROM bet.v_prediction_card_history card_history
+     LEFT JOIN external.public_match pm
+       ON pm.match_id = card_history.primary_match_id AND pm.system_id = 3
      WHERE card_type_code = $1
        AND card_status_code = 'published'
        AND visibility_scope = 'public'
@@ -75,7 +78,10 @@ async function getRecommendedPick({ pg, cardTypeCode = CARD_TYPE_CODE } = {}) {
     item: {
       prediction_card_id: card.prediction_card_id,
       card_type_code: card.card_type_code,
-      match_id: toNumber(card.primary_match_id),
+      match_id: toNumber(card.sstats_match_id)
+        || toNumber(card.snapshot?.selected?.match?.sstats_match_id)
+        || toNumber(card.snapshot?.sstats_data?.fixture_id)
+        || null,
       match: formatMatch(card),
       league: card.tournament_name || '',
       starts_at: card.match_start_at,

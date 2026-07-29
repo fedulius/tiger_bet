@@ -21,7 +21,7 @@ test('getRecommendedPick returns latest recommended pick with first bet', async 
           headline: 'Ставка дня: Обе забьют — да',
           brief: 'Brief',
           risk_note: 'низкий риск',
-          snapshot: { quality: 'strong', warnings: [] },
+          snapshot: { selected: { match: { sstats_match_id: 1556508 } }, quality: 'strong', warnings: [] },
         }];
       }
       if (/v_prediction_bet_settlements/.test(sql)) {
@@ -43,6 +43,7 @@ test('getRecommendedPick returns latest recommended pick with first bet', async 
   const payload = await getRecommendedPick({ pg });
   assert.equal(payload.item.prediction_card_id, 17);
   assert.equal(payload.item.match, 'Клаксвик — Кауно Жальгирис');
+  assert.equal(payload.item.match_id, 1556508);
   assert.equal(payload.item.bet.label, 'Обе забьют — да');
   assert.equal(payload.item.bet.odds_decimal, 1.85);
   assert.equal(calls[0].params[0], 'recommended_pick');
