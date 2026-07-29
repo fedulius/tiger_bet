@@ -42,6 +42,10 @@ function humanLabel(type, outcome) {
   if (type === 'total_under') return `Тотал меньше ${line}`;
   if (type === 'handicap1') return `Фора хозяев (${line})`;
   if (type === 'handicap2') return `Фора гостей (${line})`;
+  if (type === 'total_t1_over') return `Тотал хозяев больше ${line}`;
+  if (type === 'total_t1_under') return `Тотал хозяев меньше ${line}`;
+  if (type === 'total_t2_over') return `Тотал гостей больше ${line}`;
+  if (type === 'total_t2_under') return `Тотал гостей меньше ${line}`;
   if (type === 'correct_score') return `Точный счёт ${line}`;
   return null;
 }
@@ -100,6 +104,36 @@ function buildPartialMarketCatalog({ popularBetsData, match } = {}) {
   return {
     version: 'stavka-market-catalog-v1',
     catalog_coverage: 'partial',
+    markets,
+  };
+}
+
+// Stavka's aggregated-bets endpoint is the complete set of available lines for
+// a match. Unlike popular-bets, it includes every offered outcome and its price.
+function buildCompleteMarketCatalog({ availableMarketsData } = {}) {
+  const groups = availableMarketsData?.data?.all;
+  if (!Array.isArray(groups) || groups.length === 0) return null;
+
+  const markets = [];
+  const seen = new Set();
+  function add(raw) {
+    const market = normalizeMarket(raw, 'stavka_available_markets');
+    if (!market || seen.has(market.market_key)) return;
+    seen.add(market.market_key);
+    markets.push(market);
+  }
+
+  for (const group of groups) {
+    for (const bet of Array.isArray(group?.univariate) ? group.univariate : []) add(bet);
+    for (const row of Array.isArray(group?.bivariate) ? group.bivariate : []) {
+      for (const bet of Array.isArray(row) ? row : []) add(bet);
+    }
+  }
+
+  if (markets.length === 0) return null;
+  return {
+    version: 'stavka-market-catalog-v1',
+    catalog_coverage: 'complete',
     markets,
   };
 }
@@ -208,36 +242,38 @@ function selectMarketFits({ analytics, marketCatalog, minConfidence = 65, minFit
     return b.market_fit_score - a.market_fit_score;
   });
 
+  // Daily-picks is a one-match card, not three independent risk slots. Lock
+  // the three strongest compatible source outcomes first, then assign their
+  // display order server-side. This means a missing low/medium/high candidate
+  // cannot silently produce a partial ready analysis.
   const usedCategories = new Set();
-  const usedWinner = false;
-  for (const desiredRisk of RISK_ORDER) {
-    let best = null;
-    for (const c of candidates) {
-      if (selected.some(s => s.market_key === c.market_key)) continue;
-      if (usedCategories.has(c.market_category)) continue;
-      if (c.market_category === 'winner' && selected.some(s => s.market_category === 'winner')) continue;
-      if (c.risk_label !== desiredRisk && desiredRisk !== 'high') continue;
-      if (!best || c.market_fit_score > best.market_fit_score) best = c;
-    }
-    if (best) {
-      selected.push(best);
-      usedCategories.add(best.market_category);
-      continue;
-    }
+  for (const candidate of candidates) {
+    if (usedCategories.has(candidate.market_category)) continue;
+    selected.push(candidate);
+    usedCategories.add(candidate.market_category);
+    if (selected.length === 3) break;
   }
 
-  // If exact score is strongly justified, prefer it as high-risk slot.
-  const exact = candidates.find(c => c.type === 'correct_score' && c.risk_label === 'high' && !selected.some(s => s.market_category === c.market_category));
-  if (exact && !selected.some(s => s.risk_label === 'high')) {
-    selected.push(exact);
+  if (selected.length !== 3) {
+    return {
+      version: 'market-fit-v1',
+      catalog_coverage: marketCatalog?.catalog_coverage || 'partial',
+      selected_bets: [],
+      rejected,
+      failure_reason: 'daily_pick_requires_three_outcomes',
+    };
   }
 
-  selected.sort((a, b) => targetRank(a.risk_label) - targetRank(b.risk_label));
+  selected.sort((a, b) => {
+    const riskDiff = targetRank(a.risk_label) - targetRank(b.risk_label);
+    if (riskDiff !== 0) return riskDiff;
+    return b.market_fit_score - a.market_fit_score;
+  });
 
   return {
     version: 'market-fit-v1',
     catalog_coverage: marketCatalog?.catalog_coverage || 'partial',
-    selected_bets: selected.slice(0, 3).map((b, idx) => ({ ...b, risk_order: idx + 1 })),
+    selected_bets: selected.map((b, idx) => ({ ...b, risk_label: RISK_ORDER[idx], risk_order: idx + 1 })),
     rejected,
   };
 }
@@ -245,6 +281,7 @@ function selectMarketFits({ analytics, marketCatalog, minConfidence = 65, minFit
 module.exports = {
   WINNER_TYPES,
   buildPartialMarketCatalog,
+  buildCompleteMarketCatalog,
   selectMarketFits,
   marketKey,
   categoryFor,

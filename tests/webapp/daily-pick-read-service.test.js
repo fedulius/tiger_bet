@@ -10,6 +10,12 @@ const {
 } = require('../../webapp/services/dailyPickReadService');
 const { createFakePg } = require('./testHelpers');
 
+const LOCKED_BETS = [
+  { type: 'one_x_two', outcome: 'w1' },
+  { type: 'total_over', outcome: '2_5' },
+  { type: 'both_to_score', outcome: 'yes' },
+];
+
 test('buildFavoriteLeagueMap: empty leagues mean all leagues for that sport', () => {
   const map = buildFavoriteLeagueMap([
     { sport_name: 'Футбол', leagues: ['Premier League'] },
@@ -85,7 +91,7 @@ test('buildSlotMap: formats today/tomorrow cards and keeps first row per slot_da
       analysis_headline: 'Сегодняшний пик',
       analysis_brief: 'Короткий бриф',
       analysis_risk_note: 'Риск умеренный',
-      recommended_bets: [{ market: '1X2', selection: 'home', odds: 1.91 }],
+      recommended_bets: LOCKED_BETS,
       source_payload: { match_slug: 'alpha-beta', source_url: 'https://example.test/m/101', source_refs: ['card'] },
       model_name: 'gpt',
       prompt_version: 'v1',
@@ -98,7 +104,7 @@ test('buildSlotMap: formats today/tomorrow cards and keeps first row per slot_da
       match_id: 102,
       home_team: 'Ignored',
       away_team: 'Ignored',
-      recommended_bets: [],
+      recommended_bets: LOCKED_BETS,
       source_payload: {},
     },
     {
@@ -116,7 +122,7 @@ test('buildSlotMap: formats today/tomorrow cards and keeps first row per slot_da
       analysis_headline: 'Завтрашний пик',
       analysis_brief: 'Ещё один бриф',
       analysis_risk_note: '',
-      recommended_bets: [],
+      recommended_bets: LOCKED_BETS,
       source_payload: { source_refs: 'bad-value' },
       model_name: 'gpt',
       prompt_version: 'v2',
@@ -133,14 +139,14 @@ test('buildSlotMap: formats today/tomorrow cards and keeps first row per slot_da
   assert.equal(today.match, 'Alpha FC — Beta FC');
   assert.equal(today.match_slug, 'alpha-beta');
   assert.equal(today.league, 'Лига 1');
-  assert.deepEqual(today.primary_bet, { market: '1X2', selection: 'home', odds: 1.91 });
+  assert.deepEqual(today.primary_bet, LOCKED_BETS[0]);
   assert.equal(today.source_url, 'https://example.test/m/101');
   assert.deepEqual(today.source_refs, ['card']);
 
   const tomorrow = slots.get('2026-07-04');
   assert.equal(tomorrow.match_slug, 'sys-201');
   assert.equal(tomorrow.league, 'Premier League');
-  assert.equal(tomorrow.primary_bet, null);
+  assert.deepEqual(tomorrow.primary_bet, LOCKED_BETS[0]);
   assert.deepEqual(tomorrow.source_refs, []);
 });
 
@@ -162,7 +168,7 @@ test('getDailyPicksFeed: returns today/tomorrow slots and latest updated_at', as
         analysis_headline: 'Сегодня',
         analysis_brief: 'Бриф',
         analysis_risk_note: '',
-        recommended_bets: [],
+        recommended_bets: LOCKED_BETS,
         source_payload: { match_slug: 'alpha-beta' },
         model_name: 'gpt',
         prompt_version: 'v1',
@@ -184,7 +190,7 @@ test('getDailyPicksFeed: returns today/tomorrow slots and latest updated_at', as
         analysis_headline: 'Завтра',
         analysis_brief: 'Бриф 2',
         analysis_risk_note: '',
-        recommended_bets: [],
+        recommended_bets: LOCKED_BETS,
         source_payload: { match_slug: 'gamma-delta' },
         model_name: 'gpt',
         prompt_version: 'v1',
@@ -223,7 +229,7 @@ test('getDailyPicksFeed: selects the first favorite-league row for a day before 
         match_start_at: '2026-07-03T12:00:00.000Z',
         analysis_status_name: 'ready',
         analysis_headline: 'Не выбранная лига',
-        recommended_bets: [],
+        recommended_bets: LOCKED_BETS,
         source_payload: {},
         analysis_create_at: '2026-07-03T09:00:00.000Z',
       },
@@ -239,7 +245,7 @@ test('getDailyPicksFeed: selects the first favorite-league row for a day before 
         match_start_at: '2026-07-03T15:00:00.000Z',
         analysis_status_name: 'ready',
         analysis_headline: 'Выбранная лига',
-        recommended_bets: [],
+        recommended_bets: LOCKED_BETS,
         source_payload: {},
         analysis_create_at: '2026-07-03T10:00:00.000Z',
       },
@@ -266,7 +272,7 @@ test('getDailyPicksFeed: returns no cards when the user has no favorites', async
       tournament_name_en: 'Premier League',
       match_start_at: '2026-07-03T12:00:00.000Z',
       analysis_status_name: 'ready',
-      recommended_bets: [],
+      recommended_bets: LOCKED_BETS,
       source_payload: {},
     }],
   });
@@ -283,4 +289,23 @@ test('getDailyPicksFeed: returns no cards when the user has no favorites', async
 test('getMoscowDate: uses Moscow calendar date', () => {
   assert.equal(getMoscowDate(0, new Date('2026-07-03T21:30:00.000Z')), '2026-07-04');
   assert.equal(getMoscowDate(1, new Date('2026-07-03T21:30:00.000Z')), '2026-07-05');
+});
+
+test('buildSlotMap hides ready analyses that do not contain exactly three distinct non-conflicting outcomes', () => {
+  const base = {
+    slot_date: '2026-07-22', analysis_status_name: 'ready', match_analysis_id: 1,
+    match_id: 10, home_team: 'A', away_team: 'B', source_payload: {},
+  };
+  const invalid = buildSlotMap([{ ...base, recommended_bets: [{ type: 'one_x_two', outcome: 'w1' }] }]);
+  const valid = buildSlotMap([{
+    ...base,
+    recommended_bets: [
+      { type: 'one_x_two', outcome: 'w1' },
+      { type: 'total_over', outcome: '2_5' },
+      { type: 'both_to_score', outcome: 'yes' },
+    ],
+  }]);
+
+  assert.equal(invalid.size, 0);
+  assert.equal(valid.size, 1);
 });

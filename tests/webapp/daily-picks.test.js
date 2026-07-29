@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const sstatsApi = require('../../lib/sstatsApi');
-const { buildAnalyticsFirstPayload, enrichPayloadWithSStatsData } = require('../../scheduler/DailyPicks');
+const { buildAnalyticsFirstPayload, enrichPayloadWithSStatsData, reusableSnapshotMatchIds, buildGenerationReport } = require('../../scheduler/DailyPicks');
 
 const basePayload = {
   source_mode: 'full',
@@ -14,7 +14,9 @@ const basePayload = {
     version: 'catalog-v1',
     catalog_coverage: 'partial',
     markets: [
-      { market_key: 'one_x_two:w1', type: 'one_x_two', outcome: 'w1', label: 'Победа хозяев', rate: 1.72 },
+      { market_key: 'one_x_two:w1', type: 'one_x_two', outcome: 'w1', label: 'Победа хозяев', rate: 1.72, market_category: 'winner' },
+      { market_key: 'total_over:2_5', type: 'total_over', outcome: '2_5', label: 'Тотал больше 2.5', rate: 1.91, market_category: 'total' },
+      { market_key: 'both_to_score:yes', type: 'both_to_score', outcome: 'yes', label: 'Обе забьют — да', rate: 1.86, market_category: 'btts' },
     ],
   },
   sstats_data: {
@@ -106,8 +108,8 @@ test('analytics source hash changes when a no-market-fit input changes', () => {
     },
   });
 
-  assert.equal(first.skip_reason, 'analytics_no_market_fit');
-  assert.equal(second.skip_reason, 'analytics_no_market_fit');
+  assert.equal(first.skip_reason, 'daily_pick_requires_three_outcomes');
+  assert.equal(second.skip_reason, 'daily_pick_requires_three_outcomes');
   assert.notEqual(first.source_hash, second.source_hash);
 });
 
@@ -169,4 +171,64 @@ test('SStats discovery never auto-maps ambiguous ordered fixtures', { concurrenc
 
   assert.equal(payload.sstats_fixture_resolution, 'ambiguous');
   assert.equal(buildAnalyticsFirstPayload(payload).skip_reason, 'analytics_sstats_fixture_ambiguous');
+});
+
+test('analytics payload is skipped with the daily-pick three-outcomes reason when the catalog cannot lock three bets', () => {
+  const payload = buildAnalyticsFirstPayload({
+    ...basePayload,
+    market_catalog: {
+      ...basePayload.market_catalog,
+      markets: [{ market_key: 'one_x_two:w1', type: 'one_x_two', outcome: 'w1', label: 'Победа хозяев', rate: 1.72 }],
+    },
+  });
+
+  assert.equal(payload.source_mode, 'skip');
+  assert.equal(payload.skip_reason, 'daily_pick_requires_three_outcomes');
+  assert.deepEqual(payload.market_fit.selected_bets, []);
+});
+
+test('reusable daily-pick snapshots exclude legacy incomplete analyses but retain one valid current analysis per match', () => {
+  const ids = reusableSnapshotMatchIds([
+    { source_match_id: 'legacy-one', recommended_bets: [{ type: 'one_x_two', outcome: 'w1' }] },
+    {
+      source_match_id: 'current',
+      recommended_bets: [
+        { type: 'one_x_two', outcome: 'w1' },
+        { type: 'total_over', outcome: '2_5' },
+        { type: 'both_to_score', outcome: 'yes' },
+      ],
+    },
+    {
+      source_match_id: 'conflicting',
+      recommended_bets: [
+        { type: 'one_x_two', outcome: 'w1' },
+        { type: 'double_chance', outcome: 'x1' },
+        { type: 'total_over', outcome: '2_5' },
+      ],
+    },
+  ]);
+
+  assert.deepEqual([...ids], ['current']);
+});
+
+test('generation report retains a per-match terminal outcome and aggregates skip reasons', () => {
+  const report = buildGenerationReport([
+    { match_id: 'existing', status: 'existing_snapshot', slot_dates: ['2026-07-29'] },
+    { match_id: 'no-sstats', status: 'skipped', reason: 'analytics_sstats_fixture_unresolved', slot_dates: ['2026-07-29'] },
+    { match_id: 'no-markets', status: 'skipped', reason: 'daily_pick_requires_three_outcomes', slot_dates: ['2026-07-30'] },
+    { match_id: 'created', status: 'created', slot_dates: ['2026-07-30'] },
+  ]);
+
+  assert.deepEqual(report.counts, {
+    selected_matches: 4,
+    created: 1,
+    existing_snapshot: 1,
+    skipped: 2,
+    failed: 0,
+  });
+  assert.deepEqual(report.skip_reasons, {
+    analytics_sstats_fixture_unresolved: 1,
+    daily_pick_requires_three_outcomes: 1,
+  });
+  assert.equal(report.matches[1].reason, 'analytics_sstats_fixture_unresolved');
 });

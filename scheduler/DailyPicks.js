@@ -7,13 +7,13 @@ const { rankCandidateMatches } = require('../webapp/services/dailyPickRankingSer
 const { resolveDbContextForCandidate, resolveSystemIdForDailyPickSource } = require('../webapp/services/dailyPickMappingService');
 const { persistBundleSnapshot, persistExternalMatchMapping, persistAnalysisSnapshot } = require('../webapp/services/dailyPickPersistenceService');
 const { backfillPredictionHistory } = require('../webapp/services/predictionHistoryBackfillService');
-const { getMoscowDate } = require('../webapp/services/dailyPickReadService');
+const { getMoscowDate, hasLockedDailyOutcomes } = require('../webapp/services/dailyPickReadService');
 const { extractAnalyticsFeatures } = require('../webapp/services/matchAnalyticsFeatureService');
 const { scoreMatch } = require('../webapp/services/matchAnalyticsScoringService');
-const { buildPartialMarketCatalog, selectMarketFits } = require('../webapp/services/marketFitService');
+const { buildCompleteMarketCatalog, selectMarketFits } = require('../webapp/services/marketFitService');
 const { normalizeProviderTeamKey } = require('../webapp/services/matchResolutionService');
 
-const MATCHES_PER_DAY = 3; // максимум матчей на слот (today + tomorrow)
+const MATCHES_PER_DAY = 1; // ровно один матч на слот (today + tomorrow)
 const SSTATS_FIXTURE_TIME_TOLERANCE_MS = 15 * 60 * 1000;
 
 // ── Load users with favorites ──────────────────────────────
@@ -66,26 +66,23 @@ async function loadCandidatesForUser({ pg, user, targetDate, allMatches }) {
 }
 
 // ── Build source payload for LLM ─────────────────────────────────────────────
-async function buildSourcePayload(match, popularBetsLoader, matchDetailLoader, riskBetsSelector) {
+async function buildSourcePayload(match, availableMarketsLoader, matchDetailLoader) {
   const slug = match.match_slug || match.slug;
   if (!slug) return null;
 
-  const [popularBetsData, matchDetailData] = await Promise.all([
-    popularBetsLoader(slug).catch(() => null),
+  const [availableMarketsData, matchDetailData] = await Promise.all([
+    availableMarketsLoader(slug).catch(() => null),
     typeof matchDetailLoader === 'function' ? matchDetailLoader(slug).catch(() => null) : Promise.resolve(null),
   ]);
-
-  if (!popularBetsData) return null;
-
-  const groupedBets = stavkaApi.groupBetsByType(popularBetsData);
-  const MIN_BET_COUNT = 5;
-  const usableBets = groupedBets.filter(b => (b.count || 0) >= MIN_BET_COUNT);
-
-  if (usableBets.length < 2) return null;
-
-  const riskBets = typeof riskBetsSelector === 'function'
-    ? riskBetsSelector(popularBetsData)
-    : stavkaApi.selectRiskBets(popularBetsData);
+  const marketCatalog = buildCompleteMarketCatalog({ availableMarketsData });
+  if (!marketCatalog) {
+    return {
+      match_id: match.match_id || match.id,
+      match_slug: slug,
+      source_mode: 'skip',
+      skip_reason: 'daily_pick_available_markets_unavailable',
+    };
+  }
 
   const summaryText = matchDetailData
     ? ((matchDetailData.predictionSummary && String(matchDetailData.predictionSummary).trim())
@@ -98,51 +95,10 @@ async function buildSourcePayload(match, popularBetsLoader, matchDetailLoader, r
 
   const sourceMode = (summarySnippet && summarySnippet.length > 20) ? 'full' : 'light';
 
-  const topBets = groupedBets.slice(0, 5).map(b => ({
-    type: b.type,
-    outcome: b.outcome,
-    count: b.count,
-    rate: b.rate,
-    percent: b.percent != null ? b.percent : null,
-    label: b.label,
-  }));
-
-  const normalizedRiskBets = riskBets.map(b => ({
-    type: b.type,
-    outcome: b.outcome,
-    rate: b.rate,
-    count: b.count,
-    percent: b.percent != null ? b.percent : null,
-    label: b.label,
-    risk_order: b.risk_order,
-    risk_label: b.risk_label,
-    risk_name: b.risk_name,
-  }));
-
-  const primarySignal = topBets.length > 0 ? {
-    type: topBets[0].type,
-    outcome: topBets[0].outcome,
-    count: topBets[0].count,
-    rate: topBets[0].rate,
-    percent: topBets[0].percent,
-    label: topBets[0].label,
-  } : null;
-
-  const marketCatalog = buildPartialMarketCatalog({ popularBetsData, match });
-
   const crypto = require('crypto');
   const hashInput = JSON.stringify({
     match_slug: slug,
     source_mode: sourceMode,
-    primary_signal: primarySignal ? {
-      type: primarySignal.type,
-      outcome: primarySignal.outcome,
-      count: primarySignal.count,
-      rate: primarySignal.rate,
-    } : null,
-    top_bets: topBets.map(b => ({
-      type: b.type, outcome: b.outcome, count: b.count, rate: b.rate,
-    })),
     market_catalog: marketCatalog.markets.map(m => ({ type: m.type, outcome: m.outcome, rate: m.rate })),
     summary_snippet: summarySnippet || null,
   });
@@ -160,9 +116,9 @@ async function buildSourcePayload(match, popularBetsLoader, matchDetailLoader, r
     source_mode: sourceMode,
     source_url: 'https://stavka.tv/matches/' + (match.sport_slug || 'soccer') + '/' + slug,
     market_catalog: marketCatalog,
-    top_bets: topBets,
-    risk_bets: normalizedRiskBets,
-    primary_signal: primarySignal,
+    top_bets: [],
+    risk_bets: [],
+    primary_signal: null,
     summary_snippet: summarySnippet,
     source_hash: sourceHash,
   };
@@ -327,15 +283,16 @@ function buildAnalyticsFirstPayload(payload) {
       source_hash: buildAnalyticsSourceHash({ analyticsFeatures, matchAnalytics, marketFit, skipReason: matchAnalytics.eligibility.reasons[0] || 'analytics_insufficient_data' }),
     };
   }
-  if (!marketFit.selected_bets.length) {
+  if (marketFit.selected_bets.length !== 3) {
+    const skipReason = marketFit.failure_reason || 'daily_pick_requires_three_outcomes';
     return {
       ...payload,
       analytics_features: analyticsFeatures,
       match_analytics: matchAnalytics,
       market_fit: marketFit,
       source_mode: 'skip',
-      skip_reason: 'analytics_no_market_fit',
-      source_hash: buildAnalyticsSourceHash({ analyticsFeatures, matchAnalytics, marketFit, skipReason: 'analytics_no_market_fit' }),
+      skip_reason: skipReason,
+      source_hash: buildAnalyticsSourceHash({ analyticsFeatures, matchAnalytics, marketFit, skipReason }),
     };
   }
 
@@ -360,12 +317,38 @@ function buildAnalyticsFirstPayload(payload) {
   };
 }
 
+function reusableSnapshotMatchIds(rows = []) {
+  const ids = new Set();
+  for (const row of rows) {
+    if (!row?.source_match_id || !hasLockedDailyOutcomes(row.recommended_bets)) continue;
+    ids.add(String(row.source_match_id));
+  }
+  return ids;
+}
+
+function buildGenerationReport(outcomes = []) {
+  const counts = {
+    selected_matches: outcomes.length,
+    created: 0,
+    existing_snapshot: 0,
+    skipped: 0,
+    failed: 0,
+  };
+  const skip_reasons = {};
+  for (const outcome of outcomes) {
+    if (Object.hasOwn(counts, outcome?.status)) counts[outcome.status] += 1;
+    if (outcome?.status === 'skipped' && outcome.reason) {
+      skip_reasons[outcome.reason] = (skip_reasons[outcome.reason] || 0) + 1;
+    }
+  }
+  return { counts, skip_reasons, matches: outcomes };
+}
+
 // ── Main orchestrator ──────────────────────────────────────
 async function runDailyPicks(pg, options = {}) {
   const {
-  popularBetsLoader = stavkaApi.fetchPopularBets,
+  availableMarketsLoader = stavkaApi.fetchAvailableMarkets,
   matchDetailLoader = stavkaApi.fetchMatchDetail,
-  riskBetsSelector = stavkaApi.selectRiskBets,
   apiLoader = stavkaApi.fetchAllMatches,
   generator = null,
   generatorProvider = null,
@@ -436,36 +419,61 @@ async function runDailyPicks(pg, options = {}) {
 
   // 5. Check existing snapshots
   const matchIds = [...allSelectedMatches.keys()];
-  const existingSnapshots = new Map();
+  let existingSnapshots = new Set();
   if (matchIds.length > 0) {
     const placeholders = matchIds.map((_, i) => `$${i + 1}`).join(', ');
     const existing = await pg.connection(
-      `SELECT DISTINCT ms.source_payload->>'match_id' AS source_match_id
+      `SELECT ms.source_payload->>'match_id' AS source_match_id,
+              ma.recommended_bets
        FROM public.match_source ms
        JOIN public.match_analysis ma ON ma.match_source_id = ms.match_source_id
        WHERE ms.source_payload->>'match_id' IN (${placeholders})
          AND ma.analysis_status_id = (SELECT analysis_status_id FROM public.analysis_status WHERE analysis_status_name = 'ready')`,
       [...matchIds],
     ).catch(() => []);
-    for (const row of existing) {
-      if (row.source_match_id) existingSnapshots.set(String(row.source_match_id), true);
-    }
+    existingSnapshots = reusableSnapshotMatchIds(existing);
   }
 
-  // 6. Generate analysis for new matches
+  // 6. Generate analysis for new matches. Every terminal result is retained in
+  // the returned report so cron output can explain an empty slot.
   let snapshotsCreated = 0;
+  const outcomes = [];
   for (const [matchId, match] of allSelectedMatches) {
-    if (existingSnapshots.has(matchId)) continue;
+    const slots = userSlots
+      .filter(slot => slot.match_id === matchId)
+      .map(slot => ({ user_id: slot.user_id, slot_date: slot.slot_date }));
+    const slot_dates = [...new Set(slots.map(slot => slot.slot_date))];
+    const outcome = {
+      match_id: matchId,
+      match: [match.home_team, match.away_team].filter(Boolean).join(' — '),
+      league: match.league_label || '',
+      slot_dates,
+      slots,
+    };
+    if (existingSnapshots.has(matchId)) {
+      outcomes.push({ ...outcome, status: 'existing_snapshot' });
+      continue;
+    }
 
-    const sourcePayload = await buildSourcePayload(match, popularBetsLoader, matchDetailLoader, riskBetsSelector);
-    if (!sourcePayload || sourcePayload.source_mode === 'skip') continue;
+    const sourcePayload = await buildSourcePayload(match, availableMarketsLoader, matchDetailLoader);
+    if (!sourcePayload || sourcePayload.source_mode === 'skip') {
+      outcomes.push({ ...outcome, status: 'skipped', reason: sourcePayload?.skip_reason || 'daily_pick_source_unavailable' });
+      continue;
+    }
 
     // Enrich with SStats data (lineups, form, statistics), then build deterministic analytics/market-fit payload.
     const enrichedPayload = buildAnalyticsFirstPayload(await enrichPayloadWithSStatsData(sourcePayload, pg));
+    if (enrichedPayload.source_mode === 'skip') {
+      outcomes.push({ ...outcome, status: 'skipped', reason: enrichedPayload.skip_reason || 'daily_pick_analytics_unavailable' });
+      continue;
+    }
 
     // Resolve DB context (match is already normalized from getCandidateMatchesForDate)
     const { systemId, sportId, tournamentId } = await resolveDbContextForCandidate(pg, { systemName: 'stavka', candidate: match });
-    if (systemId == null || sportId == null || tournamentId == null) continue;
+    if (systemId == null || sportId == null || tournamentId == null) {
+      outcomes.push({ ...outcome, status: 'skipped', reason: 'daily_pick_db_context_unresolved' });
+      continue;
+    }
 
     // Persist match + source
     let sourceId;
@@ -488,37 +496,48 @@ async function runDailyPicks(pg, options = {}) {
         }
       }
     } catch (err) {
+      outcomes.push({ ...outcome, status: 'failed', reason: 'daily_pick_source_persistence_failed' });
       continue;
     }
 
-    if (sourceId == null) continue;
+    if (sourceId == null) {
+      outcomes.push({ ...outcome, status: 'failed', reason: 'daily_pick_source_id_missing' });
+      continue;
+    }
 
-    // Generate analysis via LLM (if generator provided)
-    if (typeof generator === 'function') {
-      try {
-        const genResult = await generator({ sourcePayload: enrichedPayload, modelName, promptVersion, provider: generatorProvider });
-        if (genResult && genResult.status === 'ready') {
-          const analysisResult = await persistAnalysisSnapshot(pg, {
-            matchSourceId: sourceId,
-            snapshot: {
-              status: 'ready',
-              headline: genResult.output.headline,
-              brief: genResult.output.brief,
-              risk_note: genResult.output.risk_note || null,
-              recommended_bets: genResult.output.recommended_bets || [],
-              model_name: genResult.model_name || modelName,
-              prompt_version: genResult.prompt_version || promptVersion,
-            },
-          });
+    if (typeof generator !== 'function') {
+      outcomes.push({ ...outcome, status: 'skipped', reason: 'daily_pick_generator_unavailable' });
+      continue;
+    }
 
-          if (analysisResult?.analysisId != null) {
-            await backfillPredictionHistory(pg, { matchAnalysisId: analysisResult.analysisId, limit: 1 });
-          }
-          snapshotsCreated++;
-        }
-      } catch (err) {
-        // skip silently
+    try {
+      const genResult = await generator({ sourcePayload: enrichedPayload, modelName, promptVersion, provider: generatorProvider });
+      if (!genResult || genResult.status !== 'ready') {
+        outcomes.push({ ...outcome, status: 'skipped', reason: genResult?.skip_reason || genResult?.error || 'daily_pick_generation_not_ready' });
+        continue;
       }
+      const analysisResult = await persistAnalysisSnapshot(pg, {
+        matchSourceId: sourceId,
+        snapshot: {
+          status: 'ready',
+          headline: genResult.output.headline,
+          brief: genResult.output.brief,
+          risk_note: genResult.output.risk_note || null,
+          recommended_bets: genResult.output.recommended_bets || [],
+          model_name: genResult.model_name || modelName,
+          prompt_version: genResult.prompt_version || promptVersion,
+        },
+      });
+
+      if (analysisResult?.analysisId == null) {
+        outcomes.push({ ...outcome, status: 'failed', reason: 'daily_pick_analysis_id_missing' });
+        continue;
+      }
+      await backfillPredictionHistory(pg, { matchAnalysisId: analysisResult.analysisId, limit: 1 });
+      snapshotsCreated++;
+      outcomes.push({ ...outcome, status: 'created', analysis_id: analysisResult.analysisId });
+    } catch (err) {
+      outcomes.push({ ...outcome, status: 'failed', reason: 'daily_pick_analysis_persistence_or_backfill_failed' });
     }
   }
 
@@ -527,7 +546,8 @@ async function runDailyPicks(pg, options = {}) {
     unique_matches: allSelectedMatches.size,
     snapshots_created: snapshotsCreated,
     existing_snapshots: existingSnapshots.size,
+    generation_report: buildGenerationReport(outcomes),
   };
 }
 
-module.exports = { runDailyPicks, loadUsersWithFavorites, loadUserLeagueScope, buildSourcePayload, enrichPayloadWithSStatsData, buildAnalyticsFirstPayload };
+module.exports = { runDailyPicks, loadUsersWithFavorites, loadUserLeagueScope, buildSourcePayload, enrichPayloadWithSStatsData, buildAnalyticsFirstPayload, reusableSnapshotMatchIds, buildGenerationReport };

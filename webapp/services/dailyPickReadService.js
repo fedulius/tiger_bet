@@ -66,6 +66,31 @@ function getMoscowDate(daysOffset = 0, now = new Date()) {
   return mskDate.toISOString().slice(0, 10);
 }
 
+function dailyPickCategory(type) {
+  const normalized = String(type || '').toLowerCase();
+  if (['one_x_two', 'winner', 'match_result', 'match_qualify', 'double_chance'].includes(normalized)) return 'winner';
+  if (normalized.includes('total')) return 'total';
+  if (normalized.includes('both') || normalized === 'btts') return 'btts';
+  if (normalized.includes('handicap')) return 'handicap';
+  if (normalized === 'correct_score') return 'correct_score';
+  return normalized || 'other';
+}
+
+function hasLockedDailyOutcomes(recommendedBets) {
+  if (!Array.isArray(recommendedBets) || recommendedBets.length !== 3) return false;
+  const keys = new Set();
+  const categories = new Set();
+  for (const bet of recommendedBets) {
+    if (!bet || !bet.type || bet.outcome == null) return false;
+    const key = `${bet.type}:${bet.outcome}`;
+    const category = dailyPickCategory(bet.type);
+    if (keys.has(key) || categories.has(category)) return false;
+    keys.add(key);
+    categories.add(category);
+  }
+  return true;
+}
+
 function buildSlotMap(rows = []) {
   const slots = new Map();
   for (const row of rows) {
@@ -75,7 +100,8 @@ function buildSlotMap(rows = []) {
       ? row.source_payload
       : {};
     const recommendedBets = Array.isArray(row.recommended_bets) ? row.recommended_bets : [];
-    const primaryBet = recommendedBets[0] || null;
+    if (!hasLockedDailyOutcomes(recommendedBets)) continue;
+    const primaryBet = recommendedBets[0];
     const matchSlug = sourcePayload.match_slug || row.system_match_id || String(row.match_id || '');
 
     slots.set(row.slot_date, {
@@ -164,6 +190,7 @@ module.exports = {
   expandLeagueAliases,
   filterRowsByFavoriteLeagues,
   getMoscowDate,
+  hasLockedDailyOutcomes,
   buildSlotMap,
   getDailyPicksByDateRange,
   getDailyPicksFeed,

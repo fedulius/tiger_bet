@@ -15,6 +15,11 @@ function mskDate(offset = 0) {
 }
 const TODAY = mskDate(0);
 const TOMORROW = mskDate(1);
+const LOCKED_BETS = [
+  { type: 'one_x_two', outcome: 'w1' },
+  { type: 'total_over', outcome: '2_5' },
+  { type: 'both_to_score', outcome: 'yes' },
+];
 
 test('GET /home/daily-picks returns today/tomorrow picks from DB-backed feed', async () => {
   const fakePg = createFakePg({
@@ -41,7 +46,7 @@ test('GET /home/daily-picks returns today/tomorrow picks from DB-backed feed', a
           analysis_headline: 'Сегодняшний пик',
           analysis_brief: 'Короткий бриф',
           analysis_risk_note: 'Риск умеренный',
-          recommended_bets: [{ market: '1X2', selection: 'home', odds: 1.91 }],
+          recommended_bets: LOCKED_BETS,
           source_payload: { match_slug: 'alpha-beta', source_url: 'https://example.test/m/101', source_refs: ['card'] },
           model_name: 'gpt',
           prompt_version: 'v1',
@@ -63,7 +68,7 @@ test('GET /home/daily-picks returns today/tomorrow picks from DB-backed feed', a
           analysis_headline: 'Завтрашний пик',
           analysis_brief: 'Ещё один бриф',
           analysis_risk_note: '',
-          recommended_bets: [],
+          recommended_bets: LOCKED_BETS,
           source_payload: { match_slug: 'gamma-delta' },
           model_name: 'gpt',
           prompt_version: 'v2',
@@ -123,7 +128,7 @@ test('GET /home/daily-picks filters to selected league from user_tournament', as
           analysis_headline: 'Финский пик',
           analysis_brief: 'Не должен пройти',
           analysis_risk_note: '',
-          recommended_bets: [],
+          recommended_bets: LOCKED_BETS,
           source_payload: { match_slug: 'alpha-beta' },
           model_name: 'gpt',
           prompt_version: 'v1',
@@ -145,7 +150,7 @@ test('GET /home/daily-picks filters to selected league from user_tournament', as
           analysis_headline: 'Пик ЧМ',
           analysis_brief: 'Должен пройти',
           analysis_risk_note: '',
-          recommended_bets: [],
+          recommended_bets: LOCKED_BETS,
           source_payload: { match_slug: 'gamma-delta' },
           model_name: 'gpt',
           prompt_version: 'v2',
