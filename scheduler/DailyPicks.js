@@ -216,6 +216,7 @@ async function enrichPayloadWithSStatsData(payload, pg) {
       ...payload,
       sstats_data: {
         fixture_id: sstatsPayload.fixture_id,
+        league_slug: sstatsPayload.league_slug || null,
         status: sstatsPayload.status,
         round: sstatsPayload.round,
         referee: sstatsPayload.referee,
@@ -468,8 +469,14 @@ async function runDailyPicks(pg, options = {}) {
       continue;
     }
 
-    // Resolve DB context (match is already normalized from getCandidateMatchesForDate)
-    const { systemId, sportId, tournamentId } = await resolveDbContextForCandidate(pg, { systemName: 'stavka', candidate: match });
+    // Tournament identity comes only from the exact SStats fixture already resolved above.
+    // Stavka supplies markets, not canonical tournament mappings.
+    const sstatsCandidate = {
+      ...match,
+      external_league_id: null,
+      league_slug: enrichedPayload?.sstats_data?.league_slug || null,
+    };
+    const { systemId, sportId, tournamentId } = await resolveDbContextForCandidate(pg, { systemName: 'sstats', candidate: sstatsCandidate });
     if (systemId == null || sportId == null || tournamentId == null) {
       outcomes.push({ ...outcome, status: 'skipped', reason: 'daily_pick_db_context_unresolved' });
       continue;

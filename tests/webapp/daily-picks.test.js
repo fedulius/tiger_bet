@@ -51,6 +51,7 @@ function withSstatsStub(t, { games, matchPayload = null }) {
 function sstatsPayload(fixtureId) {
   return {
     fixture_id: fixtureId,
+    league_slug: 'uefa-champions-league',
     status: 1,
     round: 'Q2',
     referee: null,
@@ -128,6 +129,7 @@ test('SStats discovery resolves a non-World-Cup English fixture from the day lis
   });
 
   assert.equal(payload.sstats_data.fixture_id, 2026);
+  assert.equal(payload.sstats_data.league_slug, 'uefa-champions-league');
   assert.equal(apiCalls.length, 1);
   assert.equal(apiCalls[0].path, '/Games/list');
   assert.equal(apiCalls[0].params.LeagueId, undefined, 'daily discovery must not pin the World Cup');
