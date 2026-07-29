@@ -2,7 +2,7 @@
 
 const stavkaApi = require('../lib/stavkaApi');
 const sstatsApi = require('../lib/sstatsApi');
-const { normalizeCandidate, getCandidateMatchesForDate } = require('../webapp/services/dailyPickCandidateService');
+const { getUpcomingMatchesForDate } = require('../webapp/services/dailyPickCandidateService');
 const { rankCandidateMatches } = require('../webapp/services/dailyPickRankingService');
 const { resolveDbContextForCandidate, resolveSystemIdForDailyPickSource } = require('../webapp/services/dailyPickMappingService');
 const { persistBundleSnapshot, persistExternalMatchMapping, persistAnalysisSnapshot } = require('../webapp/services/dailyPickPersistenceService');
@@ -36,33 +36,7 @@ async function loadUserLeagueScope(pg, userId) {
   `, [userId]);
 
   const leagueIds = rows.map(r => Number(r.tournament_id)).filter(Number.isFinite);
-  const leagueNames = [];
-  for (const r of rows) {
-    if (r.tournament_name_en) leagueNames.push(String(r.tournament_name_en).trim().toLowerCase());
-    if (r.tournament_name) leagueNames.push(String(r.tournament_name).trim().toLowerCase());
-  }
-  const uniqueLeagueNames = [...new Set(leagueNames)].filter(Boolean);
-
-  return { leagueIds, leagueSlugs: uniqueLeagueNames };
-}
-
-// ── Load candidates for a user + date ──────────────────────
-async function loadCandidatesForUser({ pg, user, targetDate, allMatches }) {
-  const userId = user.id ?? user.user_id;
-  const scope = await loadUserLeagueScope(pg, userId);
-
-  if (scope.leagueIds.length === 0 && scope.leagueSlugs.length === 0) {
-    return [];
-  }
-
-  // Filter matches by Moscow date and league scope
-  const candidates = getCandidateMatchesForDate({
-    allMatches,
-    userLeagueScope: scope,
-    targetDateMsk: targetDate,
-  });
-
-  return candidates;
+  return { leagueIds };
 }
 
 // ── Build source payload for LLM ─────────────────────────────────────────────
@@ -124,6 +98,14 @@ async function buildSourcePayload(match, availableMarketsLoader, matchDetailLoad
   };
 }
 
+function slugContainsOrderedTeamPair(slugKey, homeKey, awayKey) {
+  if (!slugKey || !homeKey || !awayKey) return false;
+  const slugParts = slugKey.split('-').filter(Boolean);
+  const pairParts = [...homeKey.split('-'), ...awayKey.split('-')].filter(Boolean);
+  if (pairParts.length === 0 || pairParts.length > slugParts.length) return false;
+  return slugParts.some((_, start) => pairParts.every((part, offset) => slugParts[start + offset] === part));
+}
+
 function findSstatsFixtureFromDayList(payload, games) {
   const context = payload?.fixture_context || {};
   const homeKey = normalizeProviderTeamKey(context.home_team);
@@ -137,10 +119,9 @@ function findSstatsFixtureFromDayList(payload, games) {
     const gameAwayKey = normalizeProviderTeamKey(game?.awayTeam?.name);
     const gameKickoff = Date.parse(game?.date || game?.starts_at || game?.startAt || '');
     const exactDisplayPair = gameHomeKey === homeKey && gameAwayKey === awayKey;
-    // Stavka may localize display names. Its slug is the provider's ordered
-    // English pair, so accept it only when both complete normalized SStats
-    // names appear contiguously and in home→away order.
-    const exactSlugPair = !!sourceSlugKey && sourceSlugKey.includes(`${gameHomeKey}-${gameAwayKey}`);
+    // Stavka can localize display names. Match only the complete ordered team
+    // token sequence in its slug; no prefix, truncation, or fuzzy comparison.
+    const exactSlugPair = slugContainsOrderedTeamPair(sourceSlugKey, gameHomeKey, gameAwayKey);
     return (exactDisplayPair || exactSlugPair)
       && Number.isFinite(gameKickoff)
       && Math.abs(gameKickoff - kickoff) <= SSTATS_FIXTURE_TIME_TOLERANCE_MS;
@@ -216,6 +197,7 @@ async function enrichPayloadWithSStatsData(payload, pg) {
       ...payload,
       sstats_data: {
         fixture_id: sstatsPayload.fixture_id,
+        league_id: sstatsPayload.league_id ?? null,
         league_slug: sstatsPayload.league_slug || null,
         status: sstatsPayload.status,
         round: sstatsPayload.round,
@@ -231,6 +213,42 @@ async function enrichPayloadWithSStatsData(payload, pg) {
   } catch {
     return { ...payload, sstats_fixture_resolution: 'unresolved' };
   }
+}
+
+async function resolveSstatsCandidate({ pg, candidate }) {
+  const resolvedPayload = await enrichPayloadWithSStatsData({
+    match_id: candidate.match_id || candidate.id,
+    match_slug: candidate.match_slug || candidate.slug || '',
+    sport_slug: candidate.sport_slug || candidate.sportSlug || '',
+    fixture_context: {
+      home_team: candidate.home_team || candidate.homeTeam?.name || null,
+      away_team: candidate.away_team || candidate.awayTeam?.name || null,
+      starts_at: candidate.starts_at || candidate.startsAt || null,
+    },
+  }, pg);
+  const sstatsCandidate = {
+    ...candidate,
+    external_league_id: resolvedPayload?.sstats_data?.league_id != null
+      ? String(resolvedPayload.sstats_data.league_id)
+      : null,
+    league_slug: resolvedPayload?.sstats_data?.league_slug || null,
+  };
+  const dbContext = await resolveDbContextForCandidate(pg, { systemName: 'sstats', candidate: sstatsCandidate });
+  if (dbContext.systemId == null || dbContext.sportId == null || dbContext.tournamentId == null) return null;
+
+  return {
+    ...candidate,
+    tournament_id: Number(dbContext.tournamentId),
+    sstats_data: resolvedPayload.sstats_data,
+    daily_pick_db_context: dbContext,
+  };
+}
+
+async function resolveCandidateForFavoriteScope({ pg, candidate, favoriteTournamentIds }) {
+  const resolvedCandidate = await resolveSstatsCandidate({ pg, candidate });
+  if (!resolvedCandidate) return null;
+  const favoriteIds = new Set((favoriteTournamentIds || []).map(Number).filter(Number.isFinite));
+  return favoriteIds.has(resolvedCandidate.tournament_id) ? resolvedCandidate : null;
 }
 
 // ── Build analytics-first payload ──────────────────────────
@@ -373,18 +391,28 @@ async function runDailyPicks(pg, options = {}) {
   const todayDate = getMoscowDate(0, now);
   const tomorrowDate = getMoscowDate(1, now);
 
-  // 3. Collect candidates per user
+  // 3. Resolve each Stavka fixture through SStats before comparing it with a
+  // user's favorite public.tournament_id. Stavka tournament slugs are never a
+  // favorite-filter key.
+  const rawCandidates = [
+    ...getUpcomingMatchesForDate({ allMatches, targetDateMsk: todayDate }),
+    ...getUpcomingMatchesForDate({ allMatches, targetDateMsk: tomorrowDate }),
+  ];
+  // SStats enrichment touches Postgres and external APIs. Keep it serial so a
+  // broad Stavka day cannot exhaust the shared Postgres pool.
+  const resolvedCandidates = [];
+  for (const candidate of rawCandidates) {
+    const resolved = await resolveSstatsCandidate({ pg, candidate });
+    if (resolved) resolvedCandidates.push(resolved);
+  }
+
   const candidatesByUserId = {};
   for (const user of users) {
     const userId = user.id ?? user.user_id;
-    const [todayCandidates, tomorrowCandidates] = await Promise.all([
-      loadCandidatesForUser({ pg, user, targetDate: todayDate, allMatches }),
-      loadCandidatesForUser({ pg, user, targetDate: tomorrowDate, allMatches }),
-    ]);
-    candidatesByUserId[userId] = [
-      ...(todayCandidates || []),
-      ...(tomorrowCandidates || []),
-    ];
+    const scope = await loadUserLeagueScope(pg, userId);
+    const favoriteIds = new Set(scope.leagueIds);
+    candidatesByUserId[userId] = resolvedCandidates
+      .filter((candidate) => favoriteIds.has(candidate.tournament_id));
   }
 
   // 4. Rank and select top matches per user per day
@@ -462,21 +490,19 @@ async function runDailyPicks(pg, options = {}) {
       continue;
     }
 
-    // Enrich with SStats data (lineups, form, statistics), then build deterministic analytics/market-fit payload.
-    const enrichedPayload = buildAnalyticsFirstPayload(await enrichPayloadWithSStatsData(sourcePayload, pg));
+    // SStats fixture/statistics and its exact public tournament mapping were
+    // resolved before favorites and ranking. Stavka enters only here for its
+    // current markets/odds.
+    const enrichedPayload = buildAnalyticsFirstPayload({
+      ...sourcePayload,
+      sstats_data: match.sstats_data,
+    });
     if (enrichedPayload.source_mode === 'skip') {
       outcomes.push({ ...outcome, status: 'skipped', reason: enrichedPayload.skip_reason || 'daily_pick_analytics_unavailable' });
       continue;
     }
 
-    // Tournament identity comes only from the exact SStats fixture already resolved above.
-    // Stavka supplies markets, not canonical tournament mappings.
-    const sstatsCandidate = {
-      ...match,
-      external_league_id: null,
-      league_slug: enrichedPayload?.sstats_data?.league_slug || null,
-    };
-    const { systemId, sportId, tournamentId } = await resolveDbContextForCandidate(pg, { systemName: 'sstats', candidate: sstatsCandidate });
+    const { systemId, sportId, tournamentId } = match.daily_pick_db_context;
     if (systemId == null || sportId == null || tournamentId == null) {
       outcomes.push({ ...outcome, status: 'skipped', reason: 'daily_pick_db_context_unresolved' });
       continue;
@@ -557,4 +583,4 @@ async function runDailyPicks(pg, options = {}) {
   };
 }
 
-module.exports = { runDailyPicks, loadUsersWithFavorites, loadUserLeagueScope, buildSourcePayload, enrichPayloadWithSStatsData, buildAnalyticsFirstPayload, reusableSnapshotMatchIds, buildGenerationReport };
+module.exports = { runDailyPicks, loadUsersWithFavorites, loadUserLeagueScope, buildSourcePayload, enrichPayloadWithSStatsData, resolveCandidateForFavoriteScope, buildAnalyticsFirstPayload, reusableSnapshotMatchIds, buildGenerationReport };

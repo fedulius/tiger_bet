@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const sstatsApi = require('../../lib/sstatsApi');
-const { buildAnalyticsFirstPayload, enrichPayloadWithSStatsData, reusableSnapshotMatchIds, buildGenerationReport } = require('../../scheduler/DailyPicks');
+const { buildAnalyticsFirstPayload, enrichPayloadWithSStatsData, resolveCandidateForFavoriteScope, reusableSnapshotMatchIds, buildGenerationReport } = require('../../scheduler/DailyPicks');
 
 const basePayload = {
   source_mode: 'full',
@@ -51,6 +51,7 @@ function withSstatsStub(t, { games, matchPayload = null }) {
 function sstatsPayload(fixtureId) {
   return {
     fixture_id: fixtureId,
+    league_id: 2,
     league_slug: 'uefa-champions-league',
     status: 1,
     round: 'Q2',
@@ -134,6 +135,36 @@ test('SStats discovery resolves a non-World-Cup English fixture from the day lis
   assert.equal(apiCalls[0].path, '/Games/list');
   assert.equal(apiCalls[0].params.LeagueId, undefined, 'daily discovery must not pin the World Cup');
   assert.equal(apiCalls[0].params.from, '2026-07-22T00:00:00+03:00');
+});
+
+test('daily candidate enters a favorite only after exact SStats tournament mapping, not its Stavka tournament slug', { concurrency: false }, async (t) => {
+  withSstatsStub(t, { games: [fixture({ id: 2026 })], matchPayload: sstatsPayload(2026) });
+  const pg = {
+    calls: [],
+    async connection(query, params = []) {
+      this.calls.push({ query, params });
+      if (/FROM external\.system/i.test(query)) return [{ system_id: 3 }];
+      if (/FROM public\.sport/i.test(query)) return [{ sport_id: 1 }];
+      if (/system_tournament_slug/i.test(query)) {
+        assert.deepEqual(params, [3, 'uefa-champions-league']);
+        return [{ tournament_id: 90 }];
+      }
+      return [];
+    },
+  };
+  const resolved = await resolveCandidateForFavoriteScope({
+    pg,
+    favoriteTournamentIds: [90],
+    candidate: {
+      match_id: 'stavka-2026', match_slug: 'omonia-nicosia-kairat-almaty-2026', sport_slug: 'soccer',
+      league_slug: 'international-clubs-uefa-champions-league',
+      starts_at: '2026-07-22T17:00:00Z', home_team: 'Omonia Nicosia', away_team: 'Kairat Almaty',
+    },
+  });
+
+  assert.equal(resolved.tournament_id, 90);
+  assert.equal(resolved.sstats_data.league_slug, 'uefa-champions-league');
+  assert.equal(pg.calls.some(({ params }) => params.includes('international-clubs-uefa-champions-league')), false);
 });
 
 test('SStats discovery uses the ordered English provider pair in a Stavka slug when display names are localized', { concurrency: false }, async (t) => {

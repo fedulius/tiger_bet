@@ -139,8 +139,8 @@ function isInLeagueScope(match, userLeagueScope) {
  * @param {number}   [nowMs]         — current timestamp; defaults to Date.now()
  * @returns {object[]} normalized candidate matches
  */
-function getCandidateMatchesForDate({ allMatches, userLeagueScope, targetDateMsk, nowMs }) {
-  if (!Array.isArray(allMatches) || !userLeagueScope || !targetDateMsk) return [];
+function getUpcomingMatchesForDate({ allMatches, targetDateMsk, nowMs }) {
+  if (!Array.isArray(allMatches) || !targetDateMsk) return [];
 
   const now = nowMs != null ? Number(nowMs) : Date.now();
   const candidates = [];
@@ -162,13 +162,19 @@ function getCandidateMatchesForDate({ allMatches, userLeagueScope, targetDateMsk
     // Filter by exact Moscow calendar date
     if (toMoscowDateStr(startsAtRaw) !== targetDateMsk) continue;
 
-    // Filter by user's allowed leagues
-    if (!isInLeagueScope(match, userLeagueScope)) continue;
-
     candidates.push(normalizeCandidate(match));
   }
 
   return candidates;
 }
 
-module.exports = { normalizeCandidate, getCandidateMatchesForDate };
+function getCandidateMatchesForDate({ allMatches, userLeagueScope, targetDateMsk, nowMs }) {
+  if (!userLeagueScope) return [];
+  return getUpcomingMatchesForDate({ allMatches, targetDateMsk, nowMs })
+    .filter((candidate) => isInLeagueScope({ league: {
+      id: candidate.external_league_id,
+      slug: candidate.league_slug,
+    } }, userLeagueScope));
+}
+
+module.exports = { normalizeCandidate, getUpcomingMatchesForDate, getCandidateMatchesForDate };
