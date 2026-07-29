@@ -149,7 +149,13 @@ export function MatchPage() {
   const [followState, setFollowState] = useState({ visible: false, following: false, canFollow: false, isFinished: false, loading: false, error: '' });
   const swipeBackRef = useRef(null);
 
-  const goBack = () => navigate(-1);
+  const goBack = () => {
+    if (location.state?.fromTab) {
+      navigate(-1);
+      return;
+    }
+    navigate('/', { replace: true });
+  };
 
   const startSwipeBackGesture = (clientX, clientY) => {
     const pageLeft = document.querySelector('.page.active')?.getBoundingClientRect?.().left || 0;
