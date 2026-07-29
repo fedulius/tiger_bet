@@ -1,5 +1,7 @@
 'use strict';
 
+const { getWebAppUrl } = require('../../server/runtimeConfig');
+
 const TYPE_BY_EVENT_KIND = {
   started: 'match.started',
   score_changed: 'match.score_changed',
@@ -44,8 +46,9 @@ async function resolveMatchNotificationFields(pg, { matchId, scoreHome, scoreAwa
   const rows = await pg.connection(`
     SELECT m.home_team, m.away_team, m.match_start_at,
            t.tournament_name, t.tournament_name_en,
-           s.sport_name
+           s.sport_name, pm.system_match_id AS sstats_match_id
     FROM public.match m
+    LEFT JOIN external.public_match pm ON pm.match_id = m.match_id AND pm.system_id = 3
     LEFT JOIN public.tournament t ON t.tournament_id = m.tournament_id
     LEFT JOIN public.sport s ON s.sport_id = m.sport_id
     WHERE m.match_id = $1
@@ -63,6 +66,7 @@ async function resolveMatchNotificationFields(pg, { matchId, scoreHome, scoreAwa
     score: formatScore(scoreHome, scoreAway),
     elapsed: formatElapsed(data.elapsed ?? data.minute),
     event_kind: data.event_kind || '',
+    web_app_url: match.sstats_match_id ? `${getWebAppUrl()}/match/${encodeURIComponent(String(match.sstats_match_id))}` : null,
   };
 }
 
@@ -100,7 +104,10 @@ async function enqueueNotificationForMatchEvent({ pg, matchEventId, matchId, eve
   });
   let created = 0;
   for (const follower of followers || []) {
-    const rendered = renderTemplate(follower, fields);
+    const rendered = {
+      ...renderTemplate(follower, fields),
+      web_app_url: fields.web_app_url,
+    };
     await pg.connection(`
       INSERT INTO notification.delivery
         (notification_event_id, user_id, channel_id, recipient_address, notification_template_id, rendered_payload)
@@ -132,7 +139,12 @@ async function sendPendingDeliveries({ pg, sender, limit = 50, workerId } = {}) 
   for (const delivery of deliveries) {
     const attemptNo = Number(delivery.attempt_count || 0) + 1;
     try {
-      const result = await sender({ chatId: delivery.recipient_address, text: delivery.rendered_payload?.text || '', delivery });
+      const result = await sender({
+        chatId: delivery.recipient_address,
+        text: delivery.rendered_payload?.text || '',
+        webAppUrl: delivery.rendered_payload?.web_app_url || null,
+        delivery,
+      });
       await pg.connection(`UPDATE notification.delivery SET delivery_status='sent', attempt_count=$2, sent_at=now(), provider_message_id=$3, locked_at=NULL, locked_by=NULL, updated_at=now() WHERE notification_delivery_id=$1`, [delivery.notification_delivery_id, attemptNo, String(result?.message_id ?? result?.provider_message_id ?? '')]);
       await pg.connection(`INSERT INTO notification.delivery_attempt (notification_delivery_id, attempt_no, finished_at, outcome, provider_message_id) VALUES ($1,$2,now(),'sent',$3)`, [delivery.notification_delivery_id, attemptNo, String(result?.message_id ?? result?.provider_message_id ?? '')]);
       summary.sent += 1;

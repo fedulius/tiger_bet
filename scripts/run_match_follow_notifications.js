@@ -9,11 +9,17 @@ const { sendPendingDeliveries } = require('../webapp/services/notificationDelive
 function createTelegramSender({ token = process.env.TELEGRAM_BOT_TOKEN, fetchImpl = globalThis.fetch } = {}) {
   if (!token) throw new Error('TELEGRAM_BOT_TOKEN is required');
   if (typeof fetchImpl !== 'function') throw new TypeError('fetch implementation is required');
-  return async ({ chatId, text }) => {
+  return async ({ chatId, text, webAppUrl = null }) => {
+    const body = { chat_id: String(chatId), text: String(text ?? '') };
+    if (webAppUrl) {
+      body.reply_markup = {
+        inline_keyboard: [[{ text: 'Перейти к матчу', web_app: { url: String(webAppUrl) } }]],
+      };
+    }
     const response = await fetchImpl(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ chat_id: String(chatId), text: String(text ?? '') }),
+      body: JSON.stringify(body),
     });
     const payload = await response.json();
     if (!response.ok || payload?.ok === false) {
